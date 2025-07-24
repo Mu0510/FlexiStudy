@@ -380,8 +380,8 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
 
       const minHeight = 200; // Minimum height for either panel
       if (newLeftColumnHeight >= minHeight && newChatPanelHeight >= minHeight) {
-        leftColumn.style.height = `${newLeftColumnHeight}px`;
-        panel.style.height = `${newChatPanelHeight}px`; // Use 'panel' for chatPanel
+        leftColumn.style.flexBasis = `${newLeftColumnHeight}px`;
+        panel.style.flexBasis = `${newChatPanelHeight}px`; // Use 'panel' for chatPanel
       }
     } else {
       delta = e.clientX - startPos;
@@ -390,8 +390,8 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
 
       const minWidth = 200; // Minimum width for either panel
       if (newLeftColumnWidth >= minWidth && newChatPanelWidth >= minWidth) {
-        leftColumn.style.width = `${newLeftColumnWidth}px`;
-        panel.style.width = `${newChatPanelWidth}px`; // Use 'panel' for chatPanel
+        leftColumn.style.flexBasis = `${newLeftColumnWidth}px`;
+        panel.style.flexBasis = `${newChatPanelWidth}px`; // Use 'panel' for chatPanel
       }
     }
   }
