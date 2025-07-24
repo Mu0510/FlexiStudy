@@ -60,6 +60,21 @@ body::before {
     }
 }
 
+#appContainer {
+    display: flex;
+    flex-direction: row; /* Default for landscape */
+    width: 100vw;
+    height: 100vh;
+}
+
+#resizer {
+    width: 10px; /* Default width for landscape */
+    height: 100%; /* Default height for landscape */
+    background-color: rgba(255, 255, 255, 0.1); /* Visible but subtle */
+    cursor: ew-resize; /* East-west resize cursor */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
 .main-content-wrapper {
     max-width: 900px;
     width: 95%;
