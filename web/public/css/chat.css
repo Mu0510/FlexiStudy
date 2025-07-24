@@ -184,7 +184,7 @@
   background:#fff;border:none;cursor:pointer;
   box-shadow:0 3px 10px rgba(0,0,0,.25);
 }
-#chatSend svg{width:16px;height:16px;stroke:#000;}
+#chatSend svg{width:19px;height:19px;stroke:#000;}
 #chatSend:disabled{opacity:.4;cursor:default;}
 
 /* スクロールバーも統一 */
