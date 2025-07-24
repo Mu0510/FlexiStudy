@@ -244,9 +244,46 @@
 
 /* SVG中身も同様に */
 #chatHeader button.chat-btn svg,
-#chatOpenBtn.chat-btn svg {
+#chatOpenBtn.chat.btn svg {
   width: 20px; height: 20px;
   fill: none;
   stroke: #fff;
   stroke-width: 2;
+}
+
+.tool-card{
+  background: rgba(0,0,0,.35);
+  border: 1px solid #4e4e4e;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+  font-family: ui-monospace, monospace;
+}
+
+.tool-card__header{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:6px;
+  font-weight:600;
+}
+
+.tool-card__icon{
+  width:18px; height:18px;
+  /* 好みで background-image など */
+}
+
+.tool-card__command{opacity:.8;}
+
+.tool-card__body{white-space:pre-wrap;}
+
+.tool-card__body .add   {color:#7ddc8e;}  /* + 行 */
+.tool-card__body .del   {color:#ff7b7b;}  /* - 行 */
+
+.tool-card--finished .tool-card__header {
+  color: #7ddc8e; /* 完了時の色 */
+}
+
+.tool-card--error .tool-card__header {
+  color: #ff7b7b; /* エラー時の色 */
 }

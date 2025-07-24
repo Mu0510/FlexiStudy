@@ -35,6 +35,8 @@ window.addEventListener('DOMContentLoaded', () => {
   let oldestTs   = null;
   let finished   = false;
 
+  const toolCards = new Map(); // toolCallId -> toolCardElement
+
   // WebSocket 接続
   const ws = new WebSocket(`ws://${location.host}/ws`);
   window.ws = ws;  // ← これを1行追加！
@@ -48,6 +50,16 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
     
+
+    if (msg.method === 'pushToolCall') {
+      createToolCard(msg.params);
+      return;
+    }
+
+    if (msg.method === 'updateToolCall') {
+      updateToolCard(msg.params);
+      return;
+    }
 
     if (msg.method && msg.method !== 'streamAssistantMessageChunk') {
       handleNotification(msg);
@@ -284,45 +296,7 @@ window.addEventListener('DOMContentLoaded', () => {
     ws.send(JSON.stringify(response));
   }
 
-  /**
-   * pushToolCall を受けてツールパネルを生成・表示
-   * params.toolCallId をキーにして、後続の update で参照可能にする
-   */
-  function showToolInvocationUI({ toolCallId, label, icon, content, locations }) {
-    // まず「ツール実行開始」のシステムメッセージを流す
-    appendSystem(` ${label} を実行します…`);
-
-    // もし locations があれば、ファイル名などの情報も出す
-    if (Array.isArray(locations) && locations.length) {
-      appendSystem(` ${locations.map(l => l.path).join(' , ')}`);
-    }
-  }
-
-  /**
-   * updateToolCall を受けて、該当パネルを更新
-   */
-  function updateToolCallStatus({ toolCallId, status, content }) {
-    // ツール終了 or 中間結果をチャットに流す
-    if (status === 'finished') {
-      appendSystem(`✅ ツール「${toolCallId}」処理完了`);
-    } else {
-      appendSystem(`⏳ ツール「${toolCallId}」ステータス: ${status}`);
-    }
-
-    // content があれば中身をバブルで流す
-    if (content) {
-      if (content.type === 'markdown') {
-        appendMsg('assistant-message', content.markdown);
-      } else if (content.type === 'diff') {
-        appendMsg('assistant-message', '```diff\n' +
-          content.content.map(d=>d.value).join('') +
-          '\n```'
-        );
-      } else {
-        appendMsg('assistant-message', JSON.stringify(content, null, 2));
-      }
-    }
-  }
+  
 
   function showRpcError(error) {
     console.log('Placeholder: showRpcError', error);
@@ -696,6 +670,103 @@ window.addEventListener('DOMContentLoaded', () => {
         loadedIds.add(m.id);               // ← 追加
     });
   }
+
+  /**
+   * ツールカードを生成し、チャットに表示します。
+   * @param {object} params - ツール呼び出しのパラメータ
+   * @param {string} params.toolCallId - ツール呼び出しのID
+   * @param {string} params.label - ツール名
+   * @param {string} params.icon - アイコン名
+   * @param {Array<object>} params.locations - 関連ファイルパスの配列
+   */
+  function createToolCard({ toolCallId, label, icon, locations }) {
+    const card = document.createElement('div');
+    card.classList.add('tool-card');
+    card.dataset.toolCallId = toolCallId; // IDをデータ属性として保存
+
+    const header = document.createElement('div');
+    header.classList.add('tool-card__header');
+
+    const iconEl = document.createElement('i');
+    iconEl.classList.add('tool-card__icon', icon); // iconクラスを追加
+    header.appendChild(iconEl);
+
+    const titleEl = document.createElement('span');
+    titleEl.classList.add('tool-card__title');
+    titleEl.textContent = label;
+    header.appendChild(titleEl);
+
+    if (locations && locations.length > 0) {
+      const commandEl = document.createElement('code');
+      commandEl.classList.add('tool-card__command');
+      commandEl.textContent = locations.map(l => l.path.split('/').pop()).join(', '); // ファイル名のみ表示
+      header.appendChild(commandEl);
+    }
+
+    const bodyEl = document.createElement('pre');
+    bodyEl.classList.add('tool-card__body');
+    bodyEl.textContent = 'ツールを実行中...'; // 初期メッセージ
+    card.appendChild(header);
+    card.appendChild(bodyEl);
+
+    messages.appendChild(card);
+    toolCards.set(toolCallId, card); // マップに保存
+    scrollBottom(true);
+  }
+
+  /**
+   * ツールカードを更新します。
+   * @param {object} params - ツール更新のパラメータ
+   * @param {string} params.toolCallId - ツール呼び出しのID
+   * @param {string} params.status - ツール実行ステータス (e.g., 'running', 'finished', 'error')
+   * @param {object} params.content - ツールからの出力内容
+   */
+  function updateToolCard({ toolCallId, status, content }) {
+    const card = toolCards.get(toolCallId);
+    if (!card) {
+      console.warn(`Tool card with ID ${toolCallId} not found.`);
+      return;
+    }
+
+    const bodyEl = card.querySelector('.tool-card__body');
+    if (!bodyEl) return;
+
+    if (content) {
+      let contentHtml = '';
+      if (content.type === 'markdown') {
+        contentHtml = marked.parse(content.markdown);
+      } else if (content.type === 'diff') {
+        contentHtml = content.content.map(d => {
+          let line = d.value;
+          if (line.startsWith('+')) {
+            return `<span class="add">${line}</span>`;
+          } else if (line.startsWith('-')) {
+            return `<span class="del">${line}</span>`;
+          }
+          return line;
+        }).join('\n');
+        contentHtml = `<pre>${contentHtml}</pre>`; // preタグで囲む
+      } else {
+        contentHtml = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+      }
+      bodyEl.innerHTML = contentHtml;
+    }
+
+    // ステータスに応じた表示更新
+    if (status === 'finished') {
+      card.classList.add('tool-card--finished');
+      // bodyEl.textContent = bodyEl.textContent.replace('ツールを実行中...', '完了');
+    } else if (status === 'error') {
+      card.classList.add('tool-card--error');
+      // bodyEl.textContent = bodyEl.textContent.replace('ツールを実行中...', 'エラー');
+    }
+    scrollBottom(true);
+  }
+
+  // showToolInvocationUI と updateToolCallStatus は不要になるため削除またはコメントアウト
+  // function showToolInvocationUI(...) { ... }
+  // function updateToolCallStatus(...) { ... }
+
 });
 
 document.addEventListener("keydown", (e) => {
