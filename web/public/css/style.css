@@ -68,7 +68,7 @@ body::before {
 }
 
 #resizer {
-    width: 10px; /* Default width for landscape */
+    width: 25px; /* Default width for landscape */
     height: 100%; /* Default height for landscape */
     background-color: rgba(255, 255, 255, 0.1); /* Visible but subtle */
     cursor: ew-resize; /* East-west resize cursor */
@@ -424,7 +424,7 @@ details[open] > summary:before {
 
     #resizer {
         width: 100%; /* Take full width */
-        height: 5px; /* Small height for vertical resizer */
+        height: 25px; /* Small height for vertical resizer */
         cursor: ns-resize; /* North-south resize cursor */
     }
 }
