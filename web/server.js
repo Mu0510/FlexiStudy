@@ -173,6 +173,19 @@ wss.on('connection', ws => {
 
     // フロントからの “fetchHistory” をここで処理
     if (msg.method === 'fetchHistory') {
+      // fetchHistory が呼ばれた時点で ongoingText にAIのレスポンスが蓄積されていれば履歴に保存
+      if (ongoingText.length > 0) {
+        const rec = {
+          id: String(Date.now()),
+          ts: Date.now(),
+          role: 'assistant',
+          text: ongoingText.trimEnd(),
+        };
+        history.push(rec);
+        console.log('[History] Saved assistant message (on fetchHistory):', rec);
+        ongoingText = ''; // クリア
+      }
+
       const { limit = 5, before } = msg.params || {};
 
       let chunk;
