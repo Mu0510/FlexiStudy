@@ -160,18 +160,14 @@ inStream.on('data', chunk => {
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params || {};
-        const messageId =
-              msg.params?.messageId ??
-              msg.params?.message_id ??            // 旧 snake_case?
-              chunk?.message?.id ??
-              chunk?.id ??
-              null;  // 最後に null を許す
-
-        if (!messageId) {
-            console.log('[Warning] chunk に messageId が見つかりません。暫定 ID でバッファリングします');
+        // Gemini-CLI ではルートの id がストリーム識別子
+        const messageId = msg.id ?? null;
+        if (messageId === null) {
+            console.warn('[Fatal] streamAssistantMessageChunk に id が無い…想定外');
+            return;            // 早めに離脱しておく方が安全
         }
 
-        const key = messageId; // Key for assistantBuf is messageId
+        const key = String(messageId); // Key for assistantBuf is messageId
 
         let entry = assistantBuf.get(key) || { text: '', timerId: null, lastUpdated: Date.now() };
 
@@ -191,6 +187,15 @@ inStream.on('data', chunk => {
         }, ASSISTANT_SAVE_DELAY_MS);
 
         broadcast(msg); // クライアントへライブ表示用
+        continue;
+    }
+
+    // 完了通知
+    if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
+        const { messageId } = msg.params || {};
+        // fallback: 仕様により params が無い場合はルート id が同じ
+        saveAssistantMessageToHistory(String(messageId ?? msg.id));
+        broadcast(msg);      // 既存の挙動を保つ
         continue;
     }
 
