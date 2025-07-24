@@ -515,3 +515,9 @@ function stopResize() {
 
   // 初回ロードは WebSocket open イベントで呼ぶように変更済み
 });
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    document.activeElement.blur();
+  }
+});
