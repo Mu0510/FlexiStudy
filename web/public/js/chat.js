@@ -323,9 +323,7 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
   let startChatPanelSize; // Stores chatPanel.offsetWidth or chatPanel.offsetHeight
 
   // タッチデバイスを検出してリサイザーの幅を調整
-  if (window.matchMedia('(pointer:coarse)').matches) {
-    resizer.style.width = '25px'; // 例: 10px * 2.5 = 25px
-  }
+  
 
   resizer.addEventListener('pointerdown', startResize);
 
