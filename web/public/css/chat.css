@@ -156,7 +156,7 @@
 #chatInputArea{
   position:relative;
   margin:0 14px 10px;            /* ← 左右＋下の余白を少し削る */
-  padding:14px 52px 58px 18px;   /* 上右下左　※下＝ボタン高さ＋余白 */
+  padding:14px 58px 20px 18px;   /* 上右下左　※下＝ボタン高さ＋余白 */
   background:rgba(0,0,0,.45);
   backdrop-filter:blur(12px);
   -webkit-backdrop-filter:blur(12px);
