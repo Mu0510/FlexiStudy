@@ -114,38 +114,18 @@ inStream.on('data', chunk => {
         continue;
     }
 
-    /* 3) これまで通り user / system 行を保存 */
-    if (msg.role && msg.text) {
-        history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
-    }
-
     // 完了通知
     if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && msg.method !== 'initialize') {
         // ongoingText が空でない場合にのみ履歴に保存
         if (ongoingText.length > 0) {
-            // ① 履歴に 1 回だけ保存
-            const rec = {
-              id: String(Date.now()),      // ユニークな値を採番
-              ts: Date.now(),
-              role: 'assistant',
-              text: ongoingText.trimEnd(),
-            };
-            history.push(rec);
-            console.log('[History] Saved assistant message:', rec);
-
             // ② 完成形をクライアントへ送る
             broadcast(rec);
-
-            // ③ バッファをクリア
-            ongoingText = '';
         }
 
         // ④ 既存の完了通知も送信 (必要なら)
         broadcast(msg);
         continue;
     }
-
-    
 
     /* 3) これまで通り user / system 行を保存 */
     if (msg.role && msg.text) {
@@ -216,6 +196,19 @@ wss.on('connection', ws => {
     /* ── ③ クライアント→サーバー受信部 (ws.on 'message') に追記 ── */
     if (msg.method === 'sendUserMessage') {
       const inputText = msg.params?.chunks?.[0]?.text || '';
+
+      // AIのレスポンスが蓄積されていれば履歴に保存
+      if (ongoingText.length > 0) {
+        const rec = {
+          id: String(Date.now()),
+          ts: Date.now(),
+          role: 'assistant',
+          text: ongoingText.trimEnd(),
+        };
+        history.push(rec);
+        console.log('[History] Saved assistant message:', rec);
+        ongoingText = ''; // クリア
+      }
 
       /*   /clear コマンド  */
       if (inputText.trim() === '/clear'){
