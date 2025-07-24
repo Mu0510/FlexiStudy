@@ -154,11 +154,14 @@
 
 /* 入力欄背景をすりガラス風に */
 #chatInputArea {
-  background: rgba(0,0,0,0.3);
-  backdrop-filter: blur(8px);
+  position: fixed; /* 固定配置 */
+  bottom: env(safe-area-inset-bottom); /* ノッチ／ホームバー対策 */
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,0.6); /* 背景色を調整 */
+  backdrop-filter: blur(8px); /* フィルターを調整 */
   -webkit-backdrop-filter: blur(8px);
   border-top: 1px solid var(--border-color);
-  flex: none;
   display: flex;
   padding: 6px;
   position: relative;

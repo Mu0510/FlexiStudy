@@ -1,4 +1,11 @@
 window.addEventListener('DOMContentLoaded', () => {
+  // dvh のフォールバック
+  function setVH() {
+    document.documentElement.style.setProperty('--vh', window.innerHeight * 0.01 + 'px');
+  }
+  setVH();
+  window.addEventListener('resize', setVH);
+
   marked.setOptions({ breaks: false }); // 改行を <br> タグとして処理する
 
   const panel    = document.getElementById('chatPanel');
@@ -10,7 +17,10 @@ window.addEventListener('DOMContentLoaded', () => {
   input.style.color = 'white';
 
   // デバッグ：フォーカスイベント確認
-  input.addEventListener("focus", () => console.log("input focused"));
+  input.addEventListener("focus", () => {
+    console.log("input focused");
+    input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  });
   input.addEventListener("blur", () => console.log("input blurred"));
   const messages = document.getElementById('chatMessages');
 
@@ -454,6 +464,37 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
   fullBtn.addEventListener('click', () => {
     panel.classList.toggle('fullscreen');
   });
+
+  // visualViewport のリサイズイベントで入力エリアの位置を調整
+  if (window.visualViewport) {
+    const chatInputArea = document.getElementById('chatInputArea');
+    const chatMessages = document.getElementById('chatMessages');
+
+    function adjustChatLayout() {
+      const visualViewportHeight = window.visualViewport.height;
+      const visualViewportOffsetTop = window.visualViewport.offsetTop;
+      const documentHeight = document.documentElement.clientHeight;
+
+      // キーボードが表示されているかどうかの判定
+      const isKeyboardShowing = (documentHeight - visualViewportHeight - visualViewportOffsetTop) > 0;
+
+      if (isKeyboardShowing) {
+        // キーボードが表示されている場合、入力エリアをキーボードの上に配置
+        chatInputArea.style.bottom = `${documentHeight - visualViewportHeight - visualViewportOffsetTop}px`;
+        // メッセージエリアのパディングを調整して、入力エリアがメッセージを隠さないようにする
+        chatMessages.style.paddingBottom = `${chatInputArea.offsetHeight + 10}px`; // 10px は適当な余白
+      } else {
+        // キーボードが非表示の場合、入力エリアを通常の位置に戻す
+        chatInputArea.style.bottom = `env(safe-area-inset-bottom)`;
+        chatMessages.style.paddingBottom = `16px`; // デフォルトのパディングに戻す
+      }
+      scrollBottom(); // レイアウト調整後にスクロール位置を最下部に
+    }
+
+    window.visualViewport.addEventListener('resize', adjustChatLayout);
+    // 初期ロード時にも一度調整を実行
+    adjustChatLayout();
+  }
 
   function createTypingBubble() {
     // 既存の #typingBubble があれば削除
