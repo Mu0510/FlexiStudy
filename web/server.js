@@ -123,9 +123,10 @@ inStream.on('data', chunk => {
            role: 'assistant',
            text: assistantBuf.get(msg.id).text.trim()
         };
-        history.push(rec);           // ← 履歴には残す
+        history.push(rec);
         // broadcast(rec);                    // ← ★ 削除（二重表示の原因）
         assistantBuf.delete(msg.id);
+        console.log(' [history tail]', history.slice(-3)); // 追加
         /* ここは return しない。以降↓の role&&text も不要なので continue */
         continue;
     }
