@@ -341,16 +341,10 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
       startPos = e.clientY;
       startLeftColumnSize = leftColumn.offsetHeight;
       startChatPanelSize = panel.offsetHeight; // Use 'panel' for chatPanel
-      if (isCoarsePointer) {
-        resizer.style.height = '25px'; // タッチデバイスの縦画面では高さを25pxに
-      }
     } else {
       startPos = e.clientX;
       startLeftColumnSize = leftColumn.offsetWidth;
       startChatPanelSize = panel.offsetWidth; // Use 'panel' for chatPanel
-      if (isCoarsePointer) {
-        resizer.style.width = '25px'; // タッチデバイスの横画面では幅を25pxに
-      }
     }
   }
 
