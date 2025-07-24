@@ -90,7 +90,7 @@ window.addEventListener('DOMContentLoaded', () => {
       // ── thought
       if (chunk.thought !== undefined) {
         active.bubble.innerHTML = marked.parse(chunk.thought.trim());
-        scrollBottom();
+        scrollBottom(); // 条件付きスクロール
       }
 
       // ── text
@@ -102,9 +102,10 @@ window.addEventListener('DOMContentLoaded', () => {
           active.text        = '';
         }
 
-        active.text += chunk.text.replace(/^[\n]+/, '');
+        active.text += chunk.text.replace(/^[
+]+/, '');
         active.bubble.innerHTML = marked.parse(active.text.trimEnd());
-        scrollBottom();
+        scrollBottom(); // 条件付きスクロール
       }
 
       // ACK は id があるときだけ
@@ -230,8 +231,6 @@ window.addEventListener('DOMContentLoaded', () => {
         /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
         if (arr.length < 5) finished = true;
 
-        scrollBottom(); // 履歴読み込み後に一番下までスクロール
-
         return;
     }
 
@@ -353,7 +352,7 @@ window.addEventListener('DOMContentLoaded', () => {
     return {
       open: () => {
         panelElement.style.display = 'block';
-        scrollBottom();
+        scrollBottom(true);
       },
       setStatus: (status) => {
         const statusSpan = panelElement.querySelector('.tool-panel-status');
@@ -362,7 +361,7 @@ window.addEventListener('DOMContentLoaded', () => {
       updateBody: (newBody) => {
         const bodyDiv = panelElement.querySelector('.tool-panel-body');
         if (bodyDiv) bodyDiv.innerHTML = newBody;
-        scrollBottom();
+        scrollBottom(true);
       }
     };
   }
@@ -479,7 +478,7 @@ window.addEventListener('DOMContentLoaded', () => {
     el.classList.add('file-notice');
     el.textContent = `✔ ${type} ${path}`;
     messages.appendChild(el);
-    scrollBottom();
+    scrollBottom(); // 条件付きスクロール
   }
 
   // 送信
@@ -597,7 +596,7 @@ window.addEventListener('DOMContentLoaded', () => {
         chatInputArea.style.bottom = `env(safe-area-inset-bottom)`;
         chatMessages.style.paddingBottom = '16px'; // デフォルトのパディングに戻す
       }
-      scrollBottom(); // レイアウト調整後にスクロール位置を最下部に
+      scrollBottom(true); // レイアウト調整後にスクロール位置を最下部に (強制)
     }
 
     window.visualViewport.addEventListener('resize', adjustChatLayout);
@@ -615,6 +614,7 @@ window.addEventListener('DOMContentLoaded', () => {
     bubble.className = 'assistant-message typing';
     bubble.textContent = '…思考中…';
     chatArea.appendChild(bubble);
+    scrollBottom(); // 条件付きスクロール
     return bubble;
   }
 
@@ -626,7 +626,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function appendMsg(role, text) {
     const el = appendMsgEl(role);
     el.innerHTML = marked.parse(text);
-    scrollBottom();
+    scrollBottom(); // 条件付きスクロール
   }
 
   // appendMsg の DOM 生成部分を分離
@@ -640,12 +640,19 @@ window.addEventListener('DOMContentLoaded', () => {
     const el = document.createElement('div');
     el.classList.add('system');
     el.textContent = text;
-    messages.appendChild(el);
-    scrollBottom();
+    scrollBottom(); // 条件付きスクロール
   }
 
-  function scrollBottom() {
-    messages.scrollTop = messages.scrollHeight;
+  /**
+   * チャットメッセージを一番下までスクロールします。
+   * @param {boolean} force - true の場合、現在のスクロール位置に関わらず強制的にスクロールします。
+   *                          false (または未指定) の場合、ユーザーが一番下に近い位置にいる場合のみスクロールします。
+   */
+  function scrollBottom(force = false) {
+    // ユーザーが一番下に近い位置にいるか、強制スクロールが指定されている場合のみスクロール
+    if (force || (messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 1)) {
+      messages.scrollTop = messages.scrollHeight;
+    }
   }
 
   let histReqId = 10000;          // 衝突しない範囲で適当
@@ -662,7 +669,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   ws.addEventListener('open', () => {
     requestHistory();
-    scrollBottom(); // 初期表示時にも一番下までスクロール
+    scrollBottom(true); // 初期表示時にも一番下までスクロール (強制)
   });
 
   messages.addEventListener('scroll', () => {
