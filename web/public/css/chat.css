@@ -119,10 +119,10 @@
   background: rgba(0,0,0,0.4);    /* 半透明の黒 */
   color: #fff;
   border-radius: 18px 18px 0px 18px;            /* やや丸め */
-  padding: 10px 12px 13px 12px;     /* 程よい高さ感！ */
+  padding: 8px 12px 8px 12px;     /* 程よい高さ感！ */
   font-size: 1em;
   font-weight: 400;
-  line-height: 1;           /* 行間を自然に */
+  line-height: 1.6;           /* 行間を自然に */
   max-width: 70%;                 /* 長文のときだけ折り返す */
   box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.6);
   border: 1px solid var(--border-color);

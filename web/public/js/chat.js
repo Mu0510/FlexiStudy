@@ -6,7 +6,7 @@ window.addEventListener('DOMContentLoaded', () => {
   setVH();
   window.addEventListener('resize', setVH);
 
-  marked.setOptions({ breaks: false }); // 改行を <br> タグとして処理する
+  marked.setOptions({ breaks: true }); // 改行を <br> タグとして処理する
 
   const panel    = document.getElementById('chatPanel');
   const openBtn  = document.getElementById('chatOpenBtn');
@@ -69,6 +69,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (msg.method === 'streamAssistantMessageChunk') {
       const { chunk } = msg.params;
+      const shouldScroll = isNearBottom(); // チャンク処理前にスクロール位置を判定
 
       // ─────────────────────────────
       // ① 新しい応答の開始判定
@@ -90,7 +91,7 @@ window.addEventListener('DOMContentLoaded', () => {
       // ── thought
       if (chunk.thought !== undefined) {
         active.bubble.innerHTML = marked.parse(chunk.thought.trim());
-        scrollBottom(); // 条件付きスクロール
+        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール // 判定結果に基づいてスクロール
       }
 
       // ── text
@@ -102,9 +103,7 @@ window.addEventListener('DOMContentLoaded', () => {
           active.text        = '';
         }
 
-        active.text += chunk.text.replace(/^\n+/, '');
-        active.bubble.innerHTML = marked.parse(active.text.trimEnd());
-        scrollBottom(); // 条件付きスクロール
+        active.text += chunk.text.replace(/^\n+/, '');        active.bubble.innerHTML = marked.parse(active.text.trimEnd());        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
       }
 
       // ACK は id があるときだけ
@@ -644,13 +643,21 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   /**
+   * 現在のスクロール位置がチャットエリアの最下部に近いかどうかを判定します。
+   * @returns {boolean} 最下部に近い場合は true、そうでない場合は false。
+   */
+  function isNearBottom() {
+    return messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 5;
+  }
+
+  /**
    * チャットメッセージを一番下までスクロールします。
    * @param {boolean} force - true の場合、現在のスクロール位置に関わらず強制的にスクロールします。
    *                          false (または未指定) の場合、ユーザーが一番下に近い位置にいる場合のみスクロールします。
    */
   function scrollBottom(force = false) {
     // ユーザーが一番下に近い位置にいるか、強制スクロールが指定されている場合のみスクロール
-    if (force || (messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 5)) {
+    if (force || isNearBottom()) {
       messages.scrollTop = messages.scrollHeight;
     }
   }
