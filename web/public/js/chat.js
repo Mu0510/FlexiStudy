@@ -225,6 +225,8 @@ window.addEventListener('DOMContentLoaded', () => {
         /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
         if (arr.length < 5) finished = true;
 
+        scrollBottom(); // 履歴読み込み後に一番下までスクロール
+
         return;
     }
 
@@ -655,6 +657,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   ws.addEventListener('open', () => {
     requestHistory();
+    scrollBottom(); // 初期表示時にも一番下までスクロール
   });
 
   messages.addEventListener('scroll', () => {
