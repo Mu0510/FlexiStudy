@@ -103,11 +103,12 @@ inStream.on('data', chunk => {
 
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
-        const { chunk, messageId } = msg.params;
+        const chunk = msg.params.chunk;
+        const key   = msg.id;                       // ← ★ id をキーに統一
         if (chunk.text !== undefined) {
-           const entry = assistantBuf.get(messageId) || { text: '' };
+           const entry = assistantBuf.get(key) || { text: '' };
            entry.text += chunk.text.replace(/^[\r\n]+/,'');
-           assistantBuf.set(messageId, entry);
+           assistantBuf.set(key, entry);
         }
         /* 継続中なのでここで broadcast して return */
         broadcast(msg);                 // クライアントへライブ表示用
@@ -115,7 +116,7 @@ inStream.on('data', chunk => {
     }
 
     /* 2) stream が終わったシグナル (result:null) で保存 */
-    if (msg.result === null && msg.id && assistantBuf.has(msg.id)) {
+    if (msg.result === null && assistantBuf.has(msg.id)) {
         const rec = {
            id:   msg.id.toString(),
            ts:   Date.now(),
