@@ -309,43 +309,75 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
     return `<div>Loading...</div>`;
   }
 
-  //const remixer = document.getElementById('remixer');
-//remixer.addEventListener('pointerdown', startResize);
+  // 「resizer」要素を Pointer Events で掴めるように
+  const resizer = document.getElementById('resizer');
 
-// function startResize(e) { … }
-// function doResize(e) { … }
-// function stopResize() { … }
+  // Get references to the main layout elements
+  const appContainer = document.getElementById('appContainer');
+  const leftColumn = document.getElementById('leftColumn');
+  // chatPanel is already defined as 'panel'
 
-// 「resizer」要素を Pointer Events で掴めるように
-const resizer = document.getElementById('resizer');
+  // Variables for resize
+  let startPos; // Stores e.clientX or e.clientY
+  let startLeftColumnSize; // Stores leftColumn.offsetWidth or leftColumn.offsetHeight
+  let startChatPanelSize; // Stores chatPanel.offsetWidth or chatPanel.offsetHeight
 
-// タッチデバイスを検出してリサイザーの幅を調整
-if (window.matchMedia('(pointer:coarse)').matches) {
-  resizer.style.width = '25px'; // 例: 10px * 2.5 = 25px
-}
-
-resizer.addEventListener('pointerdown', startResize);
-
-function startResize(e) {
-  e.preventDefault();  // タッチのスクロール抑制
-  document.addEventListener('pointermove', doResize);
-  document.addEventListener('pointerup',   stopResize);
-  startX     = e.clientX;
-  startWidth = chatPanel.offsetWidth;
-}
-
-function doResize(e) {
-  const delta = e.clientX - startX;
-  const newWidth = startWidth - delta; // 変更: ドラッグ方向と幅の増減を反転
-  if (newWidth >= 200 && newWidth <= window.innerWidth * 0.8) {
-    chatPanel.style.width = `${newWidth}px`;
+  // タッチデバイスを検出してリサイザーの幅を調整
+  if (window.matchMedia('(pointer:coarse)').matches) {
+    resizer.style.width = '25px'; // 例: 10px * 2.5 = 25px
   }
-}
 
-function stopResize() {
-  document.removeEventListener('pointermove', doResize);
-  document.removeEventListener('pointerup',   stopResize);
-}
+  resizer.addEventListener('pointerdown', startResize);
+
+  function startResize(e) {
+    e.preventDefault();
+    document.addEventListener('pointermove', doResize);
+    document.addEventListener('pointerup', stopResize);
+
+    const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+
+    if (isPortrait) {
+      startPos = e.clientY;
+      startLeftColumnSize = leftColumn.offsetHeight;
+      startChatPanelSize = panel.offsetHeight; // Use 'panel' for chatPanel
+    } else {
+      startPos = e.clientX;
+      startLeftColumnSize = leftColumn.offsetWidth;
+      startChatPanelSize = panel.offsetWidth; // Use 'panel' for chatPanel
+    }
+  }
+
+  function doResize(e) {
+    const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+    let delta;
+
+    if (isPortrait) {
+      delta = e.clientY - startPos;
+      const newLeftColumnHeight = startLeftColumnSize + delta;
+      const newChatPanelHeight = startChatPanelSize - delta;
+
+      const minHeight = 200; // Minimum height for either panel
+      if (newLeftColumnHeight >= minHeight && newChatPanelHeight >= minHeight) {
+        leftColumn.style.height = `${newLeftColumnHeight}px`;
+        panel.style.height = `${newChatPanelHeight}px`; // Use 'panel' for chatPanel
+      }
+    } else {
+      delta = e.clientX - startPos;
+      const newLeftColumnWidth = startLeftColumnSize + delta;
+      const newChatPanelWidth = startChatPanelSize - delta;
+
+      const minWidth = 200; // Minimum width for either panel
+      if (newLeftColumnWidth >= minWidth && newChatPanelWidth >= minWidth) {
+        leftColumn.style.width = `${newLeftColumnWidth}px`;
+        panel.style.width = `${newChatPanelWidth}px`; // Use 'panel' for chatPanel
+      }
+    }
+  }
+
+  function stopResize() {
+    document.removeEventListener('pointermove', doResize);
+    document.removeEventListener('pointerup', stopResize);
+  }
 
   // appendFileNotice の実装例
   function appendFileNotice(type, path) {

@@ -395,3 +395,22 @@ details[open] > summary:before {
     }
 }
 
+/* Portrait orientation adjustments */
+@media (orientation: portrait) {
+    #appContainer {
+        flex-direction: column;
+    }
+
+    #leftColumn, #chatPanel {
+        width: 100%; /* Take full width */
+        height: 50%; /* Example: split height */
+        max-width: none; /* Remove max-width constraint */
+    }
+
+    #resizer {
+        width: 100%; /* Take full width */
+        height: 5px; /* Small height for vertical resizer */
+        cursor: ns-resize; /* North-south resize cursor */
+    }
+}
+
