@@ -174,7 +174,7 @@
   color:#fff;
   font:1em/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   padding:0;                          /* 余白はラッパー側で */
-  caret-color:var(--accent-color);
+  caret-color:var(--text-color-dark);
 }
 #chatSend{
   position:absolute;right:16px;bottom:16px;        /* pill 内側との間隔も詰める */
