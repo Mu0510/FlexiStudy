@@ -103,8 +103,8 @@ inStream.on('data', chunk => {
 
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
-        const chunk = msg.params.chunk;
-        const key   = msg.id;                // ← ★ ここを msg.id に
+        const { chunk, messageId } = msg.params;
+        const key = messageId;                // ← ★ 正しいキー
         if (chunk.text !== undefined) {
            const entry = assistantBuf.get(key) || { text: '' };
            entry.text += chunk.text.replace(/^[\r\n]+/,'');
