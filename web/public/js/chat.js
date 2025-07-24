@@ -8,6 +8,10 @@ window.addEventListener('DOMContentLoaded', () => {
   const sendBtn  = document.getElementById('chatSend');
   const input    = document.getElementById('chatInput');
   input.style.color = 'white';
+
+  // デバッグ：フォーカスイベント確認
+  input.addEventListener("focus", () => console.log("input focused"));
+  input.addEventListener("blur", () => console.log("input blurred"));
   const messages = document.getElementById('chatMessages');
 
   let currentBubble = null;       // <div id="typingBubble"> 要素
@@ -314,6 +318,12 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
 
 // 「resizer」要素を Pointer Events で掴めるように
 const resizer = document.getElementById('resizer');
+
+// タッチデバイスを検出してリサイザーの幅を調整
+if (window.matchMedia('(pointer:coarse)').matches) {
+  resizer.style.width = '25px'; // 例: 10px * 2.5 = 25px
+}
+
 resizer.addEventListener('pointerdown', startResize);
 
 function startResize(e) {
@@ -326,7 +336,7 @@ function startResize(e) {
 
 function doResize(e) {
   const delta = e.clientX - startX;
-  const newWidth = startWidth + delta;
+  const newWidth = startWidth - delta; // 変更: ドラッグ方向と幅の増減を反転
   if (newWidth >= 200 && newWidth <= window.innerWidth * 0.8) {
     chatPanel.style.width = `${newWidth}px`;
   }
