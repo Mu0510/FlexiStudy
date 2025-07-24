@@ -21,7 +21,7 @@ window.addEventListener('DOMContentLoaded', () => {
     console.log("input focused");
     input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   });
-  input.addEventListener("blur", () => console.log("input blurred"));
+  input.addEventListener("blur", () => console.log("blurred"));
   const messages = document.getElementById('chatMessages');
 
   let currentBubble = null;       // <div id="typingBubble"> 要素
@@ -101,8 +101,7 @@ window.addEventListener('DOMContentLoaded', () => {
           active.text        = '';
         }
 
-        active.text += chunk.text.replace(/^[
-]+/, '');
+        active.text += chunk.text.replace(/^[\n]+/, '');
         active.bubble.innerHTML = marked.parse(active.text.trimEnd());
         scrollBottom();
       }
@@ -397,8 +396,7 @@ window.addEventListener('DOMContentLoaded', () => {
         resizer.style.width = '25px';
         resizer.style.height = '100%';
       }
-    }
-  } else {
+    } else {
       // 非タッチデバイスの場合のデフォルトスタイル（CSSで設定済み）
       // ここでは何もしないか、必要であればデフォルト値を設定
       resizer.style.removeProperty('width');
