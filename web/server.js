@@ -177,18 +177,15 @@ wss.on('connection', ws => {
     if (msg.method === 'fetchHistory') {
       const { limit = 5, before } = msg.params || {};
 
-      // before で指定された id より古いものを slice
-      let idx = history.length;
-      if (before) {
-        idx = history.findIndex(m => m.id === before);
-        if (idx === -1) idx = history.length;
-      }
-      const chunk = history.slice(Math.max(0, idx - limit), idx);
+      // before = タイムスタンプ。より古いものを limit 件
+      const chunk = history
+          .filter(rec => before ? rec.ts < before : true)
+          .slice(-limit);                 // 配列末尾が最新なので後ろから切り出す
 
       return ws.send(JSON.stringify({
         jsonrpc: '2.0',
-        id:      msg.id,      // フロントがくれた id をそのまま返す
-        result:  { messages: chunk }
+        id:     msg.id,
+        result: { messages: chunk }
       }));
     }
 
