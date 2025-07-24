@@ -67,10 +67,7 @@ const wss    = new WebSocket.Server({ server, path: '/ws' });
 const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
 
-const ASSISTANT_SAVE_DELAY_MS = 200; // 最後のチャンクからこの時間新しいチャンクが来なければ保存
-const ASSISTANT_CLEANUP_INTERVAL_MS = 1500; // 1.5秒ごとに孤立したバッファをチェック
-
-const assistantBuf = new Map(); // { text: '', timerId: null, lastUpdated: 0 }
+let ongoingText = '';
 
 /* ── ① ユーティリティを追加 ───────────────────────── */
 function broadcast(json){
@@ -90,57 +87,6 @@ function resetHistory(reason='manual'){
   broadcast({ jsonrpc:'2.0', method:'historyCleared', params:{ reason } });
 }
 
-function saveAssistantMessageToHistory(messageId) {
-    // messageIdが不正な値の場合は処理をスキップ
-    if (messageId === undefined || messageId === null) {
-        console.log(`[History] Invalid messageId: ${messageId}. Skipping save.`);
-        return;
-    }
-
-    const entry = assistantBuf.get(messageId);
-    if (!entry || !entry.text.trim()) {
-        assistantBuf.delete(messageId); // 空のバッファは削除
-        return;
-    }
-
-    // messageIdを文字列に変換（安全に）
-    const messageIdStr = String(messageId);
-
-    // 既に履歴に存在するかチェック（重複防止）
-    const existsInHistory = history.some(rec => rec.id === messageIdStr && rec.role === 'assistant');
-    if (existsInHistory) {
-        console.log(`[History] Assistant message ${messageIdStr} already exists in history. Skipping save.`);
-        assistantBuf.delete(messageId); // 既に保存済みならバッファから削除
-        return;
-    }
-
-    const rec = {
-       id:   messageIdStr,
-       ts:   Date.now(),
-       role: 'assistant',
-       text: entry.text.trimEnd()
-    };
-    history.push(rec);
-    console.log(`[History] Saved assistant message: ${messageIdStr}`);
-    console.log(' [history tail]', history.slice(-3));
-    assistantBuf.delete(messageId); // 保存後、バッファから削除
-}
-
-// 定期的に孤立したバッファをチェックし、保存する
-setInterval(() => {
-    const now = Date.now();
-    assistantBuf.forEach((entry, messageId) => {
-        // 最終更新から一定時間経過しているが、まだ保存されていないもの
-        if (now - entry.lastUpdated > ASSISTANT_CLEANUP_INTERVAL_MS && entry.text.trim()) {
-            console.log(`[Cleanup] Saving orphaned assistant message: ${messageId}`);
-            if (entry.timerId) {
-                clearTimeout(entry.timerId);
-            }
-            saveAssistantMessageToHistory(messageId);
-        }
-    });
-}, ASSISTANT_CLEANUP_INTERVAL_MS);
-
 /* ──────────────────────────────────────────────── */
 
 const inStream  = fs.createReadStream(PIPE_OUT, { encoding: 'utf8' });
@@ -159,49 +105,34 @@ inStream.on('data', chunk => {
 
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
-        const { chunk } = msg.params || {};
-        const messageId = chunk?.message?.id || null;
-        if (!messageId) {
-            console.warn('[Fatal] チャンクに message.id が無い');
-            return;
+        const { chunk: c } = msg.params || {};
+        if (c?.text) {
+            ongoingText += c.text;
         }
-
-        const key = String(messageId); // Key for assistantBuf is messageId
-
-        let entry = assistantBuf.get(key) || { text: '', timerId: null, lastUpdated: Date.now() };
-
-        if (entry.timerId) {
-            clearTimeout(entry.timerId); // 既存のタイマーをクリア
-        }
-
-        if (chunk && chunk.text !== undefined) {
-           entry.text += chunk.text;
-        }
-        entry.lastUpdated = Date.now(); // 最終更新時刻を更新
-        assistantBuf.set(key, entry);
-
-        
-
         broadcast(msg); // クライアントへライブ表示用
         continue;
     }
 
     // 完了通知
     if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-        const id = String(msg.params?.messageId || msg.params?.message_id || msg.params?.id || msg.id);
-        saveAssistantMessageToHistory(id);   // 完了時に確定保存
-        // 完成メッセージをクライアントへ (リアルタイムと同じ経路)
-        const entry = assistantBuf.get(id);
-        if (entry && entry.text.trim()) {
-            broadcast({
-              id,
-              ts: Date.now(),
-              role: 'assistant',
-              text: entry.text.trim()
-            });
-        }
-        assistantBuf.delete(id);
-        broadcast(msg);      // 既存の挙動を保つ
+        // ① 履歴に 1 回だけ保存
+        const rec = {
+          id: String(Date.now()),      // ユニークな値を採番
+          ts: Date.now(),
+          role: 'assistant',
+          text: ongoingText.trimEnd(),
+        };
+        history.push(rec);
+        console.log('[History] Saved assistant message:', rec);
+
+        // ② 完成形をクライアントへ送る
+        broadcast(rec);
+
+        // ③ バッファをクリア
+        ongoingText = '';
+
+        // ④ 既存の完了通知も送信 (必要なら)
+        broadcast(msg);
         continue;
     }
 
@@ -255,10 +186,16 @@ wss.on('connection', ws => {
     if (msg.method === 'fetchHistory') {
       const { limit = 5, before } = msg.params || {};
 
-      // before = タイムスタンプ。より古いものを limit 件
-      const chunk = history
-          .filter(rec => before ? rec.ts < before : true)
-          .slice(-limit);                 // 配列末尾が最新なので後ろから切り出す
+      let chunk;
+      if (!before) {
+        // 起動時 or 明示的に before=null なら最新 limit 件をそのまま返す
+        chunk = history.slice(-limit);
+      } else {
+        // スクロール読み込み
+        chunk = history
+            .filter(rec => rec.ts < before)
+            .slice(-limit);
+      }
 
       return ws.send(JSON.stringify({
         jsonrpc: '2.0',
@@ -270,14 +207,6 @@ wss.on('connection', ws => {
     /* ── ③ クライアント→サーバー受信部 (ws.on 'message') に追記 ── */
     if (msg.method === 'sendUserMessage') {
       const inputText = msg.params?.chunks?.[0]?.text || '';
-
-      // 新しいユーザーメッセージが来る前に、未保存のAI応答を強制的に保存
-      assistantBuf.forEach((entry, messageId) => {
-          if (entry.timerId) {
-              clearTimeout(entry.timerId);
-          }
-          saveAssistantMessageToHistory(messageId);
-      });
 
       /*   /clear コマンド  */
       if (inputText.trim() === '/clear'){
