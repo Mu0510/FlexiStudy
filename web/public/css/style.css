@@ -367,20 +367,6 @@ details[open] > summary:before {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    body {
-        align-items: stretch; /* Reset alignment for vertical stacking */
-        justify-content: flex-start; /* Reset justification */
-    }
-    #appContainer {
-        flex-direction: column; /* Stack columns vertically */
-        width: 100%; /* Take full width */
-        height: 100%; /* Take full height */
-    }
-    #leftColumn, #chatPanel {
-        width: 100%; /* Full width for both columns */
-        height: auto; /* Auto height */
-    }
-    
     .main-content-wrapper {
         width: auto; /* Allow content to take full width */
         margin: 20px; /* Add 20px margin on all sides */
