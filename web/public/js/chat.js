@@ -52,6 +52,7 @@ window.addEventListener('DOMContentLoaded', () => {
     
 
     if (msg.method === 'pushToolCall') {
+      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
       const { icon, label, locations, toolCallId } = msg.params;
       const command = locations?.[0]?.path ?? '';
       createToolCard({ callId: toolCallId, icon, label, command });
@@ -63,8 +64,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
+      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
       // 実行ログを対応カードに追記
-      const entry = toolCards.get(msg.params.callId);
+      const entry = toolCards.get(msg.params.callId ?? msg.params.toolCallId);
       if (entry) {
         let textContent = msg.params.chunk.text;
         // diff 行の色付け
@@ -85,12 +87,14 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (msg.method === 'pushMessage') {
+      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
       // ツール完了後のふつうのアシスタント返信
       appendMsg('assistant-message', msg.params.content); // appendAssistantBubble() の代わりに appendMsg() を使用
       return;
     }
 
     if (msg.method === 'updateToolCall') {
+      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
       updateToolCard(msg.params);
       return;
     }
