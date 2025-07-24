@@ -103,8 +103,8 @@ inStream.on('data', chunk => {
 
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
-        const chunk = msg.params.chunk;
-        const key   = msg.id;                       // ← ★ id をキーに統一
+        const { chunk, messageId } = msg.params;
+        const key = messageId;                // ← ★ 元に戻す
         if (chunk.text !== undefined) {
            const entry = assistantBuf.get(key) || { text: '' };
            entry.text += chunk.text.replace(/^[\r\n]+/,'');
@@ -123,8 +123,8 @@ inStream.on('data', chunk => {
            role: 'assistant',
            text: assistantBuf.get(msg.id).text.trim()
         };
-        history.push(rec);
-        broadcast(rec);                 // 全クライアントに”完成版”を通知
+        history.push(rec);           // ← 履歴には残す
+        // broadcast(rec);              // ← ★ 削除：二重表示の原因
         assistantBuf.delete(msg.id);
         /* ここは return しない。以降↓の role&&text も不要なので continue */
         continue;
