@@ -198,7 +198,6 @@ window.addEventListener('DOMContentLoaded', () => {
         pendingHistory.delete(message.id);
 
         const arr = message.result.messages;
-  console.log('履歴で来たmessages', arr);
         if(arr.length === 0){ finished = true; return; }
 
         /* (1) サーバは「新→古」の順で返すので reverse して古→新へ */

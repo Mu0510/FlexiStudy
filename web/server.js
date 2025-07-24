@@ -94,7 +94,6 @@ const outStream = fs.createWriteStream(PIPE_IN,  { encoding: 'utf8' });
 
 let buf = '';
 inStream.on('data', chunk => {
-  console.log('Received chunk from Gemini CLI:', chunk);
   buf += chunk;
   const lines = buf.split('\n');
   buf = lines.pop() || '';
