@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Dashboard + Gemini Chat</title>
+    <link rel="icon" href="./assets/favicon.ico" />
+    <link rel="stylesheet" href="./css/style.css">
+    <link rel="stylesheet" href="./css/chat.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+  <div id="appContainer">
+    <!-- 左側カラム -->
+    <div id="leftColumn">
+      <div id="date-nav" class="date-nav">
+          <button id="prev-day">◀</button>
+          <div id="current-date-display">
+              <span id="date-text"></span>
+              <input type="date" id="date-picker">
+          </div>
+          <button id="next-day">▶</button>
+      </div>
+      <div id="mainContent">
+        <div class="main-content-wrapper">
+            <div id="daily-goal-container"></div>
+            <div id="daily-summary-container"></div>
+            <div id="logs-container"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 境界ドラッグバー -->
+    <div id="resizer"></div>
+
+    <div id="chatPanel">
+      <div id="chatHeader">
+        <span>Gemini Chat</span>
+        <button id="fullscreenToggle">⛶</button>
+        <button id="chatClose">✕</button>
+      </div>
+      <div id="chatMessages"></div>
+      <div id="chatInputArea">
+        <input id="chatInput" placeholder="メッセージ…"/>
+        <button id="chatSend">送信</button>
+      </div>
+    </div>
+  </div>
+
+  <button id="chatOpenBtn"></button>
+  <script src="./js/script.js" defer></script>
+  <script src="./js/chat.js" defer></script>
+</body>
+</html>

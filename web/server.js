@@ -1,0 +1,170 @@
+const express   = require('express');
+const http      = require('http');
+const path      = require('path');
+const fs        = require('fs');
+const { spawn, exec } = require('child_process');
+const WebSocket = require('ws');
+
+const PORT       = 5000;
+const IPC_DIR    = '/home/geminicli/GeminiCLI/web/ipc';
+const PIPE_IN    = path.join(IPC_DIR, 'gemini_in');
+const PIPE_OUT   = path.join(IPC_DIR, 'gemini_out');
+
+// 1分あたりのトークン上限（Free Tierの場合）
+const TOKENS_PER_MINUTE_LIMIT = 250000;
+const MILLIS_PER_TOKEN = 60000 / TOKENS_PER_MINUTE_LIMIT;
+
+// 前回のリクエスト時間
+let lastRequestTime = 0;
+
+const app    = express();
+
+// index.html の Content-Type を明示的に設定
+app.use(express.static(path.join(__dirname, 'public')));
+
+app.get('/', (req, res) => {
+  res.setHeader('Content-Type', 'text/html');
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
+// Pythonスクリプトを実行するエンドポイント
+app.get('/run-python-script', (req, res) => {
+  const date = req.query.date;
+  const pythonScriptPath = '/home/geminicli/GeminiCLI/manage_log.py';
+  const command = `python3 ${pythonScriptPath} logs_json_for_date ${date}`;
+
+  exec(command, (error, stdout, stderr) => {
+    if (error) {
+      console.error(`exec error: ${error}`);
+      return res.status(500).send(stderr);
+    }
+    res.json(JSON.parse(stdout));
+  });
+});
+
+// トークン数を見積もる簡易関数
+function estimateTokensFromText(text) {
+  return Math.ceil(text.length / 4); // 英語なら4文字で1トークン程度
+}
+
+// トークン数に応じて待機する関数
+async function waitForTokenCooldown(estimatedTokens) {
+  const now = Date.now();
+  const elapsed = now - lastRequestTime;
+  const neededDelay = estimatedTokens * MILLIS_PER_TOKEN;
+  const remainingDelay = neededDelay - elapsed;
+
+  if (remainingDelay > 0) {
+    console.log(` Waiting ${Math.ceil(remainingDelay)}ms before next request...`);
+    await new Promise(res => setTimeout(res, remainingDelay));
+  }
+
+  lastRequestTime = Date.now();
+}
+
+const server = http.createServer(app);
+const wss    = new WebSocket.Server({ server, path: '/ws' });
+const clients = new Set();
+const history = [];          // メモリ上の簡易ログ（最新が末尾）
+
+const inStream  = fs.createReadStream(PIPE_OUT, { encoding: 'utf8' });
+const outStream = fs.createWriteStream(PIPE_IN,  { encoding: 'utf8' });
+
+let buf = '';
+inStream.on('data', chunk => {
+  buf += chunk;
+  const lines = buf.split('\n');
+  buf = lines.pop() || '';
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    let msg;
+    try { msg = JSON.parse(line); }
+    catch { msg = { stdout: line }; }
+
+    // チャット履歴として残すのは “role と text” を持つ行だけ
+    if (msg.role && msg.text) {
+      history.push({ ...msg, id: msg.id || Date.now() });
+    }
+
+    const json = JSON.stringify(msg);
+    for (const ws of clients) {
+      if (ws.readyState === WebSocket.OPEN) ws.send(json);
+    }
+  }
+});
+
+wss.on('connection', ws => {
+  clients.add(ws);
+
+  // ── 初回だけ initialize を送るフラグ
+  if (!wss._sentInit) {
+    const init = {
+      jsonrpc: '2.0',
+      id:      1,
+      method:  'initialize',
+      params:  { protocolVersion: '0.0.9' }
+    };
+    outStream.write(JSON.stringify(init) + '\n');
+    wss._sentInit = true;          // 以後は送らない
+  }
+
+  ws.on('message', async data => { // async を追加
+
+    const text = data.toString().trim();
+    if (!text) return;
+
+    let msg;
+    try {
+      msg = JSON.parse(text);
+    } catch (e) {
+      console.error('Failed to parse incoming WebSocket message as JSON:', e);
+      // If it's not JSON, treat it as a plain text command
+      outStream.write(text + '\n');
+      return;
+    }
+
+    // フロントからの “fetchHistory” をここで処理
+    if (msg.method === 'fetchHistory') {
+      const { limit = 5, before } = msg.params || {};
+
+      // before で指定された id より古いものを slice
+      let idx = history.length;
+      if (before) {
+        idx = history.findIndex(m => m.id === before);
+        if (idx === -1) idx = history.length;
+      }
+      const chunk = history.slice(Math.max(0, idx - limit), idx);
+
+      return ws.send(JSON.stringify({
+        jsonrpc: '2.0',
+        id:      msg.id,      // フロントがくれた id をそのまま返す
+        result:  { messages: chunk }
+      }));
+    }
+
+    // Gemini CLIへのメッセージ送信前にクールダウンを適用
+    if (msg.method === 'sendUserMessage' && msg.params && msg.params.chunks && msg.params.chunks[0] && msg.params.chunks[0].text) {
+      const inputText = msg.params.chunks[0].text;
+      const estimatedTokens = estimateTokensFromText(inputText);
+      await waitForTokenCooldown(estimatedTokens);
+    }
+
+    // それ以外は Gemini へパススルー
+    outStream.write(JSON.stringify(msg) + '\n');
+  });
+
+  ws.on('close', () => clients.delete(ws));
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received. Forcing exit...');
+  process.exit(0);
+});
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received. Forcing exit...');
+  process.exit(0);
+});
+
+server.listen(PORT, () => {
+  console.log(`Server running at http://localhost:${PORT}`);
+});

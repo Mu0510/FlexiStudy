@@ -1,0 +1,194 @@
+/* 全体を横並びに */
+#appContainer {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* 左カラム：縦に date-nav＋mainContent */
+#leftColumn {
+  display: flex;
+  flex-direction: column;
+  flex: 1;               /* 可能な限り幅をとる */
+  overflow: hidden;
+}
+#date-nav {
+  flex: none;
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(10px) !important;
+  -webkit-backdrop-filter: blur(10px) !important;
+  box-shadow: var(--shadow-medium) !important;
+  color: var(--text-color-dark) !important;
+  padding: 12px;
+  font-weight: bold;
+}
+#mainContent {
+  flex: 1;
+  overflow-y: auto;      /* 左カラム内部スクロール */
+}
+
+/* 境界ドラッグバー */
+#resizer {
+  width: 4px;
+  cursor: ew-resize;
+  touch-action: none;       /* タッチ操作を抑制 */
+  -ms-touch-action: none;   /* IE/Edge 用 */
+}
+#resizer:hover {
+  background: rgba(255,255,255,0.3);
+}
+
+/* 右カラム：チャットパネル */
+#chatPanel {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-width: 75%;
+  min-width: 200px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--shadow-medium);
+  border-left: none; /* 透過感を優先 */
+}
+
+/* 縦長画面なら下並びに */
+ @media (max-aspect-ratio: 1/1) {
+  #appContainer {
+    flex-direction: column;
+  }
+  #resizer {
+    height: 5px;
+    width: 100%;
+    cursor: ns-resize;
+  }
+  #chatPanel {
+    width: 100%;
+    height: 240px;
+    border-left: none;
+    border-top: 1px solid #333;
+  }
+}
+
+/* ヘッダーもガラス風に */
+#chatHeader {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* 閉じる／全画面ボタンの余白調整 */
+#chatHeader button {
+  margin-left: 8px;
+}
+
+/* メッセージと入力 */
+#chatMessages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ユーザーは右寄せ吹き出し */
+.user-message {
+  align-self: flex-end;           /* 右上に寄せる */
+  background: rgba(0,0,0,0.4);    /* 半透明の黒 */
+  color: #fff;
+  border-radius: 18px 18px 0px 18px;            /* やや丸め */
+  padding: 10px 12px 13px 12px;     /* 程よい高さ感！ */
+  font-size: 1em;
+  font-weight: 400;
+  line-height: 1;           /* 行間を自然に */
+  max-width: 70%;                 /* 長文のときだけ折り返す */
+  box-shadow: 5px 5px 20px rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-color);
+  word-break: break-word;
+  text-align: left;
+  margin: 8px 0 2px 0;            /* 上下の空き具合 */
+  box-sizing: border-box;
+}
+
+/* AIは中央寄せ、背景なし */
+.assistant-message {
+  align-self: center;
+  width: 90%;         /* ← max-width: 90%; ではなく width: 90%; に */
+  background: transparent; /* 背景なし */
+  color: #fff;
+  padding: 0;              /* 余白も不要なら0 */
+  text-align: left;
+  word-break: break-word;
+  box-sizing: border-box;
+  margin: 10px 0 20px 0;
+}
+
+.assistant-message.typing {
+  color: #aaa;
+  font-style: italic;
+  text-align: left !important; /* 左揃えにする */
+}
+
+/* 最初のシステムメッセージも背景なし＆薄色 */
+.system-message:first-of-type {
+  align-self: center;
+  max-width: 90%;
+  background: none;      /* 背景無し */
+  color: #888;           /* 薄いグレー */
+  font-size: 0.9em;
+  text-align: center;    /* 中央揃え */
+  padding: 4px 0;        /* 最小余白 */
+}
+
+/* 吹き出し内の p タグのマージンをリセット */
+.user-message p,
+.assistant-message p {
+  margin: 0;
+}
+
+/* 入力欄背景をすりガラス風に */
+#chatInputArea {
+  background: rgba(0,0,0,0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border-color);
+  flex: none;
+  display: flex;
+  padding: 6px;
+}
+#chatInputArea input {
+  background: rgba(255,255,255,0.1);
+  color: var(--text-color-light);
+  flex: 1;
+  padding: 6px;
+  border: none;
+  border-radius: 4px;
+  margin-right: 4px;
+}
+#chatInputArea button {
+  background: var(--accent-color);
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  color: white;
+  cursor: pointer;
+}
+
+/* スクロールバーも統一 */
+#chatMessages::-webkit-scrollbar {
+  width: 6px;
+}
+#chatMessages::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 3px;
+}
+#mainContent::-webkit-scrollbar, 
+#chatMessages::-webkit-scrollbar {
+  background: transparent;
+}
