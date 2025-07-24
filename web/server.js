@@ -185,7 +185,7 @@ wss.on('connection', ws => {
         ongoingText = ''; // クリア
       }
 
-      const { limit = 5, before } = msg.params || {};
+      const { limit = 20, before } = msg.params || {};
 
       let chunk;
       if (!before) {
