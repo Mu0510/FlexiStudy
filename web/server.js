@@ -68,7 +68,7 @@ const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
 
 const ASSISTANT_SAVE_DELAY_MS = 200; // 最後のチャンクからこの時間新しいチャンクが来なければ保存
-const ASSISTANT_CLEANUP_INTERVAL_MS = 5000; // 5秒ごとに孤立したバッファをチェック
+const ASSISTANT_CLEANUP_INTERVAL_MS = 1500; // 1.5秒ごとに孤立したバッファをチェック
 
 const assistantBuf = new Map(); // { text: '', timerId: null, lastUpdated: 0 }
 
@@ -118,7 +118,7 @@ function saveAssistantMessageToHistory(messageId) {
        id:   messageIdStr,
        ts:   Date.now(),
        role: 'assistant',
-       text: entry.text.trim()
+       text: entry.text.trimEnd()
     };
     history.push(rec);
     console.log(`[History] Saved assistant message: ${messageIdStr}`);
@@ -160,11 +160,10 @@ inStream.on('data', chunk => {
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params || {};
-        // Gemini-CLI ではルートの id がストリーム識別子
-        const messageId = msg.id ?? null;
-        if (messageId === null) {
-            console.warn('[Fatal] streamAssistantMessageChunk に id が無い…想定外');
-            return;            // 早めに離脱しておく方が安全
+        const messageId = chunk?.message?.id || null;
+        if (!messageId) {
+            console.warn('[Fatal] チャンクに message.id が無い');
+            return;
         }
 
         const key = String(messageId); // Key for assistantBuf is messageId
@@ -176,7 +175,7 @@ inStream.on('data', chunk => {
         }
 
         if (chunk && chunk.text !== undefined) {
-           entry.text += chunk.text.replace(/^[\r\n]+/,'');
+           entry.text += chunk.text;
         }
         entry.lastUpdated = Date.now(); // 最終更新時刻を更新
         assistantBuf.set(key, entry);
@@ -189,7 +188,7 @@ inStream.on('data', chunk => {
 
     // 完了通知
     if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-        const id = String(msg.id);
+        const id = String(msg.params?.messageId || msg.params?.message_id || msg.params?.id || msg.id);
         saveAssistantMessageToHistory(id);   // 完了時に確定保存
         // 完成メッセージをクライアントへ (リアルタイムと同じ経路)
         const entry = assistantBuf.get(id);
