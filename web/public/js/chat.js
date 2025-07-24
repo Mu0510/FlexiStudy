@@ -37,6 +37,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // WebSocket 接続
   const ws = new WebSocket(`ws://${location.host}/ws`);
+  window.ws = ws;  // ← これを1行追加！
   let requestId = 1;
   ws.addEventListener('message', e => {
     let msg;
