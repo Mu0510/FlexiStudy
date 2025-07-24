@@ -8,6 +8,15 @@
     <link rel="stylesheet" href="./css/style.css">
     <link rel="stylesheet" href="./css/chat.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script>
+    /* Safari 用：見えている高さを --vh に反映 */
+    function setRealVH() {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    }
+    setRealVH();
+    window.addEventListener('resize', setRealVH);
+  </script>
 </head>
 <body>
   <div id="appContainer">
@@ -41,7 +50,7 @@
       </div>
       <div id="chatMessages"></div>
       <div id="chatInputArea">
-        <input id="chatInput" placeholder="メッセージ…"/>
+        <textarea id="chatInput" placeholder="メッセージ…"></textarea>
         <button id="chatSend">送信</button>
       </div>
     </div>
