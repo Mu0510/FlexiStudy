@@ -68,6 +68,8 @@
     flex: 1; /* 変更: width: 100%; height: 240px; を flex: 1; に */
     border-left: none;
     border-top: 1px solid #333;
+    width: 100%; /* 縦画面時に横幅を100%にする */
+    max-width: 100%; /* 縦画面時に最大幅の制限を解除する */
   }
 }
 
