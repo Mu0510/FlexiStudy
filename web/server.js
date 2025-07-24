@@ -91,28 +91,37 @@ function resetHistory(reason='manual'){
 }
 
 function saveAssistantMessageToHistory(messageId) {
+    // messageIdが不正な値の場合は処理をスキップ
+    if (messageId === undefined || messageId === null) {
+        console.log(`[History] Invalid messageId: ${messageId}. Skipping save.`);
+        return;
+    }
+
     const entry = assistantBuf.get(messageId);
     if (!entry || !entry.text.trim()) {
         assistantBuf.delete(messageId); // 空のバッファは削除
         return;
     }
 
+    // messageIdを文字列に変換（安全に）
+    const messageIdStr = String(messageId);
+
     // 既に履歴に存在するかチェック（重複防止）
-    const existsInHistory = history.some(rec => rec.id === messageId.toString() && rec.role === 'assistant');
+    const existsInHistory = history.some(rec => rec.id === messageIdStr && rec.role === 'assistant');
     if (existsInHistory) {
-        console.log(`[History] Assistant message ${messageId} already exists in history. Skipping save.`);
+        console.log(`[History] Assistant message ${messageIdStr} already exists in history. Skipping save.`);
         assistantBuf.delete(messageId); // 既に保存済みならバッファから削除
         return;
     }
 
     const rec = {
-       id:   messageId.toString(),
+       id:   messageIdStr,
        ts:   Date.now(),
        role: 'assistant',
        text: entry.text.trim()
     };
     history.push(rec);
-    console.log(`[History] Saved assistant message: ${messageId}`);
+    console.log(`[History] Saved assistant message: ${messageIdStr}`);
     console.log(' [history tail]', history.slice(-3));
     assistantBuf.delete(messageId); // 保存後、バッファから削除
 }
@@ -150,7 +159,18 @@ inStream.on('data', chunk => {
 
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
-        const { chunk, messageId } = msg.params;
+        const { chunk } = msg.params || {};
+        const messageId =
+              msg.params?.messageId ??
+              msg.params?.message_id ??            // 旧 snake_case?
+              chunk?.message?.id ??
+              chunk?.id ??
+              null;  // 最後に null を許す
+
+        if (!messageId) {
+            console.log('[Warning] chunk に messageId が見つかりません。暫定 ID でバッファリングします');
+        }
+
         const key = messageId; // Key for assistantBuf is messageId
 
         let entry = assistantBuf.get(key) || { text: '', timerId: null, lastUpdated: Date.now() };
@@ -159,7 +179,7 @@ inStream.on('data', chunk => {
             clearTimeout(entry.timerId); // 既存のタイマーをクリア
         }
 
-        if (chunk.text !== undefined) {
+        if (chunk && chunk.text !== undefined) {
            entry.text += chunk.text.replace(/^[\r\n]+/,'');
         }
         entry.lastUpdated = Date.now(); // 最終更新時刻を更新
@@ -178,7 +198,7 @@ inStream.on('data', chunk => {
 
     /* 3) これまで通り user / system 行を保存 */
     if (msg.role && msg.text) {
-        history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? msg.id.toString() : Date.now().toString() });
+        history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
     }
 
     broadcast(msg);   // 既存の配信
@@ -255,7 +275,7 @@ wss.on('connection', ws => {
       }
 
       /*   ユーザ発言を履歴へも保存して broadcast  */
-      const rec = { id: Date.now().toString(), ts: Date.now(),
+      const rec = { id: String(Date.now()), ts: Date.now(),
                     role:'user', text: inputText };
       history.push(rec);                     // メモリキャッシュ
       broadcastExcept(ws, rec); // 新：送信元以外にだけ送る
