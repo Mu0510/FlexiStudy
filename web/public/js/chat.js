@@ -211,13 +211,18 @@ window.addEventListener('DOMContentLoaded', () => {
         }));
 
         /* (2) 既に表示済みの id はスキップ */
+        const prevScrollHeight = messages.scrollHeight; // 現在のスクロール高さを保存
+
         mapped.forEach(o=>{
-            if (loadedIds.has(o.id)) return;          // ← ここが重複ブロック
+            if (loadedIds.has(o.id)) return;
             const el = appendMsgEl(o.roleClass);
             el.innerHTML = marked.parse(o.text);
             messages.prepend(el);
             loadedIds.add(o.id);
         });
+
+        // スクロール位置を維持
+        messages.scrollTop = messages.scrollHeight - prevScrollHeight;
 
         /* (3) 一番古い ts を次の before に使う */
         oldestTs = mapped[0].ts;
