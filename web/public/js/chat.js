@@ -672,7 +672,8 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   messages.addEventListener('scroll', () => {
-    if (messages.scrollTop < 50 && !finished) {
+    // スクロール位置が上から30%以内になったら履歴を読み込む
+    if (messages.scrollTop < messages.clientHeight * 0.3 && !finished) {
       requestHistory();
     }
   });
