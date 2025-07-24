@@ -94,6 +94,7 @@ const outStream = fs.createWriteStream(PIPE_IN,  { encoding: 'utf8' });
 
 let buf = '';
 inStream.on('data', chunk => {
+  console.log('Received chunk from Gemini CLI:', chunk);
   buf += chunk;
   const lines = buf.split('\n');
   buf = lines.pop() || '';
@@ -113,23 +114,31 @@ inStream.on('data', chunk => {
         continue;
     }
 
+    /* 3) これまで通り user / system 行を保存 */
+    if (msg.role && msg.text) {
+        history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
+    }
+
     // 完了通知
-    if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-        // ① 履歴に 1 回だけ保存
-        const rec = {
-          id: String(Date.now()),      // ユニークな値を採番
-          ts: Date.now(),
-          role: 'assistant',
-          text: ongoingText.trimEnd(),
-        };
-        history.push(rec);
-        console.log('[History] Saved assistant message:', rec);
+    if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && msg.method !== 'initialize') {
+        // ongoingText が空でない場合にのみ履歴に保存
+        if (ongoingText.length > 0) {
+            // ① 履歴に 1 回だけ保存
+            const rec = {
+              id: String(Date.now()),      // ユニークな値を採番
+              ts: Date.now(),
+              role: 'assistant',
+              text: ongoingText.trimEnd(),
+            };
+            history.push(rec);
+            console.log('[History] Saved assistant message:', rec);
 
-        // ② 完成形をクライアントへ送る
-        broadcast(rec);
+            // ② 完成形をクライアントへ送る
+            broadcast(rec);
 
-        // ③ バッファをクリア
-        ongoingText = '';
+            // ③ バッファをクリア
+            ongoingText = '';
+        }
 
         // ④ 既存の完了通知も送信 (必要なら)
         broadcast(msg);
