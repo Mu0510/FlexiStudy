@@ -67,6 +67,25 @@ const wss    = new WebSocket.Server({ server, path: '/ws' });
 const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
 
+/* ── ① ユーティリティを追加 ───────────────────────── */
+function broadcast(json){
+  const str = JSON.stringify(json);
+  for (const ws of clients)
+    if (ws.readyState === WebSocket.OPEN) ws.send(str);
+}
+function broadcastExcept(sender, json){
+  const str = JSON.stringify(json);
+  for (const ws of clients){
+    if (ws === sender) continue;                 // ← 送信元だけスキップ
+    if (ws.readyState === WebSocket.OPEN) ws.send(str);
+  }
+}
+function resetHistory(reason='manual'){
+  history.length = 0;                    // 配列を空に
+  broadcast({ jsonrpc:'2.0', method:'historyCleared', params:{ reason } });
+}
+/* ──────────────────────────────────────────────── */
+
 const inStream  = fs.createReadStream(PIPE_OUT, { encoding: 'utf8' });
 const outStream = fs.createWriteStream(PIPE_IN,  { encoding: 'utf8' });
 
@@ -92,6 +111,11 @@ inStream.on('data', chunk => {
     }
   }
 });
+
+/* ── ② Gemini からの行を処理する所で history.push 済み ──
+   ……この直後に inStream.on('end') を利用してキャッシュ自動消し …… */
+inStream.on('end', ()=> resetHistory('gemini-exit'));   // CLI が閉じたらクリア
+/* ──────────────────────────────────────────────── */
 
 wss.on('connection', ws => {
   clients.add(ws);
@@ -141,6 +165,24 @@ wss.on('connection', ws => {
         result:  { messages: chunk }
       }));
     }
+
+    /* ── ③ クライアント→サーバー受信部 (ws.on 'message') に追記 ── */
+    if (msg.method === 'sendUserMessage') {
+      const inputText = msg.params?.chunks?.[0]?.text || '';
+
+      /*   /clear コマンド  */
+      if (inputText.trim() === '/clear'){
+          resetHistory('command');
+          return ws.send(JSON.stringify({ jsonrpc:'2.0', id:msg.id, result:null }));
+      }
+
+      /*   ユーザ発言を履歴へも保存して broadcast  */
+      const rec = { id: Date.now().toString(), ts: Date.now(),
+                    role:'user', text: inputText };
+      history.push(rec);                     // メモリキャッシュ
+      broadcastExcept(ws, rec); // 新：送信元以外にだけ送る
+    }
+
 
     // Gemini CLIへのメッセージ送信前にクールダウンを適用
     if (msg.method === 'sendUserMessage' && msg.params && msg.params.chunks && msg.params.chunks[0] && msg.params.chunks[0].text) {

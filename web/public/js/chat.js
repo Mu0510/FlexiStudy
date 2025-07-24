@@ -30,6 +30,9 @@ window.addEventListener('DOMContentLoaded', () => {
   let active = null; // { bubble, thoughtMode, text }
 
   let oldestCursor = null; // いちばん古いメッセージID を保持
+  const pendingHistory = new Set();
+  let oldestTs   = null;
+  let finished   = false;
 
   // WebSocket 接続
   const ws = new WebSocket(`ws://${location.host}/ws`);
@@ -46,6 +49,18 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (msg.method && msg.method !== 'streamAssistantMessageChunk') {
       handleNotification(msg);
+      return;
+    }
+
+    if (msg.method === 'historyCleared'){
+      messages.innerHTML = '';
+      oldestTs = null; finished = false;
+      pendingHistory.clear();
+      return;
+    }
+
+    if (msg.role && msg.text){           // これは既存の if があるはず
+      appendMsg(msg.role+'-message', msg.text);
       return;
     }
 
@@ -161,7 +176,6 @@ window.addEventListener('DOMContentLoaded', () => {
         }));
         break;
       }
-
       
 
       default:
@@ -172,8 +186,35 @@ window.addEventListener('DOMContentLoaded', () => {
   /**
    * client→server のレスポンス受信処理
    */
-  function handleRpcResponse(message) {
-    if (message.error) {
+  function handleRpcResponse(message){
+    /* --- fetchHistory 応答を先に処理 --- */
+    if (pendingHistory.has(message.id) && message.result?.messages){
+        pendingHistory.delete(message.id);
+
+        const arr = message.result.messages;
+        if(arr.length === 0){ finished = true; return; }
+
+        /* role → CSS クラス変換して描画 */
+        const mapped = arr.map(m => ({
+            roleClass: (m.role==='user')      ? 'user-message'
+                     : (m.role==='assistant') ? 'assistant-message'
+                     : 'system',
+            text: m.text,
+            ts:  m.ts
+        })).reverse();       // 古い→新しい順にして prepend へ
+
+        mapped.forEach(o=>{
+          const el = appendMsgEl(o.roleClass);
+          el.innerHTML = marked.parse(o.text);
+          messages.prepend(el);
+        });
+
+        oldestTs = arr[0].ts;          // さらに古い境界を更新
+        return;                        // 既存処理に落ちない
+    }
+
+    /* ↓↓↓ 既存の sendUserMessage / エラー処理などはそのまま ↓↓↓ */
+    if (message.error){
       // エラーハンドリング
       console.error('RPC Error:', message.error);
       showRpcError(message.error);
@@ -211,8 +252,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const { id: requestId, params } = message;
     console.log('Placeholder: showToolConfirmationDialog', requestId, params);
     // 例：組み込みの confirm ダイアログで許可/拒否
-    const allow = confirm(`Confirm tool call: ${params.label}
-Content: ${JSON.stringify(params.content, null, 2)}`);
+    const allow = confirm(`Confirm tool call: ${params.label}\nContent: ${JSON.stringify(params.content, null, 2)}`);
     respondToolCall(requestId, allow ? 'allow' : 'reject');
   }
 
@@ -456,23 +496,60 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
   panel.style.display = 'flex';
   openBtn.style.display = 'none';
 
+  /* 閉じる（×） */
   closeBtn.addEventListener('click', () => {
-    panel.style.display = 'none';
-    openBtn.style.display = 'block';
-    // メインを全幅に戻す
-    document.getElementById('appContainer').style.gridTemplateColumns = '1fr';
+    panel.style.display   = 'none';
+    resizer.style.display = 'none';
+    openBtn.style.display = 'block';          // 右下 FAB
+    // 左カラムを全幅に
+    leftColumn.style.display = '';
   });
 
+  /* 開く（右下 FAB）*/
   openBtn.addEventListener('click', () => {
-    panel.style.display = 'flex';
+    panel.style.display   = 'flex';
+    resizer.style.display = '';               // 横/縦リサイズ復活
     openBtn.style.display = 'none';
-    // 2列レイアウトに戻す
-    document.getElementById('appContainer').style.removeProperty('grid-template-columns');
+    if(!isFull){                               // 通常レイアウト
+      leftColumn.style.display = '';
+    }
   });
 
-  // 全画面切り替え
+  /* 先頭付近に退避用変数を用意 */
+  let isFull          = false;
+  let prevBasis       = null;   // flex-basis
+  let prevMaxWidth    = null;   // max-width
+  let prevPanelStyle  = null;   // インライン幅が全部ここにある
+
+  /* 全画面トグル（⛶⇆↙）を置き換え */
   fullBtn.addEventListener('click', () => {
-    panel.classList.toggle('fullscreen');
+    isFull = !isFull;
+
+    if (isFull) {
+      // ── 入る前の状態を保存 ──
+      prevBasis      = panel.style.flexBasis || '';
+      prevMaxWidth   = panel.style.maxWidth  || '';
+      prevPanelStyle = panel.getAttribute('style') || ''; // 念のため全部
+
+      // ── ダッシュボードを隠し、幅100%へ ──
+      leftColumn.style.display = 'none';
+      resizer.style.display    = 'none';
+      panel.style.flex         = '1 1 100%';
+      panel.style.maxWidth     = '100%';     // ← これが効いて横いっぱい
+      panel.style.flexBasis    = '100%';
+      fullBtn.textContent      = '↙';
+      openBtn.style.display    = 'none';
+
+    } else {
+      // ── 保存しておいた値で復元 ──
+      leftColumn.style.display = '';
+      resizer.style.display    = '';
+      panel.style.flex         = '';
+      panel.style.flexBasis    = prevBasis;
+      panel.style.maxWidth     = prevMaxWidth;
+      panel.setAttribute('style', prevPanelStyle); // さらに完全復元
+      fullBtn.textContent      = '⛶';
+    }
   });
 
   // visualViewport のリサイズイベントで入力エリアの位置を調整
@@ -496,7 +573,7 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
       } else {
         // キーボードが非表示の場合、入力エリアを通常の位置に戻す
         chatInputArea.style.bottom = `env(safe-area-inset-bottom)`;
-        chatMessages.style.paddingBottom = `16px`; // デフォルトのパディングに戻す
+        chatMessages.style.paddingBottom = '16px'; // デフォルトのパディングに戻す
       }
       scrollBottom(); // レイアウト調整後にスクロール位置を最下部に
     }
@@ -549,76 +626,27 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
     messages.scrollTop = messages.scrollHeight;
   }
 
-  // 1. 起動時に最新5件をロード
-  function loadRecent() {
-    const req = {
-      jsonrpc: '2.0',
-      id: ++requestId,
-      method: 'runShellCommand',
-      params: {
-        command: 'python3 /home/geminicli/GeminiCLI/manage_log.py get_chat_history 5',
-        description: 'チャット履歴の最新5件を取得します。'
-      }
-    };
-    ws.send(JSON.stringify(req));
+  let histReqId = 10000;          // 衝突しない範囲で適当
+  function requestHistory(){
+    const id = ++histReqId;
+    pendingHistory.add(id);
+    ws.send(JSON.stringify({
+      jsonrpc:'2.0',
+      id,
+      method:'fetchHistory',
+      params:{ limit:5, before: oldestTs }
+    }));
   }
 
-  // 2. スクロール上端で過去をロード
-  function loadOlder() {
-    if (!oldestCursor) return;
-    const req = {
-      jsonrpc: '2.0',
-      id: ++requestId,
-      method: 'runShellCommand',
-      params: {
-        command: `python3 /home/geminicli/GeminiCLI/manage_log.py get_chat_history 5 ${oldestCursor}`,
-        description: `チャット履歴の過去5件をID ${oldestCursor} より古いものから取得します。`
-      }
-    };
-    ws.send(JSON.stringify(req));
-  }
-
-  // 汎用レンダー関数
-  function renderMessages(msgArray, { prepend = false } = {}) {
-    msgArray.forEach(msg => {
-      const div = document.createElement('div');
-      // roleを決定 (user-message, assistant-message, system)
-      let role = 'system'; // デフォルトはsystem
-      if (msg.event_type === 'START' || msg.event_type === 'RESUME') {
-        role = 'user-message'; // ユーザーの学習開始・再開はユーザーメッセージとして扱う
-      } else if (msg.event_type === 'BREAK') {
-        role = 'assistant-message'; // 休憩はアシスタントメッセージとして扱う
-      }
-      div.className = role;
-      
-      // メッセージ内容の整形
-      let messageContent = '';
-      if (msg.event_type === 'START') {
-        messageContent = `学習開始: ${msg.subject} - ${msg.content}`;
-      } else if (msg.event_type === 'RESUME') {
-        messageContent = `学習再開: ${msg.subject} - ${msg.content}`;
-      } else if (msg.event_type === 'BREAK') {
-        messageContent = `休憩: ${msg.content || '休憩中'}`;
-      } else {
-        messageContent = msg.content; // その他のイベントタイプ
-      }
-
-      div.innerHTML = marked.parse(messageContent);
-      div.dataset.messageId = msg.id; // メッセージIDをデータ属性として保存
-
-      if (prepend) messages.prepend(div);
-      else      messages.append(div);
-    });
-  }
-
-  // イベント登録：上端に来たら loadOlder
-  messages.addEventListener('scroll', () => {
-    if (messages.scrollTop < 50) {
-      loadOlder();
-    }
+  ws.addEventListener('open', () => {
+    requestHistory();
   });
 
-  // 初回ロードは WebSocket open イベントで呼ぶように変更済み
+  messages.addEventListener('scroll', () => {
+    if (messages.scrollTop < 50 && !finished) {
+      requestHistory();
+    }
+  });
 });
 
 document.addEventListener("keydown", (e) => {
