@@ -52,7 +52,41 @@ window.addEventListener('DOMContentLoaded', () => {
     
 
     if (msg.method === 'pushToolCall') {
-      createToolCard(msg.params);
+      const { icon, label, locations, toolCallId } = msg.params;
+      const command = locations?.[0]?.path ?? '';
+      createToolCard({ callId: toolCallId, icon, label, command });
+      // ★ ここで typingBubble を終わらせる
+      const thinking = document.querySelector('.thinking-bubble');
+      if (thinking) thinking.remove();
+      active = null;
+      return; // 通常処理は打ち切り
+    }
+
+    if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
+      // 実行ログを対応カードに追記
+      const entry = toolCards.get(msg.params.callId);
+      if (entry) {
+        let textContent = msg.params.chunk.text;
+        // diff 行の色付け
+        if (msg.params.chunk.type === 'diff') {
+          textContent = textContent.split('\n').map(line => {
+            if (line.startsWith('+')) {
+              return `<span class="add">${line}</span>`;
+            } else if (line.startsWith('-')) {
+              return `<span class="del">${line}</span>`;
+            }
+            return line;
+          }).join('\n');
+        }
+        entry.bodyElem.innerHTML += textContent; // innerHTML を使用して span タグを反映
+        scrollBottom(); // autoScroll() の代わりに scrollBottom() を使用
+      }
+      return;
+    }
+
+    if (msg.method === 'pushMessage') {
+      // ツール完了後のふつうのアシスタント返信
+      appendMsg('assistant-message', msg.params.content); // appendAssistantBubble() の代わりに appendMsg() を使用
       return;
     }
 
@@ -162,37 +196,38 @@ window.addEventListener('DOMContentLoaded', () => {
         respondToolCall(id, 'allow');
         break;
 
-      case 'pushToolCall': {
-        console.log('[DEBUG] pushToolCall received, about to respond to tool call with id=', id);
-        // (1) ツール呼び出しUIを生成
-        const toolCallId = params.toolCallId ?? id;
-        // ★ ここで typingBubble を終わらせる
-        const thinking = document.querySelector('.thinking-bubble');
-        if (thinking) thinking.remove();
+      // pushToolCall と updateToolCall はトップレベルで処理するため、ここでは削除またはコメントアウト
+      // case 'pushToolCall': {
+      //   console.log('[DEBUG] pushToolCall received, about to respond to tool call with id=', id);
+      //   // (1) ツール呼び出しUIを生成
+      //   const toolCallId = params.toolCallId ?? id;
+      //   // ★ ここで typingBubble を終わらせる
+      //   const thinking = document.querySelector('.thinking-bubble');
+      //   if (thinking) thinking.remove();
 
-        active = null;
+      //   active = null;
 
-        showToolInvocationUI({ ...params, toolCallId });
-        ws.send(JSON.stringify({
-          jsonrpc:'2.0',
-          id,                     // 受け取った requestId
-          result:{ id: toolCallId } // ← これだけで十分
-        }));
-        break;
-      }
+      //   showToolInvocationUI({ ...params, toolCallId });
+      //   ws.send(JSON.stringify({
+      //     jsonrpc:'2.0',
+      //     id,                     // 受け取った requestId
+      //     result:{ id: toolCallId } // ← これだけで十分
+      //   }));
+      //   break;
+      // }
 
-      case 'updateToolCall': {
-        // ① UI 更新
-        updateToolCallStatus(params);
+      // case 'updateToolCall': {
+      //   // ① UI 更新
+      //   updateToolCallStatus(params);
 
-        // ② Gemini へ ACK
-        ws.send(JSON.stringify({
-          jsonrpc: '2.0',
-          id,          // 受け取った requestId をそのまま返す
-          result: null // void メソッドなので null
-        }));
-        break;
-      }
+      //   // ② Gemini へ ACK
+      //   ws.send(JSON.stringify({
+      //     jsonrpc: '2.0',
+      //     id,          // 受け取った requestId をそのまま返す
+      //     result: null // void メソッドなので null
+      //   }));
+      //   break;
+      // }
       
 
       default:
@@ -295,8 +330,6 @@ window.addEventListener('DOMContentLoaded', () => {
     };
     ws.send(JSON.stringify(response));
   }
-
-  
 
   function showRpcError(error) {
     console.log('Placeholder: showRpcError', error);
@@ -674,43 +707,30 @@ window.addEventListener('DOMContentLoaded', () => {
   /**
    * ツールカードを生成し、チャットに表示します。
    * @param {object} params - ツール呼び出しのパラメータ
-   * @param {string} params.toolCallId - ツール呼び出しのID
-   * @param {string} params.label - ツール名
+   * @param {string} params.callId - ツール呼び出しのID
    * @param {string} params.icon - アイコン名
-   * @param {Array<object>} params.locations - 関連ファイルパスの配列
+   * @param {string} params.label - ツール名
+   * @param {string} params.command - コマンド文字列
    */
-  function createToolCard({ toolCallId, label, icon, locations }) {
+  function createToolCard({ callId, icon, label, command }) {
     const card = document.createElement('div');
     card.classList.add('tool-card');
-    card.dataset.toolCallId = toolCallId; // IDをデータ属性として保存
+    card.dataset.toolCallId = callId; // IDをデータ属性として保存
 
-    const header = document.createElement('div');
-    header.classList.add('tool-card__header');
-
-    const iconEl = document.createElement('i');
-    iconEl.classList.add('tool-card__icon', icon); // iconクラスを追加
-    header.appendChild(iconEl);
-
-    const titleEl = document.createElement('span');
-    titleEl.classList.add('tool-card__title');
-    titleEl.textContent = label;
-    header.appendChild(titleEl);
-
-    if (locations && locations.length > 0) {
-      const commandEl = document.createElement('code');
-      commandEl.classList.add('tool-card__command');
-      commandEl.textContent = locations.map(l => l.path.split('/').pop()).join(', '); // ファイル名のみ表示
-      header.appendChild(commandEl);
-    }
-
-    const bodyEl = document.createElement('pre');
-    bodyEl.classList.add('tool-card__body');
-    bodyEl.textContent = 'ツールを実行中...'; // 初期メッセージ
-    card.appendChild(header);
-    card.appendChild(bodyEl);
+    card.innerHTML = `
+      <div class="tool-card__header">
+        <i class="tool-card__icon ${icon}"></i>
+        <span class="tool-card__title">${label}</span>
+        <code class="tool-card__command">${command}</code>
+      </div>
+      <pre class="tool-card__body"></pre>
+    `;
 
     messages.appendChild(card);
-    toolCards.set(toolCallId, card); // マップに保存
+    toolCards.set(callId, {
+      cardElem: card,
+      bodyElem: card.querySelector('.tool-card__body')
+    });
     scrollBottom(true);
   }
 
@@ -755,17 +775,11 @@ window.addEventListener('DOMContentLoaded', () => {
     // ステータスに応じた表示更新
     if (status === 'finished') {
       card.classList.add('tool-card--finished');
-      // bodyEl.textContent = bodyEl.textContent.replace('ツールを実行中...', '完了');
     } else if (status === 'error') {
       card.classList.add('tool-card--error');
-      // bodyEl.textContent = bodyEl.textContent.replace('ツールを実行中...', 'エラー');
     }
     scrollBottom(true);
   }
-
-  // showToolInvocationUI と updateToolCallStatus は不要になるため削除またはコメントアウト
-  // function showToolInvocationUI(...) { ... }
-  // function updateToolCallStatus(...) { ... }
 
 });
 
