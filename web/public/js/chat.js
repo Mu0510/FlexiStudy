@@ -102,8 +102,7 @@ window.addEventListener('DOMContentLoaded', () => {
           active.text        = '';
         }
 
-        active.text += chunk.text.replace(/^[
-]+/, '');
+        active.text += chunk.text.replace(/^\n+/, '');
         active.bubble.innerHTML = marked.parse(active.text.trimEnd());
         scrollBottom(); // 条件付きスクロール
       }
