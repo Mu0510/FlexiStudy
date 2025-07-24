@@ -322,10 +322,32 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
   let startLeftColumnSize; // Stores leftColumn.offsetWidth or leftColumn.offsetHeight
   let startChatPanelSize; // Stores chatPanel.offsetWidth or chatPanel.offsetHeight
 
-  // タッチデバイスを検出してリサイザーの幅を調整
-  if (window.matchMedia('(pointer:coarse)').matches) {
-    resizer.style.width = '25px'; // 例: 10px * 2.5 = 25px
+  // リサイザーのサイズを更新する関数
+  function updateResizerSize() {
+    const isPortrait = window.matchMedia('(orientation: portrait)').matches;
+    const isCoarsePointer = window.matchMedia('(pointer:coarse)').matches;
+
+    if (isCoarsePointer) {
+      if (isPortrait) {
+        resizer.style.height = '25px';
+        resizer.style.width = '100%';
+      } else {
+        resizer.style.width = '25px';
+        resizer.style.height = '100%';
+      }
+    } else {
+      // 非タッチデバイスの場合のデフォルトスタイル（CSSで設定済み）
+      // ここでは何もしないか、必要であればデフォルト値を設定
+      resizer.style.removeProperty('width');
+      resizer.style.removeProperty('height');
+    }
   }
+
+  // 初期ロード時にリサイザーのサイズを設定
+  updateResizerSize();
+
+  // 画面の向きが変わった時にリサイザーのサイズを更新
+  window.matchMedia('(orientation: portrait)').addListener(updateResizerSize);
 
   resizer.addEventListener('pointerdown', startResize);
 
@@ -335,24 +357,15 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
     document.addEventListener('pointerup', stopResize);
 
     const isPortrait = window.matchMedia('(orientation: portrait)').matches;
-    const isCoarsePointer = window.matchMedia('(pointer:coarse)').matches;
 
     if (isPortrait) {
       startPos = e.clientY;
       startLeftColumnSize = leftColumn.offsetHeight;
       startChatPanelSize = panel.offsetHeight; // Use 'panel' for chatPanel
-      if (isCoarsePointer) {
-        resizer.style.height = '25px'; // タッチデバイスの縦画面では高さを25pxに
-        resizer.style.width = '100%';
-      }
     } else {
       startPos = e.clientX;
       startLeftColumnSize = leftColumn.offsetWidth;
       startChatPanelSize = panel.offsetWidth; // Use 'panel' for chatPanel
-      if (isCoarsePointer) {
-        resizer.style.width = '25px'; // タッチデバイスの横画面では幅を25pxに
-        resizer.style.height = '100%';
-      }
     }
   }
 
