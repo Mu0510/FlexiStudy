@@ -88,14 +88,7 @@
 }
 
 /* メッセージと入力 */
-#chatMessages{
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px 16px 120px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+#chatMessages{padding:16px 16px 96px;}
 
 /* ユーザーは右寄せ吹き出し */
 .user-message {
@@ -154,14 +147,9 @@
 
 /* ❶ pill を中央寄せで丸く & フローティング感 */
 #chatInputArea{
-  position:relative;
-  margin:0 20px 14px;           /* ← 左右に余白を空けて丸みを見せる */
-  padding:18px 60px 70px 24px;  /* ↙︎ 下はボタン分のクリアランス */
-  background:rgba(0,0,0,.45);
-  backdrop-filter:blur(12px);
-  -webkit-backdrop-filter:blur(12px);
-  border-radius:28px;
-  box-shadow:0 6px 30px rgba(0,0,0,.35);
+  margin:0 14px 10px;            /* ← 左右＋下の余白を少し削る */
+  padding:14px 52px 58px 18px;   /* 上右下左　※下＝ボタン高さ＋余白 */
+  border-radius:22px;            /* 28→22 で丸みを少し控えめに */
 }
 
 /* ❷ textarea をフラットに */
@@ -177,13 +165,10 @@
 
 /* ❸ 送信ボタンを pill 内右下に白丸で固定 */
 #chatSend{
-  position:absolute;right:20px;bottom:20px;
-  width:44px;height:44px;border-radius:50%;
-  display:flex;justify-content:center;align-items:center;
-  background:#fff;border:none;cursor:pointer;
-  box-shadow:0 3px 10px rgba(0,0,0,.25);
+  right:16px;bottom:16px;        /* pill 内側との間隔も詰める */
+  width:36px;height:36px;        /* 44→36 */
 }
-#chatSend svg{stroke:#000;}          /* 矢印を黒線に */
+#chatSend svg{width:16px;height:16px;}
 #chatSend:disabled{opacity:.4;cursor:default;}
 
 /* スクロールバーも統一 */
