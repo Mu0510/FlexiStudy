@@ -488,9 +488,9 @@ window.addEventListener('DOMContentLoaded', () => {
     input.style.height = Math.min(input.scrollHeight,     // 中身の高さ
                     window.innerHeight*0.25) + 'px';// 25dvh で頭打ち
   }
-  // Shift+Enter で改行、Enter 単押しで送信
+  // Alt+Enter で送信、Enter 単押しで改行
   input.addEventListener('keydown', e=>{
-    if(e.key==='Enter' && !e.shiftKey){
+    if(e.key==='Enter' && e.altKey){
       e.preventDefault();   // textarea の改行を抑止
       sendMessage();        // 既存関数を呼ぶ
     }
@@ -510,6 +510,7 @@ window.addEventListener('DOMContentLoaded', () => {
     };
     ws.send(JSON.stringify(req));
     input.value = '';
+    scrollBottom(true); // メッセージ送信後に強制的に最下部までスクロール
   }
 
   // 初期は開いた状態
@@ -649,7 +650,7 @@ window.addEventListener('DOMContentLoaded', () => {
    */
   function scrollBottom(force = false) {
     // ユーザーが一番下に近い位置にいるか、強制スクロールが指定されている場合のみスクロール
-    if (force || (messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 1)) {
+    if (force || (messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 5)) {
       messages.scrollTop = messages.scrollHeight;
     }
   }
