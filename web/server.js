@@ -181,10 +181,7 @@ inStream.on('data', chunk => {
         entry.lastUpdated = Date.now(); // 最終更新時刻を更新
         assistantBuf.set(key, entry);
 
-        // 保存タイマーを設定
-        entry.timerId = setTimeout(() => {
-            saveAssistantMessageToHistory(key);
-        }, ASSISTANT_SAVE_DELAY_MS);
+        
 
         broadcast(msg); // クライアントへライブ表示用
         continue;
@@ -192,9 +189,19 @@ inStream.on('data', chunk => {
 
     // 完了通知
     if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-        const { messageId } = msg.params || {};
-        // fallback: 仕様により params が無い場合はルート id が同じ
-        saveAssistantMessageToHistory(String(messageId ?? msg.id));
+        const id = String(msg.id);
+        saveAssistantMessageToHistory(id);   // 完了時に確定保存
+        // 完成メッセージをクライアントへ (リアルタイムと同じ経路)
+        const entry = assistantBuf.get(id);
+        if (entry && entry.text.trim()) {
+            broadcast({
+              id,
+              ts: Date.now(),
+              role: 'assistant',
+              text: entry.text.trim()
+            });
+        }
+        assistantBuf.delete(id);
         broadcast(msg);      // 既存の挙動を保つ
         continue;
     }

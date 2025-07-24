@@ -113,11 +113,14 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // 終端シグナルで一度だけ finish
-    if (msg.result === null) {
+    // agentMessageFinished / messageCompleted でのみ完了判定
+    if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
       active = null;
+      document.querySelector('#typingBubble')?.remove();
       return;
     }
+    // 裸の result:null は無視
+    if (msg.result === null) return;
 
     // ─── 4) RPC 応答（error も含む）
     if (msg.id !== undefined) {
