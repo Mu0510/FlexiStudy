@@ -88,10 +88,10 @@
 }
 
 /* メッセージと入力 */
-#chatMessages {
+#chatMessages{
   flex: 1;
   overflow-y: auto;
-  padding: 16px 16px 72px;
+  padding: 16px 16px 100px;
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -153,43 +153,39 @@
 }
 
 /* 入力欄背景をすりガラス風に */
-#chatInputArea {
-  position: fixed; /* 固定配置 */
-  bottom: env(safe-area-inset-bottom); /* ノッチ／ホームバー対策 */
-  left: 0;
-  right: 0;
-  background: rgba(0,0,0,0.6); /* 背景色を調整 */
-  backdrop-filter: blur(8px); /* フィルターを調整 */
-  -webkit-backdrop-filter: blur(8px);
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  padding: 6px;
-  position: relative;
-  padding-bottom: calc(6px + env(safe-area-inset-bottom));
+#chatInputArea{
+  position:relative;
+  padding:12px 16px 48px 20px;        /* 右下にボタンの余白を確保 */
+  background:rgba(0,0,0,.45);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-top:1px solid var(--border-color);
 }
-#chatInputArea textarea {
-  background: rgba(255,255,255,0.1);
-  color: var(--text-color-light);
-  flex: 1;
-  padding: 6px;
-  border: none;
-  border-radius: 4px;
-  margin-right: 4px;
-  height: auto;
-  max-height: 25dvh;
-  overflow-y: auto;
+#chatInputArea textarea{
+  width:100%;
+  max-height:25dvh;                   /* ↑25%で内部スクロール */
+  resize:none;                        /* 角のドラッグ無効 */
+  overflow-y:auto;
+  background:transparent;
+  border:none;
+  outline:none;
+  color:#fff;
+  font:1em/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  padding:0;                          /* 余白はラッパー側で */
+  caret-color:var(--accent-color);
 }
-#chatInputArea button {
-  background: var(--accent-color);
-  padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  color: white;
-  cursor: pointer;
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
+#chatSend{
+  position:absolute;
+  right:16px;
+  bottom:12px;
+  width:36px;height:36px;
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--accent-color);
+  border:none;cursor:pointer;
 }
+#chatSend svg{width:18px;height:18px;fill:#fff;}
+#chatSend:disabled{opacity:.4;cursor:default;}
 
 /* スクロールバーも統一 */
 #chatMessages::-webkit-scrollbar {

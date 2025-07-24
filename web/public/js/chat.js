@@ -422,8 +422,18 @@ Content: ${JSON.stringify(params.content, null, 2)}`);
 
   // 送信
   sendBtn.addEventListener('click', sendMessage);
-  input.addEventListener('keypress', e => {
-    if (e.key === 'Enter') sendMessage();
+  input.addEventListener('input', autoGrow);
+  function autoGrow(){
+    input.style.height = 'auto';                       // 一旦リセット
+    input.style.height = Math.min(input.scrollHeight,     // 中身の高さ
+                    window.innerHeight*0.25) + 'px';// 25dvh で頭打ち
+  }
+  // Shift+Enter で改行、Enter 単押しで送信
+  input.addEventListener('keydown', e=>{
+    if(e.key==='Enter' && !e.shiftKey){
+      e.preventDefault();   // textarea の改行を抑止
+      sendMessage();        // 既存関数を呼ぶ
+    }
   });
   function sendMessage() {
     const text = input.value.trim();
