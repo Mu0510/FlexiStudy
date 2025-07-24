@@ -31,6 +31,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   let oldestCursor = null; // いちばん古いメッセージID を保持
   const pendingHistory = new Set();
+  const loadedIds = new Set();
   let oldestTs   = null;
   let finished   = false;
 
@@ -54,6 +55,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (msg.method === 'historyCleared'){
       messages.innerHTML = '';
+      loadedIds.clear();
       oldestTs = null; finished = false;
       pendingHistory.clear();
       return;
@@ -99,7 +101,8 @@ window.addEventListener('DOMContentLoaded', () => {
           active.text        = '';
         }
 
-        active.text += chunk.text.replace(/^[\r\n]+/, '');
+        active.text += chunk.text.replace(/^[
+]+/, '');
         active.bubble.innerHTML = marked.parse(active.text.trimEnd());
         scrollBottom();
       }
@@ -194,23 +197,32 @@ window.addEventListener('DOMContentLoaded', () => {
         const arr = message.result.messages;
         if(arr.length === 0){ finished = true; return; }
 
-        /* role → CSS クラス変換して描画 */
-        const mapped = arr.map(m => ({
-            roleClass: (m.role==='user')      ? 'user-message'
-                     : (m.role==='assistant') ? 'assistant-message'
-                     : 'system',
-            text: m.text,
-            ts:  m.ts
-        })).reverse();       // 古い→新しい順にして prepend へ
+        /* (1) サーバは「新→古」の順で返すので reverse して古→新へ */
+        const mapped = arr.slice().reverse().map(m => ({
+            id:  m.id,
+            ts:  m.ts,
+            roleClass: m.role==='user' ? 'user-message'
+                      : m.role==='assistant' ? 'assistant-message'
+                      : 'system',
+            text: m.text
+        }));
 
+        /* (2) 既に表示済みの id はスキップ */
         mapped.forEach(o=>{
-          const el = appendMsgEl(o.roleClass);
-          el.innerHTML = marked.parse(o.text);
-          messages.prepend(el);
+            if (loadedIds.has(o.id)) return;          // ← ここが重複ブロック
+            const el = appendMsgEl(o.roleClass);
+            el.innerHTML = marked.parse(o.text);
+            messages.prepend(el);
+            loadedIds.add(o.id);
         });
 
-        oldestTs = arr[0].ts;          // さらに古い境界を更新
-        return;                        // 既存処理に落ちない
+        /* (3) 一番古い ts を次の before に使う */
+        oldestTs = mapped[0].ts;
+
+        /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
+        if (arr.length < 5) finished = true;
+
+        return;
     }
 
     /* ↓↓↓ 既存の sendUserMessage / エラー処理などはそのまま ↓↓↓ */
@@ -385,7 +397,8 @@ window.addEventListener('DOMContentLoaded', () => {
         resizer.style.width = '25px';
         resizer.style.height = '100%';
       }
-    } else {
+    }
+  } else {
       // 非タッチデバイスの場合のデフォルトスタイル（CSSで設定済み）
       // ここでは何もしないか、必要であればデフォルト値を設定
       resizer.style.removeProperty('width');
@@ -647,6 +660,17 @@ window.addEventListener('DOMContentLoaded', () => {
       requestHistory();
     }
   });
+
+  function renderMessages(msgArray, { prepend = false } = {}){
+    msgArray.forEach(m=>{
+        const role = m.role==='user'?'user-message':
+                     m.role==='assistant'?'assistant-message':'system';
+        const el = appendMsgEl(role);
+        el.innerHTML = marked.parse(m.text);
+        if(prepend) messages.prepend(el); else messages.append(el);
+        loadedIds.add(m.id);               // ← 追加
+    });
+  }
 });
 
 document.addEventListener("keydown", (e) => {

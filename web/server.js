@@ -66,6 +66,7 @@ const server = http.createServer(app);
 const wss    = new WebSocket.Server({ server, path: '/ws' });
 const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
+const assistantBuf = new Map();
 
 /* ── ① ユーティリティを追加 ───────────────────────── */
 function broadcast(json){
@@ -100,15 +101,40 @@ inStream.on('data', chunk => {
     try { msg = JSON.parse(line); }
     catch { msg = { stdout: line }; }
 
-    // チャット履歴として残すのは “role と text” を持つ行だけ
-    if (msg.role && msg.text) {
-      history.push({ ...msg, id: msg.id || Date.now() });
+    /* 1) AI チャンクなら一旦バッファに溜める */
+    if (msg.method === 'streamAssistantMessageChunk') {
+        const { chunk, messageId } = msg.params;
+        if (chunk.text !== undefined) {
+           const entry = assistantBuf.get(messageId) || { text: '' };
+           entry.text += chunk.text.replace(/^[\r\n]+/,'');
+           assistantBuf.set(messageId, entry);
+        }
+        /* 継続中なのでここで broadcast して return */
+        broadcast(msg);                 // クライアントへライブ表示用
+        continue;                       // history にはまだ入れない
     }
 
-    const json = JSON.stringify(msg);
-    for (const ws of clients) {
-      if (ws.readyState === WebSocket.OPEN) ws.send(json);
+    /* 2) stream が終わったシグナル (result:null) で保存 */
+    if (msg.result === null && msg.id && assistantBuf.has(msg.id)) {
+        const rec = {
+           id:   msg.id.toString(),
+           ts:   Date.now(),
+           role: 'assistant',
+           text: assistantBuf.get(msg.id).text.trim()
+        };
+        history.push(rec);
+        broadcast(rec);                 // 全クライアントに”完成版”を通知
+        assistantBuf.delete(msg.id);
+        /* ここは return しない。以降↓の role&&text も不要なので continue */
+        continue;
     }
+
+    /* 3) これまで通り user / system 行を保存 */
+    if (msg.role && msg.text) {
+        history.push({ ...msg, id: msg.id || Date.now() });
+    }
+
+    broadcast(msg);   // 既存の配信
   }
 });
 
