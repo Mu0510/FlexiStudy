@@ -326,7 +326,10 @@ function startResize(e) {
 
 function doResize(e) {
   const delta = e.clientX - startX;
-  chatPanel.style.width = `${startWidth + delta}px`;
+  const newWidth = startWidth + delta;
+  if (newWidth >= 200 && newWidth <= window.innerWidth * 0.8) {
+    chatPanel.style.width = `${newWidth}px`;
+  }
 }
 
 function stopResize() {
