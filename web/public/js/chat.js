@@ -1,84 +1,39 @@
 let toolCards = new Map(); // toolCallId -> toolCardElement
 let pendingBodies = new Map();
 
-const CONTEXT_LINES = 3; // 表示する周辺行数
+// 旧バージョン generateContextualDiffHtml を全部置き換え
+function generateContextualDiffHtml(oldText, newText, ctx = 3) {
+  // --- ① hunk をまとめて生成 --------------------------------
+  const patch = Diff.structuredPatch(
+    'old', 'new',
+    oldText, newText,
+    '', '',              // header ラベルは不要なら空で
+    { context: ctx }     // 抜粋する前後行数
+  );
 
-function generateContextualDiffHtml(oldText, newText) {
-  const diff = Diff.diffLines(oldText, newText);
-  let html = '';
-  const linesToShow = new Set();
+  // --- ② HTML 組み立て --------------------------------------
+  let html = '<pre>';
+  patch.hunks.forEach((h, hi) => {
+    // @@ -12,5 +12,6 @@  みたいな行
+    html += `<span class="hunk-header"> @@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@</span>\n`;
 
-  // 変更があった行とその周辺の行のインデックスを収集
-  for (let i = 0; i < diff.length; i++) {
-    if (diff[i].added || diff[i].removed) {
-      linesToShow.add(i);
-      for (let j = 1; j <= CONTEXT_LINES; j++) {
-        if (i - j >= 0) linesToShow.add(i - j);
-        if (i + j < diff.length) linesToShow.add(i + j);
-      }
+    // 本体
+    h.lines.forEach(line => {
+      const cls =
+        line[0] === '+' ? 'add' :
+        line[0] === '-' ? 'del' : 'context';
+      // < や & がそのまま出ても崩れないようエスケープ
+      const esc = line.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      html += `<span class="${cls}">${esc}</span>\n`;
+    });
+
+    // hunk と hunk の間に区切り線
+    if (hi !== patch.hunks.length - 1) {
+      html += '<hr class="diff-separator">\n';
     }
-  }
-
-  const sortedLinesToShow = Array.from(linesToShow).sort((a, b) => a - b);
-
-  let lastRenderedLineIndex = -1;
-  let currentOldLine = 1; // 元のファイルの現在の行番号
-  let currentNewLine = 1; // 新しいファイルの現在の行番号
-
-  for (let i = 0; i < diff.length; i++) {
-    const part = diff[i];
-    // Diff.diffLinesのvalueは末尾に改行を含む場合と含まない場合があるため、空文字列を除外
-    // ただし、削除/追加でない場合は空行も含む（元のファイルに空行がある場合）
-    const linesInPart = part.value.split('\n').filter(line => line.length > 0 || !(part.added || part.removed));
-
-    if (linesToShow.has(i)) {
-      // 省略記号の挿入
-      if (i > lastRenderedLineIndex + 1) {
-        html += '<hr class="diff-separator">\n';
-      }
-
-      linesInPart.forEach(line => {
-        const spanClass = part.added ? 'add' : part.removed ? 'del' : 'context';
-        const prefix = part.added ? '+' : part.removed ? '-' : ' ';
-
-        let lineNumberHtml = '';
-        if (part.added) {
-          lineNumberHtml = `<span class="line-num new-line-num">${currentNewLine}</span>`;
-        } else if (part.removed) {
-          lineNumberHtml = `<span class="line-num old-line-num">${currentOldLine}</span>`;
-        } else {
-          lineNumberHtml = `<span class="line-num context-line-num">${currentOldLine}</span>`;
-        }
-
-        html += `<span class="${spanClass}">${lineNumberHtml}${prefix}${line}</span>\n`;
-
-        // 行番号の更新
-        if (part.added) {
-          currentNewLine++;
-        } else if (part.removed) {
-          currentOldLine++;
-        }
-
-        else {
-          currentOldLine++;
-          currentNewLine++;
-        }
-      });
-      lastRenderedLineIndex = i;
-    } else {
-      // 表示しない行の場合も行番号は進める
-      if (part.added) {
-        currentNewLine += linesInPart.length;
-      } else if (part.removed) {
-        currentOldLine += linesInPart.length;
-      } else {
-        currentOldLine += linesInPart.length;
-        currentNewLine += linesInPart.length;
-      }
-    }
-  }
-
-  return `<pre>${html}</pre>`;
+  });
+  html += '</pre>';
+  return html;
 }
 
 window.addEventListener('DOMContentLoaded', () => {
