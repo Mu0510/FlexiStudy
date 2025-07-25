@@ -305,14 +305,19 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (loadedIds.has(m.id)) return;
 
                 if (m.type === 'tool') {
-                    if (m.method === 'requestToolCallConfirmation') {
+                    if (m.method === 'requestToolCallConfirmation' || m.method === 'pushToolCall') {
                         const id = m.params.toolCallId ?? m.id;
                         if (!toolCards.has(id)) {
-                            createToolCard({ callId: id, icon: m.params.icon, label: m.params.label, command: m.params.confirmation?.command || '' });
+                            createToolCard({ callId: id, icon: m.params.icon, label: m.params.label, command: m.params.confirmation?.command || m.params.locations?.[0]?.path || '' });
                         }
                     } else if (m.method === 'updateToolCall') {
+                        const id = m.params.toolCallId;
+                        if (!toolCards.has(id)) {
+                            // 対応するカードがまだない場合、仮のカードを作成
+                            createToolCard({ callId: id, icon: 'terminal', label: '(tool)', command: '' });
+                        }
                         updateToolCard({
-                            callId: m.params.toolCallId,
+                            callId: id,
                             status: m.params.status,
                             content: m.params.content
                         });

@@ -147,6 +147,14 @@ inStream.on('data', chunk => {
       history.push({ ...msg, ts: Date.now(), type:'tool' });
       return;
     }
+    else if (msg.method === 'pushToolCall') {
+        // pushToolCall も履歴に保存
+        history.push({
+            ...msg,
+            ts: msg.ts || Date.now(), // タイムスタンプがなければ新規作成
+            type: 'tool'             // フロントエンドで判別しやすいように type を追加
+        });
+    }
     else if (msg.method === 'requestToolCallConfirmation') {
         // ツール関連のメッセージも、タイムスタンプとtypeを追加して履歴に保存
         history.push({
