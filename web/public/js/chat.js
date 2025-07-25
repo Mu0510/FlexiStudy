@@ -159,7 +159,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const { thought } = msg.params;
       const shouldScroll = isNearBottom();
 
-      if (!active || (active.bubble.classList.contains('assistant-message') && !active.bubble.classList.contains('typing'))) {
+      if (!active) {
         active = {
           bubble: createTypingBubble(),
           thoughtMode: true,
@@ -201,7 +201,7 @@ window.addEventListener('DOMContentLoaded', () => {
       //    ・active はあるが thoughtMode==false かつ
       //      今回は thought チャンク ＝ 2 本目以降の開始
       // ─────────────────────────────
-      if (!active || (active.bubble.classList.contains('assistant-message') && !active.bubble.classList.contains('typing'))) {
+      if (!active) {
         active = {
           bubble: createTypingBubble(),
           thoughtMode: false,
@@ -218,7 +218,7 @@ window.addEventListener('DOMContentLoaded', () => {
         active.thoughtMode = false; // thoughtMode は常に false にリセット
 
         active.text += chunk.text.replace(/^\n+/, '');
-        active.bubble.innerHTML = marked.parse(active.text.trimEnd());
+        active.bubble.textContent = active.text.trimEnd(); // リアルタイム更新
         if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
       }
 
@@ -231,6 +231,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // agentMessageFinished / messageCompleted でのみ完了判定
     if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
+      if (active) {
+        active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // 最終確定
+      }
       resetActive();           // ← 既存処理を書き換え
       return;
     }
