@@ -328,12 +328,12 @@ window.addEventListener('DOMContentLoaded', () => {
           if (m.type === 'tool') {
               // ツールカード
               let el = document.createElement('div');
-              el.classList.add('tool-message');
+              el.classList.add('tool-card');
               el.innerHTML = `
-                <div class="tool-message__header">
-                  <i class="tool-message__icon ${m.params?.icon || ''}"></i>
-                  <span class="tool-message__title">${m.params?.label || ''}</span>
-                  <code class="tool-message__command">${m.params?.confirmation?.command || m.params?.toolCallId || ''}</code>
+                <div class="tool-card__header">
+                  <i class="tool-card__icon ${m.params?.icon || ''}"></i>
+                  <span class="tool-card__title">${m.params?.label || ''}</span>
+                  <code class="tool-card__command">${m.params?.confirmation?.command || m.params?.toolCallId || ''}</code>
                 </div>
               `;
               let body = '';
@@ -357,8 +357,8 @@ window.addEventListener('DOMContentLoaded', () => {
               } else {
                   body = '<span style="color:gray">（内容なし）</span>';
               }
-              const bodyDiv = document.createElement('div');
-              bodyDiv.classList.add('tool-message__body');
+              const bodyDiv = document.createElement('pre');
+              bodyDiv.classList.add('tool-card__body');
               bodyDiv.innerHTML = body;
               el.appendChild(bodyDiv);
 
