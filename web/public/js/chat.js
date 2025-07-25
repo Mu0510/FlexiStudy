@@ -772,9 +772,9 @@ window.addEventListener('DOMContentLoaded', () => {
             el.classList.add('tool-message'); // 新しいCSSクラス
             el.innerHTML = `
                 <div class="tool-message__header">
-                    <i class="tool-message__icon ${m.icon}"></i>
-                    <span class="tool-message__title">${m.label}</span>
-                    <code class="tool-message__command">${m.params.command || ''}</code>
+                    <i class="tool-message__icon ${m.params.icon}"></i>
+                    <span class="tool-message__title">${m.params.label}</span>
+                    <code class="tool-message__command">${m.params.confirmation?.command || ''}</code>
                 </div>
                 <pre class="tool-message__body">${JSON.stringify(m.params, null, 2)}</pre>
             `;
