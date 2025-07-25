@@ -112,6 +112,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (msg.method === 'updateToolCall') {
+      console.log('[DEBUG] updateToolCall msg.params:', msg.params); // 追加
       const card = toolCards.get(msg.params.callId ?? msg.params.toolCallId);
       if (!card) {
         console.warn(`Tool card with ID ${msg.params.callId ?? msg.params.toolCallId} not found.`);
