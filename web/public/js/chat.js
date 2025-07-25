@@ -314,67 +314,111 @@ window.addEventListener('DOMContentLoaded', () => {
     if (pendingHistory.has(message.id) && message.result?.messages){
         pendingHistory.delete(message.id);
 
-        const arr = message.result.messages;
-        if(arr.length === 0){ finished = true; return; }
+        if (message.result && message.result.messages) {
+      // 履歴(新→古)配列を古→新へ
+      const arr = message.result.messages.slice().reverse();
 
-        /* (1) サーバは「新→古」の順で返すので reverse して古→新へ */
-        const mapped = arr.slice().reverse();  // 何も変換せず「生のまま」使う
+      const grouped = [];
+      const toolCardMap = {}; // toolCallId → { ...カード内容... }
+
+      arr.forEach(item => {
+        if (item.type === "tool") {
+          if (item.method === "requestToolCallConfirmation") {
+            // カード作成：toolCallId(なければid)で一時保持
+            const toolCallId = item.params?.toolCallId ?? item.id;
+            toolCardMap[toolCallId] = {
+              id: toolCallId,
+              icon: item.params?.icon || "",
+              label: item.params?.label || "",
+              command: item.params?.confirmation?.command || "",
+              content: null, // 結果はあとで
+              ts: item.ts
+            };
+          } else if (item.method === "updateToolCall") {
+            // 結果をセット
+            const toolCallId = item.params?.toolCallId ?? item.id;
+            // 既存カードがあれば追加
+            if (toolCardMap[toolCallId]) {
+              toolCardMap[toolCallId].content = item.params?.content;
+            } else {
+              // 万一requestが無くてupdateだけあるパターン(安全策)
+              toolCardMap[toolCallId] = {
+                id: toolCallId,
+                icon: item.params?.icon || "",
+                label: item.params?.label || "",
+                command: "",
+                content: item.params?.content,
+                ts: item.ts
+              };
+            }
+          }
+        } else {
+          grouped.push(item); // user, assistant, systemなど
+        }
+      });
+
+      // まとめたtoolカードをgroupedにpush
+      for (const key of Object.keys(toolCardMap)) {
+        grouped.push(toolCardMap[key]);
+      }
+
+      // timestampで並び替え
+      grouped.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
 
       const prevScrollHeight = messages.scrollHeight;
 
-      mapped.forEach(m => {
-          if (loadedIds.has(m.id)) return;
+      // ----- 描画処理 -----
+      grouped.forEach(m => {
+        if (loadedIds.has(m.id)) return;
 
-          if (m.type === 'tool') {
-              // ツールカード
-              let el = document.createElement('div');
-              el.classList.add('tool-card');
-              el.innerHTML = `
-                <div class="tool-card__header">
-                  <i class="tool-card__icon ${m.params?.icon || ''}"></i>
-                  <span class="tool-card__title">${m.params?.label || ''}</span>
-                  <code class="tool-card__command">${m.params?.confirmation?.command || m.params?.toolCallId || ''}</code>
-                </div>
-              `;
-              let body = '';
-              if (m.params && m.params.content) {
-                  const content = m.params.content;
-                  if (content.type === 'markdown' && content.markdown) {
-                      body = marked.parse(content.markdown);
-                  } else if (content.type === 'diff' && Array.isArray(content.content)) {
-                      body = content.content.map(d => {
-                          let line = d.value ?? '';
-                          if (line.startsWith('+')) return `<span class="add">${line}</span>`;
-                          if (line.startsWith('-')) return `<span class="del">${line}</span>`;
-                          return line;
-                      }).join('<br>');
-                      body = `<pre>${body}</pre>`;
-                  } else if (typeof content === 'string') {
-                      body = `<pre>${content}</pre>`;
-                  } else {
-                      body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
-                  }
-              } else {
-                  body = '<span style="color:gray">（内容なし）</span>';
-              }
-              const bodyDiv = document.createElement('pre');
-              bodyDiv.classList.add('tool-card__body');
-              bodyDiv.innerHTML = body;
-              el.appendChild(bodyDiv);
-
-              messages.prepend(el);
-              loadedIds.add(m.id);
-              return;
+        if (m.label !== undefined) {
+          // toolカードとして表示
+          let el = document.createElement('div');
+          el.classList.add('tool-card');
+          el.innerHTML = `
+            <div class="tool-card__header">
+              <i class="tool-card__icon ${m.icon}"></i>
+              <span class="tool-card__title">${m.label}</span>
+              <code class="tool-card__command">${m.command}</code>
+            </div>
+          `;
+          let body = '';
+          if (m.content) {
+            const content = m.content;
+            if (content.type === 'markdown' && content.markdown) {
+              body = marked.parse(content.markdown);
+            } else if (content.type === 'diff' && Array.isArray(content.content)) {
+              body = content.content.map(d => {
+                let line = d.value ?? '';
+                if (line.startsWith('+')) return `<span class="add">${line}</span>`;
+                if (line.startsWith('-')) return `<span class="del">${line}</span>`;
+                return line;
+              }).join('<br>');
+              body = `<pre>${body}</pre>`;
+            } else if (typeof content === 'string') {
+              body = `<pre>${content}</pre>`;
+            } else {
+              body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+            }
+          } else {
+            body = '<span style="color:gray">（内容なし）</span>';
           }
-
-          // --- 通常メッセージ ---
+          const bodyDiv = document.createElement('div');
+          bodyDiv.classList.add('tool-card__body');
+          bodyDiv.innerHTML = body;
+          el.appendChild(bodyDiv);
+          messages.prepend(el);
+          loadedIds.add(m.id);
+        } else if (m.role) {
+          // 通常のメッセージ
           const role = m.role === 'user' ? 'user-message'
-                    : m.role === 'assistant' ? 'assistant-message'
-                    : 'system';
+            : m.role === 'assistant' ? 'assistant-message'
+            : 'system';
           const el = appendMsgEl(role);
           el.innerHTML = marked.parse(m.text ?? '');
           messages.prepend(el);
           loadedIds.add(m.id);
+        }
       });
 
       messages.scrollTop = messages.scrollHeight - prevScrollHeight;
