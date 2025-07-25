@@ -64,23 +64,23 @@ window.addEventListener('DOMContentLoaded', () => {
       && console.log('[ACP]', msg.method, msg.params);
     
 
-    if (msg.method === 'pushToolCall') {
-      const { icon, label, locations } = msg.params;
-      const id = msg.params.toolCallId ?? nextToolCallId++; // サーバID優先で使う
-      const command = locations?.[0]?.path ?? '';
+    // if (msg.method === 'pushToolCall') {
+    //   const { icon, label, locations } = msg.params;
+    //   const id = msg.params.toolCallId ?? nextToolCallId++; // サーバID優先で使う
+    //   const command = locations?.[0]?.path ?? '';
 
-      createToolCard({ callId: id, icon, label, command }); // ② カードを ID で登録
+    //   createToolCard({ callId: id, icon, label, command }); // ② カードを ID で登録
 
-      // ③ Agent へ RPC 応答
-      ws.send(JSON.stringify({
-        jsonrpc: '2.0',
-        id:      msg.id,        // 受け取った requestId
-        result:  { id }         // 返すのは { id: ToolCallId }
-      }));
+    //   // ③ Agent へ RPC 応答
+    //   ws.send(JSON.stringify({
+    //     jsonrpc: '2.0',
+    //     id:      msg.id,        // 受け取った requestId
+    //     result:  { id }         // 返すのは { id: ToolCallId }
+    //   }));
 
-      resetActive();            // 思考バブルをリセット
-      return;
-    }
+    //   resetActive();            // 思考バブルをリセット
+    //   return;
+    // }
 
     if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
       // 実行ログを対応カードに追記
@@ -256,7 +256,15 @@ window.addEventListener('DOMContentLoaded', () => {
         // 「Edit」や「execute」など、ツール実行の確認ダイアログ
         // readFile など fetch ベースのツールは自動承認
         // すべてのツール呼び出しを自動承認
-        respondToolCall(id, 'allow');
+
+        // pushToolCall のロジックをここに移動
+        const { icon, label, locations, toolCallId } = params;
+        const command = locations?.[0]?.path ?? '';
+
+        createToolCard({ callId: toolCallId, icon, label, command }); // カードを ID で登録
+
+        // Agent へ RPC 応答
+        respondToolCall(id, 'allow'); // 既存の respondToolCall を使用
         break;
 
       // pushToolCall と updateToolCall はトップレベルで処理するため、ここでは削除またはコメントアウト
