@@ -51,6 +51,7 @@ window.addEventListener('DOMContentLoaded', () => {
   window.ws = ws;  // ← これを1行追加！
   let requestId = 1;
   ws.addEventListener('message', e => {
+    console.log('[DEBUG] Received WebSocket message:', e.data); // 追加
     let msg;
     try {
       msg = JSON.parse(e.data);
