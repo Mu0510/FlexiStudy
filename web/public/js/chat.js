@@ -141,7 +141,7 @@ window.addEventListener('DOMContentLoaded', () => {
       }
 
       // ----- ② 通常ツール呼び出し -----
-      const toolId   = Date.now();         // 任意の一意 ID
+      const toolId   = msg.params.toolCallId ?? msg.id;   // サーバがくれる ID を優先
       const { icon, label, locations } = msg.params;
       const command  = locations?.[0]?.path ?? '';
 
@@ -255,7 +255,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const { method, params, id } = message;
     switch (method) {
       case 'requestToolCallConfirmation':
-        const toolId = Date.now();
+        const toolId = params.toolCallId ?? id;
         // 確認ダイアログなどを挟むならここで outcome を決める
         ws.send(JSON.stringify({
           jsonrpc:'2.0',
@@ -322,71 +322,42 @@ window.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // まとめたtoolカードをgroupedにpush
-      for (const key of Object.keys(toolCardMap)) {
-        grouped.push(toolCardMap[key]);
-      }
-
-      // timestampで降順に並び替え (新しいものが先)
-      grouped.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
-
-      const prevScrollHeight = messages.scrollHeight;
-
-      // ----- 描画処理 -----
-      grouped.forEach(m => {
-        if (loadedIds.has(m.id)) return;
-
-        if (m.label !== undefined) {
-          // toolカードとして表示
-          let el = document.createElement('div');
-          el.classList.add('tool-card');
-          el.innerHTML = `
-            <div class="tool-card__header">
-              <i class="tool-card__icon ${m.icon}"></i>
-              <span class="tool-card__title">${m.label}</span>
-              <code class="tool-card__command">${m.command}</code>
-            </div>
-          `;
-          let body = '';
-          if (m.content) {
-            const content = m.content;
-            if (content.type === 'markdown' && content.markdown) {
-              body = marked.parse(content.markdown);
-            } else if (content.type === 'diff' && Array.isArray(content.content)) {
-              body = content.content.map(d => {
-                let line = d.value ?? '';
-                if (line.startsWith('+')) return `<span class="add">${line}</span>`;
-                if (line.startsWith('-')) return `<span class="del">${line}</span>`;
-                return line;
-              }).join('<br>');
-              body = `<pre>${body}</pre>`;
-            } else if (typeof content === 'string') {
-              body = `<pre>${content}</pre>`;
-            } else {
-              body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
-            }
-          } else {
-            body = '<span style="color:gray">（内容なし）</span>';
-          }
-          const bodyDiv = document.createElement('div');
-          bodyDiv.classList.add('tool-card__body');
-          bodyDiv.innerHTML = body;
-          el.appendChild(bodyDiv);
-          messages.prepend(el);
-          loadedIds.add(m.id);
-        } else if (m.role) {
-          // 通常のメッセージ
-          const role = m.role === 'user' ? 'user-message'
-            : m.role === 'assistant' ? 'assistant-message'
-            : 'system';
-          const el = appendMsgEl(role);
-          el.innerHTML = marked.parse(m.text ?? '');
-          messages.prepend(el);
-          loadedIds.add(m.id);
+      // ---- 1) まとめた toolCardMap を create→update ----
+      Object.values(toolCardMap).forEach(card => {
+        // まだ作っていなければ作成
+        if (!loadedIds.has(card.id)) {
+          createToolCard({
+            callId:  card.id,
+            icon:    card.icon,
+            label:   card.label,
+            command: card.command
+          });
+          loadedIds.add(card.id);
+        }
+        // 結果(content) があれば更新
+        if (card.content) {
+          updateToolCard({
+            callId:  card.id,
+            status: 'finished',
+            content: card.content
+          });
         }
       });
 
-      messages.scrollTop = messages.scrollHeight - prevScrollHeight;
+      // ---- 2) 通常メッセージ(user/assistant/system) だけ描画 ----
+      grouped
+        .filter(m => !m.type)                 // tool 以外
+        .sort((a,b) => (a.ts??0)-(b.ts??0))   // 古い→新しい
+        .forEach(m => {
+          if (loadedIds.has(m.id)) return;
+          appendMsg(
+            m.role === 'user'      ? 'user-message' :
+            m.role === 'assistant' ? 'assistant-message' :
+                                    'system',
+            m.text ?? ''
+          );
+          loadedIds.add(m.id);
+        });
 
         /* (3) 一番古い ts を次の before に使う */
         // 修正: grouped の最初の要素の ts を使用
@@ -867,8 +838,20 @@ window.addEventListener('DOMContentLoaded', () => {
   function updateToolCard({ callId, status, content }) {
     const card = toolCards.get(callId);
     if (!card) {
-      console.warn(`Tool card with ID ${callId} not found.`);
-      return;
+      console.warn(`Tool card with ID ${callId} not found. Creating new card.`);
+      // カード無ければ新規作成してから続行
+      createToolCard({
+        callId: callId,
+        icon:   'terminal', // デフォルトアイコン
+        label:  '(tool)',   // デフォルトラベル
+        command:''
+      });
+      // 新しく作成したカードを再度取得
+      card = toolCards.get(callId);
+      if (!card) { // 再度取得できなかった場合はエラー
+        console.error(`Failed to create tool card with ID ${callId}.`);
+        return;
+      }
     }
 
     const bodyEl = card.bodyElem;
