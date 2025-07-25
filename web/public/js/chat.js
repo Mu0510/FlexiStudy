@@ -793,6 +793,8 @@ window.addEventListener('DOMContentLoaded', () => {
       bodyElem: card.querySelector('.tool-card__body')
     });
     scrollBottom(true);
+    console.log('[DEBUG] createToolCard: card added to toolCards. callId:', callId, 'toolCards size:', toolCards.size); // 追加
+    console.log('[DEBUG] toolCards content:', toolCards); // 追加
   }
 
   /**
