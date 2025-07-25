@@ -299,39 +299,33 @@ window.addEventListener('DOMContentLoaded', () => {
         if (message.result && message.result.messages) {
             const arr = message.result.messages.slice();
 
-            // arr はサーバから来た順なので ts で昇順にソート
-            arr.sort((a,b)=> (a.ts??0)-(b.ts??0));
-
             const prevScrollHeight = messages.scrollHeight; // スクロール位置を維持するために現在の高さを取得
 
-            // ① tool の request → 先にカード“だけ”作成              (古い→新しい)
-            arr.filter(m => m.type==='tool' && m.method==='requestToolCallConfirmation')
-               .forEach(m => {
-                 const id = m.params.toolCallId ?? m.id;
-                 if (!toolCards.has(id))
-                   createToolCard({ callId:id, icon:m.params.icon, label:m.params.label,
-                                   command:m.params.confirmation?.command||'' });
-               });
+            arr.forEach(m => {
+                if (loadedIds.has(m.id)) return;
 
-            // ② tool の update → body を注入                         (古い→新しい)
-            arr.filter(m=> m.type==='tool' && m.method==='updateToolCall')
-               .forEach(m => updateToolCard({
-                    callId : m.params.toolCallId,
-                    status : m.params.status,
-                    content: m.params.content
-               }));
-
-            // ③ ふつうのメッセージを **昇順で appendChild**          (古い→新しい)
-            arr.filter(m => !m.type)
-               .forEach(m=>{
-                    if (loadedIds.has(m.id)) return;
+                if (m.type === 'tool') {
+                    if (m.method === 'requestToolCallConfirmation') {
+                        const id = m.params.toolCallId ?? m.id;
+                        if (!toolCards.has(id)) {
+                            createToolCard({ callId: id, icon: m.params.icon, label: m.params.label, command: m.params.confirmation?.command || '' });
+                        }
+                    } else if (m.method === 'updateToolCall') {
+                        updateToolCard({
+                            callId: m.params.toolCallId,
+                            status: m.params.status,
+                            content: m.params.content
+                        });
+                    }
+                } else { // user / assistant / system
                     const role = m.role === 'user' ? 'user-message'
-                              : m.role === 'assistant' ? 'assistant-message' : 'system';
+                               : m.role === 'assistant' ? 'assistant-message' : 'system';
                     const el = appendMsgEl(role);
                     el.innerHTML = marked.parse(m.text ?? '');
-                    messages.appendChild(el); // appendChild に変更
-                    loadedIds.add(m.id);
-               });
+                    messages.appendChild(el);
+                }
+                loadedIds.add(m.id);
+            });
 
             // スクロール位置を維持
             messages.scrollTop = messages.scrollHeight - prevScrollHeight;
