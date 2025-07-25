@@ -274,8 +274,7 @@ window.addEventListener('DOMContentLoaded', () => {
         pendingHistory.delete(message.id);
 
         if (message.result && message.result.messages) {
-      // 履歴(新→古)配列を古→新へ
-      const arr = message.result.messages.slice().reverse();
+      const arr = message.result.messages.slice();
 
       const grouped = [];
       const toolCardMap = {}; // toolCallId → { ...カード内容... }
@@ -321,8 +320,8 @@ window.addEventListener('DOMContentLoaded', () => {
         grouped.push(toolCardMap[key]);
       }
 
-      // timestampで並び替え
-      grouped.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+      // timestampで降順に並び替え (新しいものが先)
+      grouped.sort((a, b) => (b.ts ?? 0) - (a.ts ?? 0));
 
       const prevScrollHeight = messages.scrollHeight;
 

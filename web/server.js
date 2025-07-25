@@ -114,7 +114,8 @@ inStream.on('data', chunk => {
     }
 
     // 完了通知
-    if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && msg.method !== 'initialize') {
+    const methodsToExclude = ['initialize', 'requestToolCallConfirmation', 'updateToolCall'];
+    if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
         // ongoingText が空でない場合にのみ履歴に保存
         if (ongoingText.length > 0) {
             // ② 完成形をクライアントへ送る
@@ -131,19 +132,11 @@ inStream.on('data', chunk => {
         history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
     }
     else if (msg.method === 'requestToolCallConfirmation' || msg.method === 'updateToolCall') {
-        // ToolCardとして保存
+        // ツール関連のメッセージも、タイムスタンプとtypeを追加して履歴に保存
         history.push({
-            id: String(Date.now()),
-            ts: Date.now(),
-            type: 'tool',
-            method: msg.method,
-            params: msg.params || {},
-            label: msg.params?.label || '',
-            icon: msg.params?.icon || '',
-            // 追加でtoolCallIdやcontentなど必要に応じて
-            toolCallId: msg.params?.toolCallId,
-            status: msg.params?.status,
-            content: msg.params?.content,
+            ...msg,
+            ts: msg.ts || Date.now(), // タイムスタンプがなければ新規作成
+            type: 'tool'             // フロントエンドで判別しやすいように type を追加
         });
     }
 
@@ -209,16 +202,19 @@ wss.on('connection', ws => {
         chunk = history.slice(-limit);
       } else {
         // スクロール読み込み
-        chunk = history
-            .filter(rec => rec.ts < before)
-            .slice(-limit);
-      }
+      chunk = history
+          .filter(rec => rec.ts < before)
+          .slice(-limit);
+    }
 
-      return ws.send(JSON.stringify({
-        jsonrpc: '2.0',
-        id:     msg.id,
-        result: { messages: chunk }
-      }));
+    // タイムスタンプでソートしてから送信
+    chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+
+    return ws.send(JSON.stringify({
+      jsonrpc: '2.0',
+      id:     msg.id,
+      result: { messages: chunk }
+    }));
     }
 
     /* ── ③ クライアント→サーバー受信部 (ws.on 'message') に追記 ── */
