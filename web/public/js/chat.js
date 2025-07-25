@@ -82,7 +82,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
       // 実行ログを対応カードに追記
-      const entry = toolCards.get(msg.params.callId); // ← callId で引く
+      const entry = toolCards.get(msg.params.callId ?? msg.params.toolCallId); // ← callId で引く
       if (entry) {
         let textContent = msg.params.chunk.text;
         // diff 行の色付け
