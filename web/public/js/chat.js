@@ -1,4 +1,5 @@
 let toolCards = new Map(); // toolCallId -> toolCardElement
+let pendingBodies = new Map();
 
 window.addEventListener('DOMContentLoaded', () => {
   // dvh のフォールバック
@@ -263,9 +264,14 @@ window.addEventListener('DOMContentLoaded', () => {
           result:{ id: toolId, outcome:'allow'}
         }));
 
-        const exists = toolCards.has(toolId);
-        if (!exists){
-          createToolCard({ callId: toolId, icon:params.icon, label:params.label, command:params.confirmation?.command||'', prepend:true });
+        if (!toolCards.has(toolId)){
+          createToolCard({ callId: toolId, icon:params.icon, label:params.label, command:params.confirmation?.command||'' });
+          // もし body が先に届いていたら注入
+          if (pendingBodies.has(toolId)){
+              const {status, content} = pendingBodies.get(toolId);
+              updateToolCard({ callId:toolId, status, content });
+              pendingBodies.delete(toolId);
+          }
         } else {
           // 既に updateToolCall で仮カードが作られている。
           // headerPatch を payload にして updateToolCard を再利用
@@ -291,60 +297,57 @@ window.addEventListener('DOMContentLoaded', () => {
         pendingHistory.delete(message.id);
 
         if (message.result && message.result.messages) {
-      const arr = message.result.messages.slice();
+            const arr = message.result.messages.slice();
 
-      // arr はサーバから来た順なので ts で昇順にソート
-      arr.sort((a,b)=> (a.ts??0)-(b.ts??0));
+            // arr はサーバから来た順なので ts で昇順にソート
+            arr.sort((a,b)=> (a.ts??0)-(b.ts??0));
 
-      const prevScrollHeight = messages.scrollHeight; // スクロール位置を維持するために現在の高さを取得
+            const prevScrollHeight = messages.scrollHeight; // スクロール位置を維持するために現在の高さを取得
 
-      // 逆順でループし、すべて prepend
-      for (let i=arr.length-1; i>=0; i--){
-        const m = arr[i];
-        if (loadedIds.has(m.id)) continue;
+            // ① tool の request → 先にカード“だけ”作成              (古い→新しい)
+            arr.filter(m => m.type==='tool' && m.method==='requestToolCallConfirmation')
+               .forEach(m => {
+                 const id = m.params.toolCallId ?? m.id;
+                 if (!toolCards.has(id))
+                   createToolCard({ callId:id, icon:m.params.icon, label:m.params.label,
+                                   command:m.params.confirmation?.command||'' });
+               });
 
-        if (m.type === 'tool'){
-          if (m.method === 'requestToolCallConfirmation'){
-            createToolCard({
-              callId:  m.params.toolCallId ?? m.id,
-              icon:    m.params.icon,
-              label:   m.params.label,
-              command: m.params.confirmation?.command || '',
-              prepend: true
-            });
-          } else if (m.method === 'updateToolCall'){
-            updateToolCard({
-              callId:  m.params.toolCallId,
-              status:  m.params.status,
-              content: m.params.content
-            });
-          }
-        } else {                    // user / assistant / system
-          const role = m.role === 'user'      ? 'user-message'
-                     : m.role === 'assistant' ? 'assistant-message'
-                     : 'system';
-          const el   = appendMsgEl(role);
-          el.innerHTML = marked.parse(m.text ?? '');
-          messages.insertBefore(el, messages.firstChild);
+            // ② tool の update → body を注入                         (古い→新しい)
+            arr.filter(m=> m.type==='tool' && m.method==='updateToolCall')
+               .forEach(m => updateToolCard({
+                    callId : m.params.toolCallId,
+                    status : m.params.status,
+                    content: m.params.content
+               }));
+
+            // ③ ふつうのメッセージを **昇順で appendChild**          (古い→新しい)
+            arr.filter(m => !m.type)
+               .forEach(m=>{
+                    if (loadedIds.has(m.id)) return;
+                    const role = m.role === 'user' ? 'user-message'
+                              : m.role === 'assistant' ? 'assistant-message' : 'system';
+                    const el = appendMsgEl(role);
+                    el.innerHTML = marked.parse(m.text ?? '');
+                    messages.appendChild(el); // appendChild に変更
+                    loadedIds.add(m.id);
+               });
+
+            // スクロール位置を維持
+            messages.scrollTop = messages.scrollHeight - prevScrollHeight;
+
+            /* (3) 一番古い ts を次の before に使う */
+            const limit = 5; // fetchHistory の limit
+
+            /* (3) 一番古い ts を次の before に使う */
+            oldestTs = arr[0]?.ts ?? oldestTs;
+
+            /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
+            const newArr = arr.filter(m => !loadedIds.has(m.id));
+            if (newArr.length < limit) finished = true;
+
+            return;
         }
-        loadedIds.add(m.id);
-      }
-
-      // スクロール位置を維持
-      messages.scrollTop = messages.scrollHeight - prevScrollHeight;
-
-      /* (3) 一番古い ts を次の before に使う */
-      const limit = 5; // fetchHistory の limit
-
-      /* (3) 一番古い ts を次の before に使う */
-      oldestTs = arr[0]?.ts ?? oldestTs;
-
-      /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
-      const newArr = arr.filter(m => !loadedIds.has(m.id));
-      if (newArr.length < limit) finished = true;
-
-      return;
-      }
     }
 
     /* ↓↓↓ 既存の sendUserMessage / エラー処理などはそのまま ↓↓↓ */
@@ -701,7 +704,7 @@ window.addEventListener('DOMContentLoaded', () => {
       jsonrpc:'2.0',
       id,
       method:'fetchHistory',
-      params:{ limit:5, before: oldestTs }
+      params:{ limit:20, before: oldestTs }
     }));
   }
 
@@ -779,7 +782,7 @@ window.addEventListener('DOMContentLoaded', () => {
    * @param {string} params.label - ツール名
    * @param {string} params.command - コマンド文字列
    */
-  function createToolCard({ callId, icon, label, command, prepend = false }) {
+  function createToolCard({ callId, icon, label, command }) {
     const card = document.createElement('div');
     card.classList.add('tool-card');
     card.dataset.toolCallId = callId; // IDをデータ属性として保存
@@ -793,10 +796,7 @@ window.addEventListener('DOMContentLoaded', () => {
       <pre class="tool-card__body"></pre>
     `;
 
-    if (prepend)
-      messages.insertBefore(card, messages.firstChild);
-    else
-      messages.appendChild(card);
+    messages.appendChild(card);
     toolCards.set(callId, {
       cardElem: card,
       bodyElem: card.querySelector('.tool-card__body')
@@ -814,11 +814,11 @@ window.addEventListener('DOMContentLoaded', () => {
    * @param {object} params.content - ツールからの出力内容
    */
   function updateToolCard({ callId, status, content }) {
-    let card = toolCards.get(callId);
-    if (!card) {
-      console.warn(`Tool card with ID ${callId} not found. Creating new card.`);
-      createToolCard({ callId, icon:'terminal', label:'(tool)', command:'' , prepend:false});
-      card = toolCards.get(callId);
+    const card = toolCards.get(callId);
+    if (!card){
+       /* まだヘッダが来ていない → 一旦キャッシュして return */
+       pendingBodies.set(callId, { status, content });
+       return;
     }
 
     /* ── 後から requestToolCallConfirmation が来て
