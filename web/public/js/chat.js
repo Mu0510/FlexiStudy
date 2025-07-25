@@ -416,13 +416,15 @@ window.addEventListener('DOMContentLoaded', () => {
 
             // 先頭にまとめて挿入
             messages.insertBefore(frag, messages.firstChild);
-            console.log('DEBUG: After insert - currentScrollHeight:', messages.scrollHeight);
+            console.log('DEBUG: After insert (before first RAF) - currentScrollHeight:', messages.scrollHeight);
 
-            // スクロール位置を保つ (requestAnimationFrame を使用してDOM更新後に実行)
+            // スクロール位置を保つ (requestAnimationFrame を2回ネストしてDOM更新後に実行)
             requestAnimationFrame(() => {
-                const newScrollTop = messages.scrollHeight - prevScrollHeight;
-                messages.scrollTop = newScrollTop;
-                console.log('DEBUG: After RAF - newScrollTop:', newScrollTop, 'messages.scrollTop:', messages.scrollTop);
+                requestAnimationFrame(() => {
+                    const newScrollTop = messages.scrollHeight - prevScrollHeight;
+                    messages.scrollTop = newScrollTop;
+                    console.log('DEBUG: After double RAF - newScrollTop:', newScrollTop, 'messages.scrollTop:', messages.scrollTop);
+                });
             });
 
             /* (3) 一番古い ts を次の before に使う */
@@ -809,7 +811,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
   messages.addEventListener('scroll', () => {
     // スクロール位置が上から30%以内になったら履歴を読み込む
-    if (messages.scrollTop < messages.clientHeight * 0.3 && !finished) {
+    if (messages.scrollTop < 1000 && !finished) {
       requestHistory();
     }
   });
