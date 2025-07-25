@@ -1,6 +1,55 @@
 let toolCards = new Map(); // toolCallId -> toolCardElement
 let pendingBodies = new Map();
 
+const CONTEXT_LINES = 3; // 表示する周辺行数
+
+function generateContextualDiffHtml(oldText, newText) {
+  const diff = Diff.diffLines(oldText, newText);
+  let html = '';
+  let lastLineWasContext = false;
+
+  for (let i = 0; i < diff.length; i++) {
+    const part = diff[i];
+    const lines = part.value.split('\n');
+
+    if (part.added || part.removed) {
+      // 変更行の場合、その行と前後のCONTEXT_LINES行を表示
+      // 変更行の前のコンテキスト行を追加
+      for (let j = Math.max(0, i - CONTEXT_LINES); j < i; j++) {
+        const contextPart = diff[j];
+        if (!contextPart.added && !contextPart.removed) {
+          html += contextPart.value.split('\n').map(line => `<span class="context"> ${line}</span>`).join('\n') + '\n';
+        }
+      }
+      // 変更行自体を追加
+      html += lines.map(line => {
+        if (line.length === 0) return '';
+        const spanClass = part.added ? 'add' : part.removed ? 'del' : '';
+        const prefix = part.added ? '+' : part.removed ? '-' : ' ';
+        return `<span class="${spanClass}">${prefix}${line}</span>`;
+      }).join('\n') + '\n';
+      lastLineWasContext = false;
+    } else {
+      // コンテキスト行の場合
+      if (i > 0 && (diff[i - 1].added || diff[i - 1].removed)) {
+        // 直前のパートが変更行だった場合、その後のCONTEXT_LINES行を表示
+        for (let j = 0; j < Math.min(lines.length, CONTEXT_LINES); j++) {
+          html += `<span class="context"> ${lines[j]}</span>` + '\n';
+        }
+        if (lines.length > CONTEXT_LINES) {
+          html += '<span class="context">...</span>\n'; // 省略記号
+        }
+        lastLineWasContext = true;
+      } else if (!lastLineWasContext) {
+        // 連続するコンテキスト行の場合、省略記号を表示
+        html += '<span class="context">...</span>\n';
+        lastLineWasContext = true;
+      }
+    }
+  }
+  return `<pre>${html}</pre>`;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   // dvh のフォールバック
   function setVH() {
@@ -741,16 +790,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (content.type === 'markdown' && content.markdown) {
                     body = marked.parse(content.markdown);
                 } else if (content.type === 'diff') {
-                    const diff = Diff.diffLines(content.oldText, content.newText);
-                    body = diff.map(part => {
-                        const spanClass = part.added ? 'add' : part.removed ? 'del' : '';
-                        const prefix = part.added ? '+' : part.removed ? '-' : ' ';
-                        return part.value.split('\n').map(line => {
-                            if (line.length === 0) return '';
-                            return `<span class="${spanClass}">${prefix}${line}</span>`;
-                        }).join('\n');
-                    }).join('\n');
-                    body = `<pre>${body}</pre>`;
+                    body = generateContextualDiffHtml(content.oldText, content.newText);
                 } else if (typeof content === 'string') {
                     body = `<pre>${content}</pre>`;
                 } else {
@@ -844,16 +884,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (content.type === 'markdown') {
         contentHtml = marked.parse(content.markdown);
       } else if (content.type === 'diff') {
-        const diff = Diff.diffLines(content.oldText, content.newText);
-        contentHtml = diff.map(part => {
-          const spanClass = part.added ? 'add' : part.removed ? 'del' : '';
-          const prefix = part.added ? '+' : part.removed ? '-' : ' ';
-          return part.value.split('\n').map(line => {
-            if (line.length === 0) return ''; // 空行はそのまま
-            return `<span class="${spanClass}">${prefix}${line}</span>`;
-          }).join('\n');
-        }).join('\n');
-        contentHtml = `<pre>${contentHtml}</pre>`;
+        contentHtml = generateContextualDiffHtml(content.oldText, content.newText);
       } else {
         contentHtml = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
       }
