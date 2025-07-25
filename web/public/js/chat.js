@@ -146,12 +146,12 @@ window.addEventListener('DOMContentLoaded', () => {
       // ステータスに応じた表示更新
       if (msg.params.status === 'finished') {
         if (card) {
-          card.classList.add('tool-card--finished');
+          card.cardElem.classList.add('tool-card--finished');
         }
         resetActive();           // ← 追加
       } else if (msg.params.status === 'error') {
         if (card) {
-          card.classList.add('tool-card--error');
+          card.cardElem.classList.add('tool-card--error');
         }
       }
       scrollBottom(true);
@@ -776,7 +776,7 @@ window.addEventListener('DOMContentLoaded', () => {
    */
   function createToolCard({ callId, icon, label, command }) {
     const card = document.createElement('div');
-    card.classList.add('tool-card');
+    card.cardElem.classList.add('tool-card');
     card.dataset.toolCallId = callId; // IDをデータ属性として保存
 
     card.innerHTML = `
@@ -836,10 +836,10 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // ステータスに応じた表示更新
     if (status === 'finished') {
-      card.classList.add('tool-card--finished');
+      card.cardElem.classList.add('tool-card--finished');
       resetActive();           // ← 追加
     } else if (status === 'error') {
-      card.classList.add('tool-card--error');
+      card.cardElem.classList.add('tool-card--error');
     }
     scrollBottom(true);
   }
