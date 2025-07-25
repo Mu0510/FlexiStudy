@@ -308,60 +308,122 @@ window.addEventListener('DOMContentLoaded', () => {
         if (arr && arr.length) {
             // スクロール位置を保持
             const prevScrollHeight = messages.scrollHeight;
+            console.log('DEBUG: Before insert - prevScrollHeight:', prevScrollHeight);
 
             // ドキュメントフラグメントにまとめて作成
             const frag = document.createDocumentFragment();
             arr.forEach(m => {
                 if (loadedIds.has(m.id)) return;
 
-                let el;
-                if (m.type === 'tool') {
-                    // createToolCard を呼び出して要素を生成
-                    el = createToolCard({
-                        callId: m.params.toolCallId ?? m.id,
-                        icon: m.params.icon,
-                        label: m.params.label,
-                        command: m.params.confirmation?.command || m.params.locations?.[0]?.path || ''
-                    });
+                const historicalToolCards = new Map(); // Map to hold tool card elements for this history batch
 
-                    // ▼ body描画：params.content（or内容がなければ空文字）
-                    let body = '';
-                    if (m.params?.content) {
-                        const content = m.params.content;
-                        if (content.type === 'markdown' && content.markdown) {
-                            body = marked.parse(content.markdown);
-                        } else if (content.type === 'diff') {
-                            body = generateContextualDiffHtml(content.oldText, content.newText);
-                        } else if (typeof content === 'string') {
-                            body = `<pre>${content}</pre>`;
-                        } else {
-                            body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                // First pass: Process and consolidate tool calls
+                arr.forEach(m => {
+                    if (loadedIds.has(m.id)) return; // Skip already loaded messages
+
+                    if (m.type === 'tool') {
+                        const toolCallId = m.params.toolCallId ?? m.id;
+
+                        if (m.method === 'pushToolCall') {
+                            // Create the tool card element
+                            const el = createToolCard({
+                                callId: toolCallId,
+                                icon: m.params.icon,
+                                label: m.params.label,
+                                command: m.params.confirmation?.command || m.params.locations?.[0]?.path || ''
+                            });
+                            // Store it in our temporary map
+                            historicalToolCards.set(toolCallId, el);
+
+                            // Initial body content from pushToolCall (if any)
+                            const bodyDiv = el.querySelector('.tool-card__body');
+                            if (bodyDiv) {
+                                let body = '';
+                                if (m.params?.content) { // pushToolCall might have initial content
+                                    const content = m.params.content;
+                                    if (content.type === 'markdown' && content.markdown) {
+                                        body = marked.parse(content.markdown);
+                                    } else if (content.type === 'diff') {
+                                        body = generateContextualDiffHtml(content.oldText, content.newText);
+                                    } else if (typeof content === 'string') {
+                                        body = `<pre>${content}</pre>`;
+                                    } else {
+                                        body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                                    }
+                                } else {
+                                    body = '<span style="color:gray">（内容なし）</span>';
+                                }
+                                bodyDiv.innerHTML = body;
+                            }
+
+                        } else if (m.method === 'updateToolCall') {
+                            // Find the existing tool card element in our temporary map
+                            const el = historicalToolCards.get(toolCallId);
+                            if (el) {
+                                const bodyDiv = el.querySelector('.tool-card__body');
+                                if (bodyDiv) {
+                                    let body = '';
+                                    if (m.params?.content) {
+                                        const content = m.params.content;
+                                        if (content.type === 'markdown' && content.markdown) {
+                                            body = marked.parse(content.markdown);
+                                        } else if (content.type === 'diff') {
+                                            body = generateContextualDiffHtml(content.oldText, content.newText);
+                                        } else if (typeof content === 'string') {
+                                            body = `<pre>${content}</pre>`;
+                                        } else {
+                                            body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                                        }
+                                    } else {
+                                        body = '<span style="color:gray">（内容なし）</span>';
+                                    }
+                                    bodyDiv.innerHTML = body;
+                                }
+                                // Update status if needed
+                                if (m.params.status === 'finished') {
+                                    el.classList.add('tool-card--finished');
+                                } else if (m.params.status === 'error') {
+                                    el.classList.add('tool-card--error');
+                                }
+                            }
                         }
-                    } else {
-                        body = '<span style="color:gray">（内容なし）</span>';
                     }
-                    // toolCard body を更新
-                    const bodyDiv = el.querySelector('.tool-card__body');
-                    if (bodyDiv) {
-                        bodyDiv.innerHTML = body;
+                });
+
+                // Second pass: Append all messages (including consolidated tool cards) to the fragment
+                // We need to maintain the original order of messages as they appeared in `arr`
+                arr.forEach(m => {
+                    if (loadedIds.has(m.id)) return; // Skip if already loaded/appended
+
+                    let el;
+                    if (m.type === 'tool' && m.method === 'pushToolCall') { // Only append the initial pushToolCall element
+                        const toolCallId = m.params.toolCallId ?? m.id;
+                        el = historicalToolCards.get(toolCallId);
+                    } else if (m.type !== 'tool') { // For non-tool messages, create them as before
+                        const role = m.role === 'user' ? 'user-message'
+                                   : m.role === 'assistant' ? 'assistant-message' : 'system';
+                        el = document.createElement('div');
+                        el.classList.add(role);
+                        el.innerHTML = marked.parse(m.text ?? '');
                     }
 
-                } else {
-                    const role = m.role === 'user' ? 'user-message'
-                               : m.role === 'assistant' ? 'assistant-message' : 'system';
-                    el = document.createElement('div'); // Replicate appendMsgEl element creation
-                    el.classList.add(role);
-                    el.innerHTML = marked.parse(m.text ?? '');
-                }
-                frag.appendChild(el);
-                loadedIds.add(m.id);
+                    if (el) {
+                        frag.appendChild(el);
+                        loadedIds.add(m.id);
+                    }
+                });
             });
 
             // 先頭にまとめて挿入
             messages.insertBefore(frag, messages.firstChild);
+            console.log('DEBUG: After insert - currentScrollHeight:', messages.scrollHeight);
 
-            // スクロール位置を保つ
-            messages.scrollTop = messages.scrollHeight - prevScrollHeight;
+            // スクロール位置を保つ (requestAnimationFrame を使用してDOM更新後に実行)
+            requestAnimationFrame(() => {
+                const newScrollTop = messages.scrollHeight - prevScrollHeight;
+                messages.scrollTop = newScrollTop;
+                console.log('DEBUG: After RAF - newScrollTop:', newScrollTop, 'messages.scrollTop:', messages.scrollTop);
+            });
 
             /* (3) 一番古い ts を次の before に使う */
             // arr は古い順（昇順）で並んでいるので、先頭が最も古い
