@@ -766,10 +766,25 @@ window.addEventListener('DOMContentLoaded', () => {
 
   function renderMessages(msgArray, { prepend = false } = {}){
     msgArray.forEach(m=>{
-        const role = m.role==='user'?'user-message':
-                     m.role==='assistant'?'assistant-message':'system';
-        const el = appendMsgEl(role);
-        el.innerHTML = marked.parse(m.text);
+        let el;
+        if (m.type === 'tool') { // type が 'tool' の場合
+            el = document.createElement('div');
+            el.classList.add('tool-message'); // 新しいCSSクラス
+            el.innerHTML = `
+                <div class="tool-message__header">
+                    <i class="tool-message__icon ${m.icon}"></i>
+                    <span class="tool-message__title">${m.label}</span>
+                    <code class="tool-message__command">${m.params.command || ''}</code>
+                </div>
+                <pre class="tool-message__body">${JSON.stringify(m.params, null, 2)}</pre>
+            `;
+        } else {
+            const role = m.role==='user'?'user-message':
+                         m.role==='assistant'?'assistant-message':'system';
+            el = appendMsgEl(role);
+            el.innerHTML = marked.parse(m.text);
+        }
+
         if(prepend) messages.prepend(el); else messages.append(el);
         loadedIds.add(m.id);               // ← 追加
     });
