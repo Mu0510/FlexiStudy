@@ -103,6 +103,16 @@ inStream.on('data', chunk => {
     try { msg = JSON.parse(line); }
     catch { msg = { stdout: line }; }
 
+    // streamAssistantMessageChunk 以外のメッセージが来た場合、
+    // ongoingText に溜まっているAIのテキストがあれば、ここで履歴に保存する
+    if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
+        const rec = { id:String(Date.now()), ts:Date.now(),
+                     role:'assistant', text:ongoingText.trimEnd() };
+        history.push(rec);
+        console.log('[History] Saved assistant message (before other message):', rec);
+        ongoingText = ''; // クリア
+    }
+
     /* 1) AI チャンクなら一旦バッファに溜める */
     if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk: c } = msg.params || {};
