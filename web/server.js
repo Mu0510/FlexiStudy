@@ -130,6 +130,19 @@ inStream.on('data', chunk => {
     if (msg.role && msg.text) {
         history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
     }
+    // ここを追加！
+    else if (msg.method === 'pushToolCall' || msg.method === 'pushToolResult') {
+        history.push({
+            id: String(Date.now()),
+            ts: Date.now(),
+            type: 'tool', // 新しいタイプを追加
+            method: msg.method,
+            params: msg.params || {},
+            label: msg.label || '', // pushToolCall には label がある
+            icon: msg.icon || '',   // pushToolCall には icon がある
+            // 必要に応じて他の情報も
+        });
+    }
 
     broadcast(msg);   // 既存の配信
   }
