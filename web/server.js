@@ -133,7 +133,21 @@ inStream.on('data', chunk => {
     if (msg.role && msg.text) {
         history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
     }
-    else if (msg.method === 'requestToolCallConfirmation' || msg.method === 'updateToolCall') {
+    // ── Agent → Client の updateToolCall を処理 ──
+    if (msg.method === 'updateToolCall') {
+      broadcast(msg);                               // UI へ
+
+      // ★★ ここが必須 ★★ : Agent へ応答を返す
+      outStream.write(JSON.stringify({
+        jsonrpc: '2.0',
+        id:      msg.id,       // 受信した id
+        result:  null          // void 応答
+      }) + '\n');
+
+      history.push({ ...msg, ts: Date.now(), type:'tool' });
+      return;
+    }
+    else if (msg.method === 'requestToolCallConfirmation') {
         // ツール関連のメッセージも、タイムスタンプとtypeを追加して履歴に保存
         history.push({
             ...msg,
