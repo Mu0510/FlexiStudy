@@ -258,10 +258,10 @@ window.addEventListener('DOMContentLoaded', () => {
         // すべてのツール呼び出しを自動承認
 
         // pushToolCall のロジックをここに移動
-        const { icon, label, locations, toolCallId } = params;
+        const { icon, label, locations } = params; // toolCallId を削除
         const command = locations?.[0]?.path ?? '';
 
-        createToolCard({ callId: toolCallId, icon, label, command }); // カードを ID で登録
+        createToolCard({ callId: id, icon, label, command }); // カードを ID で登録 // toolCallId を id に変更
 
         // Agent へ RPC 応答
         respondToolCall(id, 'allow'); // 既存の respondToolCall を使用
