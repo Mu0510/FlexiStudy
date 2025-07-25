@@ -481,3 +481,8 @@ details[open] > summary:before {
 .context-line-num {
   color: #aaa; /* コンテキスト行の行番号 */
 }
+
+.tool-card__body {
+  overflow-x: auto;
+  white-space: pre;
+}
