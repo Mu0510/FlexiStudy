@@ -104,6 +104,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const ws = new WebSocket(`ws://${location.host}/ws`);
   window.ws = ws;  // ← これを1行追加！
   let requestId = 1;
+  let lastSentRequestId = null; // 最後に送信したリクエストのIDを保持
   ws.addEventListener('message', e => {
     console.log('[DEBUG] Received WebSocket message:', e.data); // 追加
     let msg;
@@ -806,6 +807,7 @@ window.addEventListener('DOMContentLoaded', () => {
       method:  'sendUserMessage',
       params:  { chunks: [{ text }] }
     };
+    lastSentRequestId = req.id; // 最後に送信したリクエストのIDを保存
     ws.send(JSON.stringify(req));
     input.value = '';
     scrollBottom(true); // メッセージ送信後に強制的に最下部までスクロール
@@ -814,7 +816,8 @@ window.addEventListener('DOMContentLoaded', () => {
   function cancelMessage() {
     const req = {
       jsonrpc: '2.0',
-      method: 'cancel',
+      id: lastSentRequestId, // 最後に送信したリクエストのIDを使用
+      method: 'cancelSendMessage',
       params: {}
     };
     ws.send(JSON.stringify(req));
