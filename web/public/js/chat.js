@@ -263,8 +263,18 @@ window.addEventListener('DOMContentLoaded', () => {
           result:{ id: toolId, outcome:'allow'}
         }));
 
-        createToolCard({ callId: toolId, icon:params.icon,
-                         label:params.label, command:params.confirmation?.command||'' });
+        const exists = toolCards.has(toolId);
+        if (!exists){
+          createToolCard({ callId: toolId, icon:params.icon, label:params.label, command:params.confirmation?.command||'', prepend:true });
+        } else {
+          // 既に updateToolCall で仮カードが作られている。
+          // headerPatch を payload にして updateToolCard を再利用
+          updateToolCard({
+            callId:  toolId,
+            status:'running',        // body はいじらない
+            content:{ __headerPatch:{ icon:params.icon, label:params.label, command:params.confirmation?.command||'' }}
+          });
+        }
         break;
 
       default:
@@ -324,12 +334,14 @@ window.addEventListener('DOMContentLoaded', () => {
       messages.scrollTop = messages.scrollHeight - prevScrollHeight;
 
       /* (3) 一番古い ts を次の before に使う */
-      if (arr.length > 0) {
-        oldestTs = arr[0].ts;
-      }
+      const limit = 5; // fetchHistory の limit
+
+      /* (3) 一番古い ts を次の before に使う */
+      oldestTs = arr[0]?.ts ?? oldestTs;
 
       /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
-      if (arr.length < 5) finished = true;
+      const newArr = arr.filter(m => !loadedIds.has(m.id));
+      if (newArr.length < limit) finished = true;
 
       return;
       }
@@ -802,22 +814,24 @@ window.addEventListener('DOMContentLoaded', () => {
    * @param {object} params.content - ツールからの出力内容
    */
   function updateToolCard({ callId, status, content }) {
-    const card = toolCards.get(callId);
+    let card = toolCards.get(callId);
     if (!card) {
       console.warn(`Tool card with ID ${callId} not found. Creating new card.`);
-      // カード無ければ新規作成してから続行
-      createToolCard({
-        callId: callId,
-        icon:   'terminal', // デフォルトアイコン
-        label:  '(tool)',   // デフォルトラベル
-        command:''
-      });
-      // 新しく作成したカードを再度取得
+      createToolCard({ callId, icon:'terminal', label:'(tool)', command:'' , prepend:false});
       card = toolCards.get(callId);
-      if (!card) { // 再度取得できなかった場合はエラー
-        console.error(`Failed to create tool card with ID ${callId}.`);
-        return;
-      }
+    }
+
+    /* ── 後から requestToolCallConfirmation が来て
+          ちゃんとした icon / label / command が分かった場合に
+          ヘッダーを書き換えられるようにする ── */
+    if (content?.__headerPatch) {
+      const { icon, label, command } = content.__headerPatch;
+      const h = card.cardElem.querySelector('.tool-card__header');
+      h.querySelector('.tool-card__icon').className = `tool-card__icon ${icon}`;
+      h.querySelector('.tool-card__title').textContent   = label;
+      h.querySelector('.tool-card__command').textContent = command;
+      // headerPatch は body ではないのでここで return して良い
+      return;
     }
 
     const bodyEl = card.bodyElem;
