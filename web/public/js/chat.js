@@ -330,13 +330,60 @@ window.addEventListener('DOMContentLoaded', () => {
         /* (2) 既に表示済みの id はスキップ */
         const prevScrollHeight = messages.scrollHeight; // 現在のスクロール高さを保存
 
-        mapped.forEach(o=>{
-            if (loadedIds.has(o.id)) return;
-            const el = appendMsgEl(o.roleClass);
-            el.innerHTML = marked.parse(o.text);
-            messages.prepend(el);
-            loadedIds.add(o.id);
-        });
+        mapped.forEach(m => {
+      if (loadedIds.has(m.id)) return;
+
+      // --- Toolカードかどうかで分岐 ---
+      if (m.type === 'tool') {
+        // ツールカードの描画（renderMessagesと同じロジックを流用）
+        let el = document.createElement('div');
+        el.classList.add('tool-message');
+        el.innerHTML = `
+          <div class="tool-message__header">
+            <i class="tool-message__icon ${m.params.icon}"></i>
+            <span class="tool-message__title">${m.params.label}</span>
+            <code class="tool-message__command">${m.params.confirmation?.command || ''}</code>
+          </div>
+        `;
+        let body = '';
+        if (m.params?.content) {
+          const content = m.params.content;
+          if (content.type === 'markdown' && content.markdown) {
+            body = marked.parse(content.markdown);
+          } else if (content.type === 'diff' && Array.isArray(content.content)) {
+            body = content.content.map(d => {
+              let line = d.value ?? '';
+              if (line.startsWith('+')) return `<span class="add">${line}</span>`;
+              if (line.startsWith('-')) return `<span class="del">${line}</span>`;
+              return line;
+            }).join('<br>');
+            body = `<pre>${body}</pre>`;
+          } else if (typeof content === 'string') {
+            body = `<pre>${content}</pre>`;
+          } else {
+            body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+          }
+        } else {
+          body = '<span style="color:gray">（内容なし）</span>';
+        }
+        const bodyDiv = document.createElement('div');
+        bodyDiv.classList.add('tool-message__body');
+        bodyDiv.innerHTML = body;
+        el.appendChild(bodyDiv);
+
+        if (prepend) messages.prepend(el); else messages.append(el);
+        loadedIds.add(m.id);
+        return;
+      }
+
+      // --- 通常メッセージ ---
+      const el = appendMsgEl(m.role === 'user' ? 'user-message'
+                        : m.role === 'assistant' ? 'assistant-message'
+                        : 'system');
+      el.innerHTML = marked.parse(m.text);
+      if (prepend) messages.prepend(el); else messages.append(el);
+      loadedIds.add(m.id);
+    });
 
         // スクロール位置を維持
         messages.scrollTop = messages.scrollHeight - prevScrollHeight;
