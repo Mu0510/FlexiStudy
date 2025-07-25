@@ -64,16 +64,17 @@ window.addEventListener('DOMContentLoaded', () => {
     
 
     if (msg.method === 'pushToolCall') {
-      const { icon, label, locations, toolCallId } = msg.params;
+      const { icon, label, locations } = msg.params;
+      const id = msg.params.toolCallId ?? nextToolCallId++; // サーバID優先で使う
       const command = locations?.[0]?.path ?? '';
 
-      createToolCard({ callId: toolCallId, icon, label, command }); // ② カードを ID で登録
+      createToolCard({ callId: id, icon, label, command }); // ② カードを ID で登録
 
       // ③ Agent へ RPC 応答
       ws.send(JSON.stringify({
         jsonrpc: '2.0',
         id:      msg.id,        // 受け取った requestId
-        result:  { id: toolCallId }         // 返すのは { id: ToolCallId }
+        result:  { id }         // 返すのは { id: ToolCallId }
       }));
 
       resetActive();            // 思考バブルをリセット
