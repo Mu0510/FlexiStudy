@@ -318,75 +318,66 @@ window.addEventListener('DOMContentLoaded', () => {
         if(arr.length === 0){ finished = true; return; }
 
         /* (1) サーバは「新→古」の順で返すので reverse して古→新へ */
-        const mapped = arr.slice().reverse().map(m => ({
-            id:  m.id,
-            ts:  m.ts,
-            roleClass: m.role==='user' ? 'user-message'
-                      : m.role==='assistant' ? 'assistant-message'
-                      : 'system',
-            text: m.text
-        }));
+        const mapped = arr.slice().reverse();  // 何も変換せず「生のまま」使う
 
-        /* (2) 既に表示済みの id はスキップ */
-        const prevScrollHeight = messages.scrollHeight; // 現在のスクロール高さを保存
+      const prevScrollHeight = messages.scrollHeight;
 
-        mapped.forEach(m => {
-      if (loadedIds.has(m.id)) return;
+      mapped.forEach(m => {
+          if (loadedIds.has(m.id)) return;
 
-      // --- Toolカードかどうかで分岐 ---
-      if (m.type === 'tool') {
-        // ツールカードの描画（renderMessagesと同じロジックを流用）
-        let el = document.createElement('div');
-        el.classList.add('tool-message');
-        el.innerHTML = `
-          <div class="tool-message__header">
-            <i class="tool-message__icon ${m.params.icon}"></i>
-            <span class="tool-message__title">${m.params.label}</span>
-            <code class="tool-message__command">${m.params.confirmation?.command || ''}</code>
-          </div>
-        `;
-        let body = '';
-        if (m.params?.content) {
-          const content = m.params.content;
-          if (content.type === 'markdown' && content.markdown) {
-            body = marked.parse(content.markdown);
-          } else if (content.type === 'diff' && Array.isArray(content.content)) {
-            body = content.content.map(d => {
-              let line = d.value ?? '';
-              if (line.startsWith('+')) return `<span class="add">${line}</span>`;
-              if (line.startsWith('-')) return `<span class="del">${line}</span>`;
-              return line;
-            }).join('<br>');
-            body = `<pre>${body}</pre>`;
-          } else if (typeof content === 'string') {
-            body = `<pre>${content}</pre>`;
-          } else {
-            body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+          if (m.type === 'tool') {
+              // ツールカード
+              let el = document.createElement('div');
+              el.classList.add('tool-message');
+              el.innerHTML = `
+                <div class="tool-message__header">
+                  <i class="tool-message__icon ${m.params?.icon || ''}"></i>
+                  <span class="tool-message__title">${m.params?.label || ''}</span>
+                  <code class="tool-message__command">${m.params?.confirmation?.command || m.params?.toolCallId || ''}</code>
+                </div>
+              `;
+              let body = '';
+              if (m.params && m.params.content) {
+                  const content = m.params.content;
+                  if (content.type === 'markdown' && content.markdown) {
+                      body = marked.parse(content.markdown);
+                  } else if (content.type === 'diff' && Array.isArray(content.content)) {
+                      body = content.content.map(d => {
+                          let line = d.value ?? '';
+                          if (line.startsWith('+')) return `<span class="add">${line}</span>`;
+                          if (line.startsWith('-')) return `<span class="del">${line}</span>`;
+                          return line;
+                      }).join('<br>');
+                      body = `<pre>${body}</pre>`;
+                  } else if (typeof content === 'string') {
+                      body = `<pre>${content}</pre>`;
+                  } else {
+                      body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                  }
+              } else {
+                  body = '<span style="color:gray">（内容なし）</span>';
+              }
+              const bodyDiv = document.createElement('div');
+              bodyDiv.classList.add('tool-message__body');
+              bodyDiv.innerHTML = body;
+              el.appendChild(bodyDiv);
+
+              messages.prepend(el);
+              loadedIds.add(m.id);
+              return;
           }
-        } else {
-          body = '<span style="color:gray">（内容なし）</span>';
-        }
-        const bodyDiv = document.createElement('div');
-        bodyDiv.classList.add('tool-message__body');
-        bodyDiv.innerHTML = body;
-        el.appendChild(bodyDiv);
 
-        if (prepend) messages.prepend(el); else messages.append(el);
-        loadedIds.add(m.id);
-        return;
-      }
+          // --- 通常メッセージ ---
+          const role = m.role === 'user' ? 'user-message'
+                    : m.role === 'assistant' ? 'assistant-message'
+                    : 'system';
+          const el = appendMsgEl(role);
+          el.innerHTML = marked.parse(m.text ?? '');
+          messages.prepend(el);
+          loadedIds.add(m.id);
+      });
 
-      // --- 通常メッセージ ---
-      const el = appendMsgEl(m.role === 'user' ? 'user-message'
-                        : m.role === 'assistant' ? 'assistant-message'
-                        : 'system');
-      el.innerHTML = marked.parse(m.text);
-      if (prepend) messages.prepend(el); else messages.append(el);
-      loadedIds.add(m.id);
-    });
-
-        // スクロール位置を維持
-        messages.scrollTop = messages.scrollHeight - prevScrollHeight;
+      messages.scrollTop = messages.scrollHeight - prevScrollHeight;
 
         /* (3) 一番古い ts を次の before に使う */
         oldestTs = mapped[0].ts;
