@@ -118,6 +118,8 @@ inStream.on('data', chunk => {
     if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
         // ongoingText が空でない場合にのみ履歴に保存
         if (ongoingText.length > 0) {
+            const rec = { id:String(Date.now()), ts:Date.now(),
+                         role:'assistant', text:ongoingText.trimEnd() };
             // ② 完成形をクライアントへ送る
             broadcast(rec);
         }

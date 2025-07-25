@@ -134,18 +134,26 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (msg.method === 'pushToolCall') {
-      // 1. 事前確認（confirmation付き）かどうかチェック
+      // ----- ① 確認付きならダイアログへ -----
       if (msg.params.confirmation) {
-        // 確認ダイアログを出す
-        showToolConfirmationDialog(msg);
-        return; // ここでカードは作らない
+        showToolConfirmationDialog(msg);   // この関数内で ACK を返している
+        return;
       }
-      // 2. 通常のツール呼び出し（即カード作成）
-      const toolCallId = msg.params.toolCallId ?? msg.params.id; // サーバIDを最優先で使う
+
+      // ----- ② 通常ツール呼び出し -----
+      const toolId   = Date.now();         // 任意の一意 ID
       const { icon, label, locations } = msg.params;
-      const command = locations?.[0]?.path ?? '';
-      createToolCard({ callId: toolCallId, icon, label, command });
-      // 必要に応じてACKを返すなど
+      const command  = locations?.[0]?.path ?? '';
+
+      createToolCard({ callId: toolId, icon, label, command });
+
+      // Agent へ ACK を返す  ←★これが無いと止まる★
+      ws.send(JSON.stringify({
+        jsonrpc: '2.0',
+        id:      msg.id,        // 受信した pushToolCall の id
+        result:  { id: toolId } // 自分で決めた toolId
+      }));
+
       resetActive();
       return;
     }
@@ -247,17 +255,16 @@ window.addEventListener('DOMContentLoaded', () => {
     const { method, params, id } = message;
     switch (method) {
       case 'requestToolCallConfirmation':
-        // readFile など fetch ベースのツールは自動承認
-        // すべてのツール呼び出しを自動承認
+        const toolId = Date.now();
+        // 確認ダイアログなどを挟むならここで outcome を決める
+        ws.send(JSON.stringify({
+          jsonrpc:'2.0',
+          id,
+          result:{ id: toolId, outcome:'allow'}
+        }));
 
-        // pushToolCall のロジックをここに移動
-        const { icon, label, locations } = params; // toolCallId を削除
-        const command = locations?.[0]?.path ?? '';
-
-        createToolCard({ callId: id, icon, label, command }); // カードを ID で登録 // toolCallId を id に変更
-
-        // Agent へ RPC 応答
-        respondToolCall(id, 'allow'); // 既存の respondToolCall を使用
+        createToolCard({ callId: toolId, icon:params.icon,
+                         label:params.label, command:params.confirmation?.command||'' });
         break;
 
       default:
