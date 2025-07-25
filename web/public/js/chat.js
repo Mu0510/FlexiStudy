@@ -283,93 +283,56 @@ window.addEventListener('DOMContentLoaded', () => {
         if (message.result && message.result.messages) {
       const arr = message.result.messages.slice();
 
-      const grouped = [];
-      const toolCardMap = {}; // toolCallId → { ...カード内容... }
+      // arr はサーバから来た順なので ts で昇順にソート
+      arr.sort((a,b)=> (a.ts??0)-(b.ts??0));
 
-      arr.forEach(item => {
-        if (item.type === "tool") {
-          if (item.method === "requestToolCallConfirmation") {
-            // カード作成：toolCallId(なければid)で一時保持
-            const toolCallId = item.params?.toolCallId ?? item.id;
-            toolCardMap[toolCallId] = {
-              id: toolCallId,
-              icon: item.params?.icon || "",
-              label: item.params?.label || "",
-              command: item.params?.confirmation?.command || "",
-              content: null, // 結果はあとで
-              ts: item.ts
-            };
-          } else if (item.method === "updateToolCall") {
-            // 結果をセット
-            const toolCallId = item.params?.toolCallId ?? item.id;
-            // 既存カードがあれば追加
-            if (toolCardMap[toolCallId]) {
-              toolCardMap[toolCallId].content = item.params?.content;
-            } else {
-              // 万一requestが無くてupdateだけあるパターン(安全策)
-              toolCardMap[toolCallId] = {
-                id: toolCallId,
-                icon: item.params?.icon || "",
-                label: item.params?.label || "",
-                command: "",
-                content: item.params?.content,
-                ts: item.ts
-              };
-            }
+      const prevScrollHeight = messages.scrollHeight; // スクロール位置を維持するために現在の高さを取得
+
+      // 逆順でループし、すべて prepend
+      for (let i=arr.length-1; i>=0; i--){
+        const m = arr[i];
+        if (loadedIds.has(m.id)) continue;
+
+        if (m.type === 'tool'){
+          if (m.method === 'requestToolCallConfirmation'){
+            createToolCard({
+              callId:  m.params.toolCallId ?? m.id,
+              icon:    m.params.icon,
+              label:   m.params.label,
+              command: m.params.confirmation?.command || '',
+              prepend: true
+            });
+          } else if (m.method === 'updateToolCall'){
+            updateToolCard({
+              callId:  m.params.toolCallId,
+              status:  m.params.status,
+              content: m.params.content
+            });
           }
-        } else {
-          grouped.push(item); // user, assistant, systemなど
-        }
-      });
-
-      // ---- 1) まとめた toolCardMap を create→update ----
-      Object.values(toolCardMap).forEach(card => {
-        // まだ作っていなければ作成
-        if (!loadedIds.has(card.id)) {
-          createToolCard({
-            callId:  card.id,
-            icon:    card.icon,
-            label:   card.label,
-            command: card.command
-          });
-          loadedIds.add(card.id);
-        }
-        // 結果(content) があれば更新
-        if (card.content) {
-          updateToolCard({
-            callId:  card.id,
-            status: 'finished',
-            content: card.content
-          });
-        }
-      });
-
-      // ---- 2) 通常メッセージ(user/assistant/system) だけ描画 ----
-      grouped
-        .filter(m => !m.type)                 // tool 以外
-        .sort((a,b) => (a.ts??0)-(b.ts??0))   // 古い→新しい
-        .forEach(m => {
-          if (loadedIds.has(m.id)) return;
-          const role = m.role === 'user' ? 'user-message'
-            : m.role === 'assistant' ? 'assistant-message'
-            : 'system';
-          const el = appendMsgEl(role);
+        } else {                    // user / assistant / system
+          const role = m.role === 'user'      ? 'user-message'
+                     : m.role === 'assistant' ? 'assistant-message'
+                     : 'system';
+          const el   = appendMsgEl(role);
           el.innerHTML = marked.parse(m.text ?? '');
-          messages.append(el); // prepend から append に変更
-          loadedIds.add(m.id);
-        });
-
-        /* (3) 一番古い ts を次の before に使う */
-        // 修正: grouped の最初の要素の ts を使用
-        if (grouped.length > 0) {
-          oldestTs = grouped[0].ts;
+          messages.insertBefore(el, messages.firstChild);
         }
+        loadedIds.add(m.id);
+      }
 
-        /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
-        if (arr.length < 5) finished = true;
+      // スクロール位置を維持
+      messages.scrollTop = messages.scrollHeight - prevScrollHeight;
 
-        return;
-        }
+      /* (3) 一番古い ts を次の before に使う */
+      if (arr.length > 0) {
+        oldestTs = arr[0].ts;
+      }
+
+      /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
+      if (arr.length < 5) finished = true;
+
+      return;
+      }
     }
 
     /* ↓↓↓ 既存の sendUserMessage / エラー処理などはそのまま ↓↓↓ */
@@ -804,7 +767,7 @@ window.addEventListener('DOMContentLoaded', () => {
    * @param {string} params.label - ツール名
    * @param {string} params.command - コマンド文字列
    */
-  function createToolCard({ callId, icon, label, command }) {
+  function createToolCard({ callId, icon, label, command, prepend = false }) {
     const card = document.createElement('div');
     card.classList.add('tool-card');
     card.dataset.toolCallId = callId; // IDをデータ属性として保存
@@ -818,7 +781,10 @@ window.addEventListener('DOMContentLoaded', () => {
       <pre class="tool-card__body"></pre>
     `;
 
-    messages.appendChild(card);
+    if (prepend)
+      messages.insertBefore(card, messages.firstChild);
+    else
+      messages.appendChild(card);
     toolCards.set(callId, {
       cardElem: card,
       bodyElem: card.querySelector('.tool-card__body')
