@@ -1,3 +1,5 @@
+let toolCards = new Map(); // toolCallId -> toolCardElement
+
 window.addEventListener('DOMContentLoaded', () => {
   // dvh のフォールバック
   function setVH() {
@@ -41,7 +43,8 @@ window.addEventListener('DOMContentLoaded', () => {
   let oldestTs   = null;
   let finished   = false;
 
-  const toolCards = new Map(); // toolCallId -> toolCardElement
+  
+  let nextToolCallId = 1;           // 好きなスキームで
 
   // WebSocket 接続
   const ws = new WebSocket(`ws://${location.host}/ws`);
@@ -56,29 +59,31 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
     ['pushToolCall','pushChunk','updateToolCall',
-     'pushMessage','streamAssistantMessageChunk']
-      .includes(msg.method) && console.log('[ACP]', msg.method, msg);
-    try {
-      msg = JSON.parse(e.data);
-    } catch (err) {
-      console.error('❌ JSON parse error on chunk:', err, e.data);
-      return;
-    }
+     'pushMessage','streamAssistantMessageChunk'].includes(msg.method)
+      && console.log('[ACP]', msg.method, msg.params);
     
 
     if (msg.method === 'pushToolCall') {
-      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
-      const { icon, label, locations, toolCallId } = msg.params;
+      const id = nextToolCallId++;            // ① 新ID
+      const { icon, label, locations } = msg.params;
       const command = locations?.[0]?.path ?? '';
-      createToolCard({ callId: toolCallId, icon, label, command });
-      resetActive(); // ← 追加
-      return; // 通常処理は打ち切り
+
+      createToolCard({ callId: id, icon, label, command }); // ② カードを ID で登録
+
+      // ③ Agent へ RPC 応答
+      ws.send(JSON.stringify({
+        jsonrpc: '2.0',
+        id:      msg.id,        // 受け取った requestId
+        result:  { id }         // 返すのは { id: ToolCallId }
+      }));
+
+      resetActive();            // 思考バブルをリセット
+      return;
     }
 
     if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
-      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
       // 実行ログを対応カードに追記
-      const entry = toolCards.get(msg.params.callId ?? msg.params.toolCallId);
+      const entry = toolCards.get(msg.params.callId); // ← callId で引く
       if (entry) {
         let textContent = msg.params.chunk.text;
         // diff 行の色付け
@@ -107,11 +112,44 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     if (msg.method === 'updateToolCall') {
-      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
-      updateToolCard(msg.params);
-      if (msg.params.status === 'finished') {
-        resetActive();           // ← 追加
+      const card = toolCards.get(msg.params.callId ?? msg.params.toolCallId);
+      if (!card) {
+        console.warn(`Tool card with ID ${msg.params.callId ?? msg.params.toolCallId} not found.`);
+        return;
       }
+
+      const bodyEl = card.bodyElem;
+      if (!bodyEl) return;
+
+      if (msg.params.content) {
+        let contentHtml = '';
+        if (msg.params.content.type === 'markdown') {
+          contentHtml = marked.parse(msg.params.content.markdown);
+        } else if (msg.params.content.type === 'diff') {
+          contentHtml = content.content.map(d => {
+            let line = d.value;
+            if (line.startsWith('+')) {
+              return `<span class="add">${line}</span>`;
+            } else if (line.startsWith('-')) {
+              return `<span class="del">${line}</span>`;
+            }
+            return line;
+          }).join('\n');
+          contentHtml = `<pre>${contentHtml}</pre>`; // preタグで囲む
+        } else {
+          contentHtml = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+        }
+        bodyEl.innerHTML = contentHtml;
+      }
+
+      // ステータスに応じた表示更新
+      if (msg.params.status === 'finished') {
+        card.classList.add('tool-card--finished');
+        resetActive();           // ← 追加
+      } else if (msg.params.status === 'error') {
+        card.classList.add('tool-card--error');
+      }
+      scrollBottom(true);
       return;
     }
 
@@ -760,14 +798,14 @@ window.addEventListener('DOMContentLoaded', () => {
    * @param {string} params.status - ツール実行ステータス (e.g., 'running', 'finished', 'error')
    * @param {object} params.content - ツールからの出力内容
    */
-  function updateToolCard({ toolCallId, status, content }) {
-    const card = toolCards.get(toolCallId);
+  function updateToolCard({ callId, status, content }) {
+    const card = toolCards.get(callId);
     if (!card) {
-      console.warn(`Tool card with ID ${toolCallId} not found.`);
+      console.warn(`Tool card with ID ${callId} not found.`);
       return;
     }
 
-    const bodyEl = card.querySelector('.tool-card__body');
+    const bodyEl = card.bodyElem;
     if (!bodyEl) return;
 
     if (content) {
@@ -794,6 +832,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // ステータスに応じた表示更新
     if (status === 'finished') {
       card.classList.add('tool-card--finished');
+      resetActive();           // ← 追加
     } else if (status === 'error') {
       card.classList.add('tool-card--error');
     }
