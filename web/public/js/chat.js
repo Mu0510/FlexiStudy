@@ -344,6 +344,8 @@ window.addEventListener('DOMContentLoaded', () => {
             arr.forEach(m => {
                 if (loadedIds.has(m.id)) return;
 
+                console.log('History message ID:', m.id, 'Type:', m.type, 'Method:', m.method, 'Params:', m.params); // ★この行を追加★
+
                 const historicalToolCards = new Map(); // Map to hold tool card elements for this history batch
 
                 // First pass: Process and consolidate tool calls
@@ -353,7 +355,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     if (m.type === 'tool') {
                         const toolCallId = m.params.toolCallId ?? m.id;
 
-                        if (m.method === 'pushToolCall') {
+                        if (m.method === 'pushToolCall' || m.method === 'requestToolCallConfirmation') {
                             // Create the tool card element
                             const el = createToolCard({
                                 callId: toolCallId,
@@ -425,7 +427,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     if (loadedIds.has(m.id)) return; // Skip if already loaded/appended
 
                     let el;
-                    if (m.type === 'tool' && m.method === 'pushToolCall') { // Only append the initial pushToolCall element
+                    if (m.type === 'tool' && (m.method === 'pushToolCall' || m.method === 'requestToolCallConfirmation')) { // ★この行を変更★
                         const toolCallId = m.params.toolCallId ?? m.id;
                         el = historicalToolCards.get(toolCallId);
                     } else if (m.type !== 'tool') { // For non-tool messages, create them as before
