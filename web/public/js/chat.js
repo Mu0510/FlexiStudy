@@ -155,6 +155,23 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (msg.method === 'streamAssistantThoughtChunk') {
+      const { thought } = msg.params;
+      const shouldScroll = isNearBottom();
+
+      if (!active) {
+        active = {
+          bubble: createTypingBubble(),
+          thoughtMode: true,
+          text: ''
+        };
+      }
+
+      active.bubble.innerHTML = marked.parse(thought.trim());
+      if (shouldScroll) scrollBottom(true);
+      return;
+    }
+
     if (msg.method && msg.method !== 'streamAssistantMessageChunk') {
       handleNotification(msg);
       return;
@@ -184,21 +201,12 @@ window.addEventListener('DOMContentLoaded', () => {
       //    ・active はあるが thoughtMode==false かつ
       //      今回は thought チャンク ＝ 2 本目以降の開始
       // ─────────────────────────────
-      if (
-          !active ||
-          (chunk.thought !== undefined && active.thoughtMode === false)
-      ) {
+      if (!active) {
         active = {
           bubble: createTypingBubble(),
-          thoughtMode: true,
+          thoughtMode: false,
           text: ''
         };
-      }
-
-      // ── thought
-      if (chunk.thought !== undefined) {
-        active.bubble.innerHTML = marked.parse(chunk.thought.trim());
-        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
       }
 
       // ── text
