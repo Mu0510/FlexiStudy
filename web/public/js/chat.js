@@ -159,7 +159,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const { thought } = msg.params;
       const shouldScroll = isNearBottom();
 
-      if (!active) {
+      if (!active || (active.bubble.classList.contains('assistant-message') && !active.bubble.classList.contains('typing'))) {
         active = {
           bubble: createTypingBubble(),
           thoughtMode: true,
@@ -201,7 +201,7 @@ window.addEventListener('DOMContentLoaded', () => {
       //    ・active はあるが thoughtMode==false かつ
       //      今回は thought チャンク ＝ 2 本目以降の開始
       // ─────────────────────────────
-      if (!active) {
+      if (!active || (active.bubble.classList.contains('assistant-message') && !active.bubble.classList.contains('typing'))) {
         active = {
           bubble: createTypingBubble(),
           thoughtMode: false,
