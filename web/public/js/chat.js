@@ -11,9 +11,7 @@ function generateContextualDiffHtml(oldText, newText) {
   // 変更があった行とその周辺の行のインデックスを収集
   for (let i = 0; i < diff.length; i++) {
     if (diff[i].added || diff[i].removed) {
-      // 変更行自体を追加
       linesToShow.add(i);
-      // 前後のコンテキスト行を追加
       for (let j = 1; j <= CONTEXT_LINES; j++) {
         if (i - j >= 0) linesToShow.add(i - j);
         if (i + j < diff.length) linesToShow.add(i + j);
@@ -24,23 +22,60 @@ function generateContextualDiffHtml(oldText, newText) {
   const sortedLinesToShow = Array.from(linesToShow).sort((a, b) => a - b);
 
   let lastRenderedLineIndex = -1;
-  for (const index of sortedLinesToShow) {
-    // 省略記号の挿入
-    if (index > lastRenderedLineIndex + 1) {
-      html += '<span class="context">...</span>\n';
+  let currentOldLine = 1; // 元のファイルの現在の行番号
+  let currentNewLine = 1; // 新しいファイルの現在の行番号
+
+  for (let i = 0; i < diff.length; i++) {
+    const part = diff[i];
+    // Diff.diffLinesのvalueは末尾に改行を含む場合と含まない場合があるため、空文字列を除外
+    // ただし、削除/追加でない場合は空行も含む（元のファイルに空行がある場合）
+    const linesInPart = part.value.split('\n').filter(line => line.length > 0 || !(part.added || part.removed));
+
+    if (linesToShow.has(i)) {
+      // 省略記号の挿入
+      if (i > lastRenderedLineIndex + 1) {
+        html += '<hr class="diff-separator">\n';
+      }
+
+      linesInPart.forEach(line => {
+        const spanClass = part.added ? 'add' : part.removed ? 'del' : 'context';
+        const prefix = part.added ? '+' : part.removed ? '-' : ' ';
+
+        let lineNumberHtml = '';
+        if (part.added) {
+          lineNumberHtml = `<span class="line-num new-line-num">${currentNewLine}</span>`;
+        } else if (part.removed) {
+          lineNumberHtml = `<span class="line-num old-line-num">${currentOldLine}</span>`;
+        } else {
+          lineNumberHtml = `<span class="line-num context-line-num">${currentOldLine}</span>`;
+        }
+
+        html += `<span class="${spanClass}">${lineNumberHtml}${prefix}${line}</span>\n`;
+
+        // 行番号の更新
+        if (part.added) {
+          currentNewLine++;
+        } else if (part.removed) {
+          currentOldLine++;
+        }
+
+        else {
+          currentOldLine++;
+          currentNewLine++;
+        }
+      });
+      lastRenderedLineIndex = i;
+    } else {
+      // 表示しない行の場合も行番号は進める
+      if (part.added) {
+        currentNewLine += linesInPart.length;
+      } else if (part.removed) {
+        currentOldLine += linesInPart.length;
+      } else {
+        currentOldLine += linesInPart.length;
+        currentNewLine += linesInPart.length;
+      }
     }
-
-    const part = diff[index];
-    const lines = part.value.split('\n');
-
-    // 各行を整形して追加
-    lines.forEach(line => {
-      if (line.length === 0 && (part.added || part.removed)) return; // 空の追加/削除行はスキップ
-      const spanClass = part.added ? 'add' : part.removed ? 'del' : 'context';
-      const prefix = part.added ? '+' : part.removed ? '-' : ' ';
-      html += `<span class="${spanClass}">${prefix}${line}</span>\n`;
-    });
-    lastRenderedLineIndex = index;
   }
 
   return `<pre>${html}</pre>`;
