@@ -144,10 +144,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
       // ステータスに応じた表示更新
       if (msg.params.status === 'finished') {
-        card.classList.add('tool-card--finished');
+        if (card) {
+          card.classList.add('tool-card--finished');
+        }
         resetActive();           // ← 追加
       } else if (msg.params.status === 'error') {
-        card.classList.add('tool-card--error');
+        if (card) {
+          card.classList.add('tool-card--error');
+        }
       }
       scrollBottom(true);
       return;
