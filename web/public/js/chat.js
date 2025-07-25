@@ -122,48 +122,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     if (msg.method === 'updateToolCall') {
       console.log('[DEBUG] updateToolCall msg.params:', msg.params); // 追加
-      const card = toolCards.get(msg.params.callId ?? msg.params.toolCallId);
-      if (!card) {
-        console.warn(`Tool card with ID ${msg.params.callId ?? msg.params.toolCallId} not found.`);
-        return;
-      }
-
-      const bodyEl = card.bodyElem;
-      if (!bodyEl) return;
-
-      if (msg.params.content) {
-        let contentHtml = '';
-        if (msg.params.content.type === 'markdown') {
-          contentHtml = marked.parse(msg.params.content.markdown);
-        } else if (msg.params.content.type === 'diff') {
-          contentHtml = msg.params.content.content.map(d => {
-            let line = d.value;
-            if (line.startsWith('+')) {
-              return `<span class="add">${line}</span>`;
-            } else if (line.startsWith('-')) {
-              return `<span class="del">${line}</span>`;
-            }
-            return line;
-          }).join('\n');
-          contentHtml = `<pre>${contentHtml}</pre>`; // preタグで囲む
-        } else {
-          contentHtml = `<pre>${JSON.stringify(msg.params.content, null, 2)}</pre>`;
-        }
-        bodyEl.innerHTML = contentHtml;
-      }
-
-      // ステータスに応じた表示更新
-      if (msg.params.status === 'finished') {
-        if (card) {
-          card.cardElem.classList.add('tool-card--finished');
-        }
-        resetActive();           // ← 追加
-      } else if (msg.params.status === 'error') {
-        if (card) {
-          card.cardElem.classList.add('tool-card--error');
-        }
-      }
-      scrollBottom(true);
+      updateToolCard({
+        callId: msg.params.callId ?? msg.params.toolCallId,
+        status: msg.params.status,
+        content: msg.params.content
+      });
       return;
     }
 
