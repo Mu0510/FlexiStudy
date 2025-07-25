@@ -109,6 +109,10 @@ inStream.on('data', chunk => {
         if (c?.text) {
             ongoingText += c.text;
         }
+        // ★追加★ thought があれば、thoughtChunk としてクライアントに送信
+        if (c?.thought) {
+            broadcast({ jsonrpc: '2.0', method: 'streamAssistantThoughtChunk', params: { thought: c.thought } });
+        }
         broadcast(msg); // クライアントへライブ表示用
         continue;
     }
