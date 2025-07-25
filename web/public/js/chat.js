@@ -1,7 +1,40 @@
 let toolCards = new Map(); // toolCallId -> toolCardElement
 let pendingBodies = new Map();
 
-function generateContextualDiffHtml(oldText, newText, ctx = 3){const patch = Diff.structuredPatch('old','new',oldText,newText,'','',{context:ctx});let html = '<pre>';patch.hunks.forEach((h, hi) => {html += `<span class="hunk-header"> @@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@</span>\n`;let oldNum = h.oldStart;let newNum = h.newStart;h.lines.forEach(line => {if (line.includes('\\ No newline at end of file')) return;let lineClass, lineNumHtml = '';if (line.startsWith('+')) {lineClass = 'add';lineNumHtml = `<span class="line-num new">${newNum++}</span> `;} else if (line.startsWith('-')) {lineClass = 'del';lineNumHtml = `<span class="line-num old">${oldNum++}</span> `;} else {lineClass = 'context';lineNumHtml = `<span class="line-num old">${oldNum}</span> <span class="line-num new">${newNum}</span> `;oldNum++; newNum++;}const esc = line.replace(/&/g,'&amp;').replace(/</g,'&lt;');html += `<span class="${lineClass}">${lineNumHtml}${esc}</span>\n`;});if (hi !== patch.hunks.length - 1) html += '<hr class="diff-separator">\n';});html += '</pre>';return html;}
+// 旧バージョン generateContextualDiffHtml を全部置き換え
+function generateContextualDiffHtml(oldText, newText, ctx = 3) {
+  // --- ① hunk をまとめて生成 --------------------------------
+  const patch = Diff.structuredPatch(
+    'old', 'new',
+    oldText, newText,
+    '', '',              // header ラベルは不要なら空で
+    { context: ctx }     // 抜粋する前後行数
+  );
+
+  // --- ② HTML 組み立て --------------------------------------
+  let html = '<pre>';
+  patch.hunks.forEach((h, hi) => {
+    // @@ -12,5 +12,6 @@  みたいな行
+    html += `<span class="hunk-header"> @@ -${h.oldStart},${h.oldLines} +${h.newStart},${h.newLines} @@</span>\n`;
+
+    // 本体
+    h.lines.forEach(line => {
+      const cls =
+        line[0] === '+' ? 'add' :
+        line[0] === '-' ? 'del' : 'context';
+      // < や & がそのまま出ても崩れないようエスケープ
+      const esc = line.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      html += `<span class="${cls}">${esc}</span>\n`;
+    });
+
+    // hunk と hunk の間に区切り線
+    if (hi !== patch.hunks.length - 1) {
+      html += '<hr class="diff-separator">\n';
+    }
+  });
+  html += '</pre>';
+  return html;
+}
 
 window.addEventListener('DOMContentLoaded', () => {
   // dvh のフォールバック
