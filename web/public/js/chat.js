@@ -332,6 +332,7 @@ window.addEventListener('DOMContentLoaded', () => {
     /* --- fetchHistory 応答を先に処理 --- */
     if (pendingHistory.has(message.id) && message.result?.messages){
         pendingHistory.delete(message.id);
+        console.log('[DEBUG] Received fetchHistory response for id:', message.id, 'messages count:', message.result.messages.length);
 
         const arr = message.result.messages.slice(); // Use slice to avoid modifying original array
         if (arr && arr.length) {
@@ -457,6 +458,7 @@ window.addEventListener('DOMContentLoaded', () => {
                     messages.scrollTop = newScrollTop;
                     console.log('DEBUG: After double RAF - newScrollTop:', newScrollTop, 'messages.scrollTop:', messages.scrollTop);
                     isFetchingHistory = false; // 履歴取得完了
+                    console.log('[DEBUG] isFetchingHistory set to false.');
                 });
             });
 
@@ -467,11 +469,9 @@ window.addEventListener('DOMContentLoaded', () => {
             }
 
             /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
+            // (4) 返ってきた件数が limit 未満なら最後まで読んだと判断
             const limit = 20; // fetchHistory の limit (web/server.js の limit と合わせる)
-            const newMessagesToRender = arr.filter(m => !loadedIds.has(m.id)); // Filter again for finished check
-            // ① limit 未満しか返ってこなかった（もう古い履歴が無い）
-            // ② 返ってきた全件が既に読み込み済み（newMessagesToRender が空）
-            if (arr.length < limit || newMessagesToRender.length === 0) {
+            if (arr.length < limit) { // newMessagesToRender.length === 0 の条件を削除
               finished = true;
             }
 
@@ -847,6 +847,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let isFetchingHistory = false; // 履歴取得中フラグ
 
   function handleScroll() {
+    console.log('[DEBUG] handleScroll called. scrollTop:', messages.scrollTop, 'finished:', finished, 'isFetchingHistory:', isFetchingHistory);
     // スクロール位置が上から1000px以内になったら履歴を読み込む
     if (messages.scrollTop < 1000 && !finished && !isFetchingHistory) {
       requestHistory();
@@ -854,11 +855,14 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function requestHistory(){
+    console.log('[DEBUG] requestHistory called. isFetchingHistory:', isFetchingHistory, 'finished:', finished);
     if (isFetchingHistory) return; // 既に取得中の場合は何もしない
     isFetchingHistory = true; // 取得開始
+    console.log('[DEBUG] isFetchingHistory set to true.');
 
     const id = ++histReqId;
     pendingHistory.add(id);
+    console.log('[DEBUG] Sending fetchHistory request with id:', id, 'before:', oldestTs);
     ws.send(JSON.stringify({
       jsonrpc:'2.0',
       id,
