@@ -48,10 +48,16 @@ window.addEventListener('DOMContentLoaded', () => {
   window.ws = ws;  // ← これを1行追加！
   let requestId = 1;
   ws.addEventListener('message', e => {
+    let msg;
+    try {
+      msg = JSON.parse(e.data);
+    } catch (err) {
+      console.error('❌ JSON parse error on chunk:', err, e.data);
+      return;
+    }
     ['pushToolCall','pushChunk','updateToolCall',
      'pushMessage','streamAssistantMessageChunk']
       .includes(msg.method) && console.log('[ACP]', msg.method, msg);
-    let msg;
     try {
       msg = JSON.parse(e.data);
     } catch (err) {
