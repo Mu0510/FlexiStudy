@@ -302,47 +302,74 @@ window.addEventListener('DOMContentLoaded', () => {
     if (pendingHistory.has(message.id) && message.result?.messages){
         pendingHistory.delete(message.id);
 
-        if (message.result && message.result.messages) {
-            const arr = message.result.messages.slice();
+        const arr = message.result.messages.slice(); // Use slice to avoid modifying original array
+        if (arr && arr.length) {
+            // スクロール位置を保持
+            const prevScrollHeight = messages.scrollHeight;
 
-            const prevScrollHeight = messages.scrollHeight; // スクロール位置を維持するために現在の高さを取得
-
+            // ドキュメントフラグメントにまとめて作成
+            const frag = document.createDocumentFragment();
             arr.forEach(m => {
                 if (loadedIds.has(m.id)) return;
 
+                let el;
                 if (m.type === 'tool') {
-                    if (m.method === 'requestToolCallConfirmation' || m.method === 'pushToolCall') {
-                        const id = m.params.toolCallId ?? m.id;
-                        if (!toolCards.has(id)) {
-                            createToolCard({ callId: id, icon: m.params.icon, label: m.params.label, command: m.params.confirmation?.command || m.params.locations?.[0]?.path || '' });
+                    // Replicate createToolCard element creation logic
+                    el = document.createElement('div');
+                    el.classList.add('tool-card');
+                    el.dataset.toolCallId = m.params.toolCallId ?? m.id;
+
+                    el.innerHTML = `
+                        <div class="tool-card__header">
+                            <i class="tool-card__icon ${m.params.icon}"></i>
+                            <span class="tool-card__title">${m.params.label}</span>
+                            <code class="tool-card__command">${m.params.confirmation?.command || m.params.locations?.[0]?.path || ''}</code>
+                        </div>
+                        <pre class="tool-card__body"></pre>
+                    `;
+                    // Note: toolCards map is not updated here as these are historical messages.
+                    // If they need to be interactive, createToolCard should be called,
+                    // but that appends directly to messages, which we don't want here.
+                    // For now, just render the static card.
+
+                    // ▼ body描画：params.content（or内容がなければ空文字）
+                    let body = '';
+                    if (m.params?.content) {
+                        const content = m.params.content;
+                        if (content.type === 'markdown' && content.markdown) {
+                            body = marked.parse(content.markdown);
+                        } else if (content.type === 'diff') {
+                            body = generateContextualDiffHtml(content.oldText, content.newText);
+                        } else if (typeof content === 'string') {
+                            body = `<pre>${content}</pre>`;
+                        } else {
+                            body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
                         }
-                    } else if (m.method === 'updateToolCall') {
-                        const id = m.params.toolCallId;
-                        if (!toolCards.has(id)) {
-                            // 対応するカードがまだない場合、仮のカードを作成
-                            createToolCard({ callId: id, icon: 'terminal', label: '(tool)', command: '' });
-                        }
-                        updateToolCard({
-                            callId: id,
-                            status: m.params.status,
-                            content: m.params.content
-                        });
+                    } else {
+                        body = '<span style="color:gray">（内容なし）</span>';
                     }
-                } else { // user / assistant / system
+                    // toolCard body
+                    const bodyDiv = document.createElement('div');
+                    bodyDiv.classList.add('tool-card__body'); // Use tool-card__body class
+                    bodyDiv.innerHTML = body;
+                    el.appendChild(bodyDiv);
+
+                } else {
                     const role = m.role === 'user' ? 'user-message'
                                : m.role === 'assistant' ? 'assistant-message' : 'system';
-                    const el = appendMsgEl(role);
+                    el = document.createElement('div'); // Replicate appendMsgEl element creation
+                    el.classList.add(role);
                     el.innerHTML = marked.parse(m.text ?? '');
-                    messages.appendChild(el);
                 }
+                frag.appendChild(el);
                 loadedIds.add(m.id);
             });
 
-            // スクロール位置を維持
-            messages.scrollTop = messages.scrollHeight - prevScrollHeight;
+            // 先頭にまとめて挿入
+            messages.insertBefore(frag, messages.firstChild);
 
-            /* (3) 一番古い ts を次の before に使う */
-            const limit = 5; // fetchHistory の limit
+            // スクロール位置を保つ
+            messages.scrollTop = messages.scrollHeight - prevScrollHeight;
 
             /* (3) 一番古い ts を次の before に使う */
             // arr は古い順（昇順）で並んでいるので、先頭が最も古い
@@ -351,9 +378,11 @@ window.addEventListener('DOMContentLoaded', () => {
             }
 
             /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
+            const limit = 20; // fetchHistory の limit (web/server.js の limit と合わせる)
+            const newMessagesToRender = arr.filter(m => !loadedIds.has(m.id)); // Filter again for finished check
             // ① limit 未満しか返ってこなかった（もう古い履歴が無い）
-            // ② 返ってきた全件が既に読み込み済み（newArr が空）
-            if (arr.length < limit || newArr.length === 0) {
+            // ② 返ってきた全件が既に読み込み済み（newMessagesToRender が空）
+            if (arr.length < limit || newMessagesToRender.length === 0) {
               finished = true;
             }
 
