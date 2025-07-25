@@ -130,17 +130,20 @@ inStream.on('data', chunk => {
     if (msg.role && msg.text) {
         history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
     }
-    // ここを追加！
-    else if (msg.method === 'pushToolCall' || msg.method === 'pushToolResult') {
+    else if (msg.method === 'requestToolCallConfirmation' || msg.method === 'updateToolCall') {
+        // ToolCardとして保存
         history.push({
             id: String(Date.now()),
             ts: Date.now(),
-            type: 'tool', // 新しいタイプを追加
+            type: 'tool',
             method: msg.method,
             params: msg.params || {},
-            label: msg.label || '', // pushToolCall には label がある
-            icon: msg.icon || '',   // pushToolCall には icon がある
-            // 必要に応じて他の情報も
+            label: msg.params?.label || '',
+            icon: msg.params?.icon || '',
+            // 追加でtoolCallIdやcontentなど必要に応じて
+            toolCallId: msg.params?.toolCallId,
+            status: msg.params?.status,
+            content: msg.params?.content,
         });
     }
 
