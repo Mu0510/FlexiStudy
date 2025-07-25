@@ -16,14 +16,6 @@ window.addEventListener('DOMContentLoaded', () => {
   const fullBtn  = document.getElementById('fullscreenToggle');
   const sendBtn  = document.getElementById('chatSend');
   const input    = document.getElementById('chatInput');
-  input.style.color = 'white';
-
-  // デバッグ：フォーカスイベント確認
-  input.addEventListener("focus", () => {
-    console.log("input focused");
-    input.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  });
-  input.addEventListener("blur", () => console.log("blurred"));
   const messages = document.getElementById('chatMessages');
 
   let currentBubble = null;       // <div id="typingBubble"> 要素
@@ -63,24 +55,6 @@ window.addEventListener('DOMContentLoaded', () => {
      'pushMessage','streamAssistantMessageChunk'].includes(msg.method)
       && console.log('[ACP]', msg.method, msg.params);
     
-
-    // if (msg.method === 'pushToolCall') {
-    //   const { icon, label, locations } = msg.params;
-    //   const id = msg.params.toolCallId ?? nextToolCallId++; // サーバID優先で使う
-    //   const command = locations?.[0]?.path ?? '';
-
-    //   createToolCard({ callId: id, icon, label, command }); // ② カードを ID で登録
-
-    //   // ③ Agent へ RPC 応答
-    //   ws.send(JSON.stringify({
-    //     jsonrpc: '2.0',
-    //     id:      msg.id,        // 受け取った requestId
-    //     result:  { id }         // 返すのは { id: ToolCallId }
-    //   }));
-
-    //   resetActive();            // 思考バブルをリセット
-    //   return;
-    // }
 
     if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
       // 実行ログを対応カードに追記
@@ -159,6 +133,23 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    if (msg.method === 'pushToolCall') {
+      // 1. 事前確認（confirmation付き）かどうかチェック
+      if (msg.params.confirmation) {
+        // 確認ダイアログを出す
+        showToolConfirmationDialog(msg);
+        return; // ここでカードは作らない
+      }
+      // 2. 通常のツール呼び出し（即カード作成）
+      const toolCallId = msg.params.toolCallId ?? msg.params.id; // サーバIDを最優先で使う
+      const { icon, label, locations } = msg.params;
+      const command = locations?.[0]?.path ?? '';
+      createToolCard({ callId: toolCallId, icon, label, command });
+      // 必要に応じてACKを返すなど
+      resetActive();
+      return;
+    }
+
     if (msg.method && msg.method !== 'streamAssistantMessageChunk') {
       handleNotification(msg);
       return;
@@ -167,7 +158,8 @@ window.addEventListener('DOMContentLoaded', () => {
     if (msg.method === 'historyCleared'){
       messages.innerHTML = '';
       loadedIds.clear();
-      oldestTs = null; finished = false;
+      oldestTs = null; 
+      finished = false;
       pendingHistory.clear();
       return;
     }
@@ -201,7 +193,7 @@ window.addEventListener('DOMContentLoaded', () => {
       // ── thought
       if (chunk.thought !== undefined) {
         active.bubble.innerHTML = marked.parse(chunk.thought.trim());
-        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール // 判定結果に基づいてスクロール
+        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
       }
 
       // ── text
@@ -213,7 +205,9 @@ window.addEventListener('DOMContentLoaded', () => {
           active.text        = '';
         }
 
-        active.text += chunk.text.replace(/^\n+/, '');        active.bubble.innerHTML = marked.parse(active.text.trimEnd());        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
+        active.text += chunk.text.replace(/^\n+/, '');
+        active.bubble.innerHTML = marked.parse(active.text.trimEnd());
+        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
       }
 
       // ACK は id があるときだけ
@@ -253,7 +247,6 @@ window.addEventListener('DOMContentLoaded', () => {
     const { method, params, id } = message;
     switch (method) {
       case 'requestToolCallConfirmation':
-        // 「Edit」や「execute」など、ツール実行の確認ダイアログ
         // readFile など fetch ベースのツールは自動承認
         // すべてのツール呼び出しを自動承認
 
@@ -266,40 +259,6 @@ window.addEventListener('DOMContentLoaded', () => {
         // Agent へ RPC 応答
         respondToolCall(id, 'allow'); // 既存の respondToolCall を使用
         break;
-
-      // pushToolCall と updateToolCall はトップレベルで処理するため、ここでは削除またはコメントアウト
-      // case 'pushToolCall': {
-      //   console.log('[DEBUG] pushToolCall received, about to respond to tool call with id=', id);
-      //   // (1) ツール呼び出しUIを生成
-      //   const toolCallId = params.toolCallId ?? id;
-      //   // ★ ここで typingBubble を終わらせる
-      //   const thinking = document.querySelector('.thinking-bubble');
-      //   if (thinking) thinking.remove();
-
-      //   active = null;
-
-      //   showToolInvocationUI({ ...params, toolCallId });
-      //   ws.send(JSON.stringify({
-      //     jsonrpc:'2.0',
-      //     id,                     // 受け取った requestId
-      //     result:{ id: toolCallId } // ← これだけで十分
-      //   }));
-      //   break;
-      // }
-
-      // case 'updateToolCall': {
-      //   // ① UI 更新
-      //   updateToolCallStatus(params);
-
-      //   // ② Gemini へ ACK
-      //   ws.send(JSON.stringify({
-      //     jsonrpc: '2.0',
-      //     id,          // 受け取った requestId をそのまま返す
-      //     result: null // void メソッドなので null
-      //   }));
-      //   break;
-      // }
-      
 
       default:
         console.warn(`Unhandled notification: ${method}`, params);
@@ -424,12 +383,16 @@ window.addEventListener('DOMContentLoaded', () => {
       messages.scrollTop = messages.scrollHeight - prevScrollHeight;
 
         /* (3) 一番古い ts を次の before に使う */
-        oldestTs = mapped[0].ts;
+        // 修正: grouped の最初の要素の ts を使用
+        if (grouped.length > 0) {
+          oldestTs = grouped[0].ts;
+        }
 
         /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
         if (arr.length < 5) finished = true;
 
         return;
+        }
     }
 
     /* ↓↓↓ 既存の sendUserMessage / エラー処理などはそのまま ↓↓↓ */
@@ -484,59 +447,82 @@ window.addEventListener('DOMContentLoaded', () => {
     ws.send(JSON.stringify(response));
   }
 
-  function showRpcError(error) {
-    console.log('Placeholder: showRpcError', error);
-    if (error.code === 8 && error.message.includes('RESOURCE_EXHAUSTED')) { // 8はGRPCのRESOURCE_EXHAUSTEDコード
-      appendSystem('今日のクォータに達しました。16:00 (JST) にリセットされます。');
-    } else {
-      alert(`RPC Error: ${error.message}`);
-    }
-  }
-
-  // Basic implementation for UI components
-  function createPanel({ id, title, icon, body }) {
-    const panelElement = document.createElement('div');
-    panelElement.id = `tool-panel-${id}`;
-    panelElement.classList.add('tool-panel');
-    panelElement.innerHTML = `
-      <div class="tool-panel-header">
-        <h3>${title}</h3>
-        <span class="tool-panel-status"></span>
-      </div>
-      <div class="tool-panel-body">${body || ''}</div>
-    `;
-    messages.appendChild(panelElement);
-
-    return {
-      open: () => {
-        panelElement.style.display = 'block';
-        scrollBottom(true);
-      },
-      setStatus: (status) => {
-        const statusSpan = panelElement.querySelector('.tool-panel-status');
-        if (statusSpan) statusSpan.textContent = status;
-      },
-      updateBody: (newBody) => {
-        const bodyDiv = panelElement.querySelector('.tool-panel-body');
-        if (bodyDiv) bodyDiv.innerHTML = newBody;
-        scrollBottom(true);
-      }
+  function read_file(path) {
+    const req = {
+      jsonrpc: '2.0',
+      id: ++requestId,
+      method: 'read_file',
+      params: { path }
     };
+    ws.send(JSON.stringify(req));
   }
 
-  function renderDiff(content) {
-    // For simplicity, just stringify the diff content
-    return `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+  function appendFileNotice(type, path) {
+    const el = document.createElement('div');
+    el.classList.add('file-notice');
+    el.textContent = `✔ ${type} ${path}`;
+    messages.appendChild(el);
+    scrollBottom(); // 条件付きスクロール
   }
 
-  function renderToolContent(content) {
-    // For simplicity, just stringify the content
-    return `<pre>${JSON.stringify(content, null, 2)}</pre>`;
-  }
+  // 初期は開いた状態
+  panel.style.display = 'flex';
+  openBtn.style.display = 'none';
 
-  function renderLoadingSpinner() {
-    return `<div>Loading...</div>`;
-  }
+  /* 閉じる（×） */
+  closeBtn.addEventListener('click', () => {
+    panel.style.display   = 'none';
+    resizer.style.display = 'none';
+    openBtn.style.display = 'block';          // 右下 FAB
+    // 左カラムを全幅に
+    leftColumn.style.display = '';
+  });
+
+  /* 開く（右下 FAB）*/
+  openBtn.addEventListener('click', () => {
+    panel.style.display   = 'flex';
+    resizer.style.display = '';               // 横/縦リサイズ復活
+    openBtn.style.display = 'none';
+    if(!isFull){                               // 通常レイアウト
+      leftColumn.style.display = '';
+    }
+  });
+
+  /* 全画面トグル（⛶⇆↙）を置き換え */
+  let isFull          = false;
+  let prevBasis       = null;   // flex-basis
+  let prevMaxWidth    = null;   // max-width
+  let prevPanelStyle  = null;   // インライン幅が全部ここにある
+
+  fullBtn.addEventListener('click', () => {
+    isFull = !isFull;
+
+    if (isFull) {
+      // ── 入る前の状態を保存 ──
+      prevBasis      = panel.style.flexBasis || '';
+      prevMaxWidth   = panel.style.maxWidth  || '';
+      prevPanelStyle = panel.getAttribute('style') || ''; // 念のため全部
+
+      // ── ダッシュボードを隠し、幅100%へ ──
+      leftColumn.style.display = 'none';
+      resizer.style.display    = 'none';
+      panel.style.flex         = '1 1 100%';
+      panel.style.maxWidth     = '100%';     // ← これが効いて横いっぱい
+      panel.style.flexBasis    = '100%';
+      fullBtn.textContent      = '↙';
+      openBtn.style.display    = 'none';
+
+    } else {
+      // ── 保存しておいた値で復元 ──
+      leftColumn.style.display = '';
+      resizer.style.display    = '';
+      panel.style.flex         = '';
+      panel.style.flexBasis    = prevBasis;
+      panel.style.maxWidth     = prevMaxWidth;
+      panel.setAttribute('style', prevPanelStyle); // さらに完全復元
+      fullBtn.textContent      = '⛶';
+    }
+  });
 
   // 「resizer」要素を Pointer Events で掴めるように
   const resizer = document.getElementById('resizer');
@@ -630,13 +616,77 @@ window.addEventListener('DOMContentLoaded', () => {
     document.removeEventListener('pointerup', stopResize);
   }
 
-  // appendFileNotice の実装例
-  function appendFileNotice(type, path) {
+  // visualViewport のリサイズイベントで入力エリアの位置を調整
+  if (window.visualViewport) {
+    const chatInputArea = document.getElementById('chatInputArea');
+    const chatMessages = document.getElementById('chatMessages');
+
+    function adjustChatLayout() {
+      const visualViewportHeight = window.visualViewport.height;
+      const visualViewportOffsetTop = window.visualViewport.offsetTop;
+      const documentHeight = document.documentElement.clientHeight;
+
+      // キーボードが表示されているかどうかの判定
+      const isKeyboardShowing = (documentHeight - visualViewportHeight - visualViewportOffsetTop) > 0;
+
+      if (isKeyboardShowing) {
+        // キーボードが表示されている場合、入力エリアをキーボードの上に配置
+        chatInputArea.style.bottom = `${documentHeight - visualViewportHeight - visualViewportOffsetTop}px`;
+        // メッセージエリアのパディングを調整して、入力エリアがメッセージを隠さないようにする
+        chatMessages.style.paddingBottom = `${chatInputArea.offsetHeight + 10}px`; // 10px は適当な余白
+      } else {
+        // キーボードが非表示の場合、入力エリアを通常の位置に戻す
+        chatInputArea.style.bottom = `env(safe-area-inset-bottom)`;
+        chatMessages.style.paddingBottom = '16px'; // デフォルトのパディングに戻す
+      }
+      scrollBottom(true); // レイアウト調整後にスクロール位置を最下部に (強制)
+    }
+
+    window.visualViewport.addEventListener('resize', adjustChatLayout);
+    // 初期ロード時にも一度調整を実行
+    adjustChatLayout();
+  }
+
+  // メッセージ追加（エラー含む）
+  function appendMsg(role, text) {
+    const el = appendMsgEl(role);
+    el.innerHTML = marked.parse(text);
+    scrollBottom(); // 条件付きスクロール
+  }
+
+  // appendMsg の DOM 生成部分を分離
+  function appendMsgEl(role) {
     const el = document.createElement('div');
-    el.classList.add('file-notice');
-    el.textContent = `✔ ${type} ${path}`;
+    el.classList.add(role);
+    messages.appendChild(el);
+    return el;
+  }
+  function appendSystem(text) {
+    const el = document.createElement('div');
+    el.classList.add('system');
+    el.textContent = text;
     messages.appendChild(el);
     scrollBottom(); // 条件付きスクロール
+  }
+
+  /**
+   * 現在のスクロール位置がチャットエリアの最下部に近いかどうかを判定します。
+   * @returns {boolean} 最下部に近い場合は true、そうでない場合は false。
+   */
+  function isNearBottom() {
+    return messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 5;
+  }
+
+  /**
+   * チャットメッセージを一番下までスクロールします。
+   * @param {boolean} force - true の場合、現在のスクロール位置に関わらず強制的にスクロールします。
+   *                          false (または未指定) の場合、ユーザーが一番下に近い位置にいる場合のみスクロールします。
+   */
+  function scrollBottom(force = false) {
+    // ユーザーが一番下に近い位置にいるか、強制スクロールが指定されている場合のみスクロール
+    if (force || isNearBottom()) {
+      messages.scrollTop = messages.scrollHeight;
+    }
   }
 
   // 送信
@@ -672,97 +722,6 @@ window.addEventListener('DOMContentLoaded', () => {
     scrollBottom(true); // メッセージ送信後に強制的に最下部までスクロール
   }
 
-  // 初期は開いた状態
-  panel.style.display = 'flex';
-  openBtn.style.display = 'none';
-
-  /* 閉じる（×） */
-  closeBtn.addEventListener('click', () => {
-    panel.style.display   = 'none';
-    resizer.style.display = 'none';
-    openBtn.style.display = 'block';          // 右下 FAB
-    // 左カラムを全幅に
-    leftColumn.style.display = '';
-  });
-
-  /* 開く（右下 FAB）*/
-  openBtn.addEventListener('click', () => {
-    panel.style.display   = 'flex';
-    resizer.style.display = '';               // 横/縦リサイズ復活
-    openBtn.style.display = 'none';
-    if(!isFull){                               // 通常レイアウト
-      leftColumn.style.display = '';
-    }
-  });
-
-  /* 先頭付近に退避用変数を用意 */
-  let isFull          = false;
-  let prevBasis       = null;   // flex-basis
-  let prevMaxWidth    = null;   // max-width
-  let prevPanelStyle  = null;   // インライン幅が全部ここにある
-
-  /* 全画面トグル（⛶⇆↙）を置き換え */
-  fullBtn.addEventListener('click', () => {
-    isFull = !isFull;
-
-    if (isFull) {
-      // ── 入る前の状態を保存 ──
-      prevBasis      = panel.style.flexBasis || '';
-      prevMaxWidth   = panel.style.maxWidth  || '';
-      prevPanelStyle = panel.getAttribute('style') || ''; // 念のため全部
-
-      // ── ダッシュボードを隠し、幅100%へ ──
-      leftColumn.style.display = 'none';
-      resizer.style.display    = 'none';
-      panel.style.flex         = '1 1 100%';
-      panel.style.maxWidth     = '100%';     // ← これが効いて横いっぱい
-      panel.style.flexBasis    = '100%';
-      fullBtn.textContent      = '↙';
-      openBtn.style.display    = 'none';
-
-    } else {
-      // ── 保存しておいた値で復元 ──
-      leftColumn.style.display = '';
-      resizer.style.display    = '';
-      panel.style.flex         = '';
-      panel.style.flexBasis    = prevBasis;
-      panel.style.maxWidth     = prevMaxWidth;
-      panel.setAttribute('style', prevPanelStyle); // さらに完全復元
-      fullBtn.textContent      = '⛶';
-    }
-  });
-
-  // visualViewport のリサイズイベントで入力エリアの位置を調整
-  if (window.visualViewport) {
-    const chatInputArea = document.getElementById('chatInputArea');
-    const chatMessages = document.getElementById('chatMessages');
-
-    function adjustChatLayout() {
-      const visualViewportHeight = window.visualViewport.height;
-      const visualViewportOffsetTop = window.visualViewport.offsetTop;
-      const documentHeight = document.documentElement.clientHeight;
-
-      // キーボードが表示されているかどうかの判定
-      const isKeyboardShowing = (documentHeight - visualViewportHeight - visualViewportOffsetTop) > 0;
-
-      if (isKeyboardShowing) {
-        // キーボードが表示されている場合、入力エリアをキーボードの上に配置
-        chatInputArea.style.bottom = `${documentHeight - visualViewportHeight - visualViewportOffsetTop}px`;
-        // メッセージエリアのパディングを調整して、入力エリアがメッセージを隠さないようにする
-        chatMessages.style.paddingBottom = `${chatInputArea.offsetHeight + 10}px`; // 10px は適当な余白
-      } else {
-        // キーボードが非表示の場合、入力エリアを通常の位置に戻す
-        chatInputArea.style.bottom = `env(safe-area-inset-bottom)`;
-        chatMessages.style.paddingBottom = '16px'; // デフォルトのパディングに戻す
-      }
-      scrollBottom(true); // レイアウト調整後にスクロール位置を最下部に (強制)
-    }
-
-    window.visualViewport.addEventListener('resize', adjustChatLayout);
-    // 初期ロード時にも一度調整を実行
-    adjustChatLayout();
-  }
-
   function createTypingBubble() {
     // 既存の #typingBubble があれば削除
     document.querySelector('#typingBubble')?.remove();
@@ -781,47 +740,7 @@ window.addEventListener('DOMContentLoaded', () => {
     // この関数はもう使わない
   }
 
-  // メッセージ追加（エラー含む）
-  function appendMsg(role, text) {
-    const el = appendMsgEl(role);
-    el.innerHTML = marked.parse(text);
-    scrollBottom(); // 条件付きスクロール
-  }
-
-  // appendMsg の DOM 生成部分を分離
-  function appendMsgEl(role) {
-    const el = document.createElement('div');
-    el.classList.add(role);
-    messages.appendChild(el);
-    return el;
-  }
-  function appendSystem(text) {
-    const el = document.createElement('div');
-    el.classList.add('system');
-    el.textContent = text;
-    scrollBottom(); // 条件付きスクロール
-  }
-
-  /**
-   * 現在のスクロール位置がチャットエリアの最下部に近いかどうかを判定します。
-   * @returns {boolean} 最下部に近い場合は true、そうでない場合は false。
-   */
-  function isNearBottom() {
-    return messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 5;
-  }
-
-  /**
-   * チャットメッセージを一番下までスクロールします。
-   * @param {boolean} force - true の場合、現在のスクロール位置に関わらず強制的にスクロールします。
-   *                          false (または未指定) の場合、ユーザーが一番下に近い位置にいる場合のみスクロールします。
-   */
-  function scrollBottom(force = false) {
-    // ユーザーが一番下に近い位置にいるか、強制スクロールが指定されている場合のみスクロール
-    if (force || isNearBottom()) {
-      messages.scrollTop = messages.scrollHeight;
-    }
-  }
-
+  // 履歴読み込み
   let histReqId = 10000;          // 衝突しない範囲で適当
   function requestHistory(){
     const id = ++histReqId;
@@ -980,13 +899,4 @@ window.addEventListener('DOMContentLoaded', () => {
     scrollBottom(true);
   }
 
-
-});
-
-});
-
-document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    document.activeElement.blur();
-  }
 });
