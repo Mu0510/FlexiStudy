@@ -350,12 +350,12 @@ window.addEventListener('DOMContentLoaded', () => {
         .sort((a,b) => (a.ts??0)-(b.ts??0))   // 古い→新しい
         .forEach(m => {
           if (loadedIds.has(m.id)) return;
-          appendMsg(
-            m.role === 'user'      ? 'user-message' :
-            m.role === 'assistant' ? 'assistant-message' :
-                                    'system',
-            m.text ?? ''
-          );
+          const role = m.role === 'user' ? 'user-message'
+            : m.role === 'assistant' ? 'assistant-message'
+            : 'system';
+          const el = appendMsgEl(role);
+          el.innerHTML = marked.parse(m.text ?? '');
+          messages.append(el); // prepend から append に変更
           loadedIds.add(m.id);
         });
 
