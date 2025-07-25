@@ -247,7 +247,15 @@ window.addEventListener('DOMContentLoaded', () => {
         active.bubble.id = ''; // typingBubble の id を削除
         active.thoughtMode = false; // thoughtMode は常に false にリセット
 
-        active.text += chunk.text.replace(/^\n+/, '');        active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // リアルタイム更新        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
+        active.text += chunk.text.replace(/^\n+/, '');
+        active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // リアルタイム更新
+
+        // 判定結果に基づいてスクロールを遅延実行
+        if (shouldScroll) {
+          requestAnimationFrame(() => {
+            scrollBottom(true);
+          });
+        }
       }
 
       // ACK は id があるときだけ
@@ -757,7 +765,13 @@ window.addEventListener('DOMContentLoaded', () => {
    * @returns {boolean} 最下部に近い場合は true、そうでない場合は false。
    */
   function isNearBottom() {
-    return messages.scrollHeight - messages.scrollTop <= messages.clientHeight + 5;
+    const scrollHeight = messages.scrollHeight;
+    const scrollTop = messages.scrollTop;
+    const clientHeight = messages.clientHeight;
+    const isNear = scrollHeight - scrollTop <= clientHeight + 5;
+
+    console.log(`[DEBUG] isNearBottom: scrollHeight=${scrollHeight}, scrollTop=${scrollTop}, clientHeight=${clientHeight}, isNear=${isNear}`);
+    return isNear;
   }
 
   /**
