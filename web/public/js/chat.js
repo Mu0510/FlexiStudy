@@ -204,8 +204,9 @@ window.addEventListener('DOMContentLoaded', () => {
       // ── text
       if (chunk.text !== undefined) {
         if (active.thoughtMode) {       // 初回 text → バブルを正式化
-          active.bubble.remove();
-          active.bubble     = appendMsgEl('assistant-message');
+          active.bubble.classList.remove('typing');
+          active.bubble.classList.add('assistant-message');
+          active.bubble.id = ''; // typingBubble の id を削除
           active.thoughtMode = false;
           active.text        = '';
         }
