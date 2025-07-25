@@ -233,6 +233,13 @@
   line-height: 1;
   transition: background .15s, transform .1s;
 }
+
+#chatOpenBtn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000;
+}
 #chatHeader button.chat-btn:hover,
 #chatOpenBtn.chat-btn:hover {
   background: rgba(255,255,255,0.18);
