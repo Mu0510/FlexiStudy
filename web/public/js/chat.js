@@ -301,7 +301,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }));
 
         if (!toolCards.has(toolId)){
-          createToolCard({ callId: toolId, icon:params.icon, label:params.label, command:params.confirmation?.command||'' });
+          const card = createToolCard({ callId: toolId, icon:params.icon, label:params.label, command:params.confirmation?.command||'' });
+          messages.appendChild(card); // ★この行を追加★
+          scrollBottom(true);         // ★この行を追加★
           // もし body が先に届いていたら注入
           if (pendingBodies.has(toolId)){
               const {status, content} = pendingBodies.get(toolId);
@@ -545,6 +547,8 @@ window.addEventListener('DOMContentLoaded', () => {
   // 初期は開いた状態
   panel.style.display = 'flex';
   openBtn.style.display = 'none';
+  console.log('chatPanel display:', panel.style.display);
+  console.log('chatOpenBtn display:', openBtn.style.display);
 
   /* 閉じる（×） */
   closeBtn.addEventListener('click', () => {
