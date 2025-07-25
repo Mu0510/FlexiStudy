@@ -308,7 +308,8 @@ window.addEventListener('DOMContentLoaded', () => {
         if (arr && arr.length) {
             // スクロール位置を保持
             const prevScrollHeight = messages.scrollHeight;
-            console.log('DEBUG: Before insert - prevScrollHeight:', prevScrollHeight);
+            const initialScrollTop = messages.scrollTop; // 履歴読み込み前のスクロール位置を記録
+            console.log('DEBUG: Before insert - prevScrollHeight:', prevScrollHeight, 'initialScrollTop:', initialScrollTop);
 
             // ドキュメントフラグメントにまとめて作成
             const frag = document.createDocumentFragment();
@@ -416,14 +417,17 @@ window.addEventListener('DOMContentLoaded', () => {
 
             // 先頭にまとめて挿入
             messages.insertBefore(frag, messages.firstChild);
-            console.log('DEBUG: After insert (before first RAF) - currentScrollHeight:', messages.scrollHeight);
+            // 強制的にリフローを発生させる
+            messages.offsetHeight; // Accessing offsetHeight forces a reflow
+            console.log('DEBUG: After insert (forced reflow) - currentScrollHeight:', messages.scrollHeight);
 
             // スクロール位置を保つ (requestAnimationFrame を2回ネストしてDOM更新後に実行)
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
-                    const newScrollTop = messages.scrollHeight - prevScrollHeight;
+                    const newScrollTop = initialScrollTop + (messages.scrollHeight - prevScrollHeight);
                     messages.scrollTop = newScrollTop;
                     console.log('DEBUG: After double RAF - newScrollTop:', newScrollTop, 'messages.scrollTop:', messages.scrollTop);
+                    isFetchingHistory = false; // 履歴取得完了
                 });
             });
 
@@ -793,7 +797,19 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // 履歴読み込み
   let histReqId = 10000;          // 衝突しない範囲で適当
+  let isFetchingHistory = false; // 履歴取得中フラグ
+
+  function handleScroll() {
+    // スクロール位置が上から1000px以内になったら履歴を読み込む
+    if (messages.scrollTop < 1000 && !finished && !isFetchingHistory) {
+      requestHistory();
+    }
+  }
+
   function requestHistory(){
+    if (isFetchingHistory) return; // 既に取得中の場合は何もしない
+    isFetchingHistory = true; // 取得開始
+
     const id = ++histReqId;
     pendingHistory.add(id);
     ws.send(JSON.stringify({
@@ -809,12 +825,7 @@ window.addEventListener('DOMContentLoaded', () => {
     scrollBottom(true); // 初期表示時にも一番下までスクロール (強制)
   });
 
-  messages.addEventListener('scroll', () => {
-    // スクロール位置が上から30%以内になったら履歴を読み込む
-    if (messages.scrollTop < 1000 && !finished) {
-      requestHistory();
-    }
-  });
+  messages.addEventListener('scroll', handleScroll);
 
   function renderMessages(msgArray, { prepend = false } = {}) {
     msgArray.forEach(m => {
