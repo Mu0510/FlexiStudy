@@ -764,29 +764,57 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  function renderMessages(msgArray, { prepend = false } = {}){
-    msgArray.forEach(m=>{
+  function renderMessages(msgArray, { prepend = false } = {}) {
+    msgArray.forEach(m => {
         let el;
         if (m.type === 'tool') { // type が 'tool' の場合
             el = document.createElement('div');
-            el.classList.add('tool-message'); // 新しいCSSクラス
+            el.classList.add('tool-message');
+            // toolCard header
             el.innerHTML = `
                 <div class="tool-message__header">
                     <i class="tool-message__icon ${m.params.icon}"></i>
                     <span class="tool-message__title">${m.params.label}</span>
                     <code class="tool-message__command">${m.params.confirmation?.command || ''}</code>
                 </div>
-                <pre class="tool-message__body">${JSON.stringify(m.params, null, 2)}</pre>
             `;
+
+            // ▼ body描画：params.content（or内容がなければ空文字）
+            let body = '';
+            if (m.params?.content) {
+                const content = m.params.content;
+                if (content.type === 'markdown' && content.markdown) {
+                    body = marked.parse(content.markdown);
+                } else if (content.type === 'diff' && Array.isArray(content.content)) {
+                    body = content.content.map(d => {
+                        let line = d.value ?? '';
+                        if (line.startsWith('+')) return `<span class="add">${line}</span>`;
+                        if (line.startsWith('-')) return `<span class="del">${line}</span>`;
+                        return line;
+                    }).join('<br>');
+                    body = `<pre>${body}</pre>`;
+                } else if (typeof content === 'string') {
+                    body = `<pre>${content}</pre>`;
+                } else {
+                    body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                }
+            } else {
+                body = '<span style="color:gray">（内容なし）</span>';
+            }
+            // toolCard body
+            const bodyDiv = document.createElement('div');
+            bodyDiv.classList.add('tool-message__body');
+            bodyDiv.innerHTML = body;
+            el.appendChild(bodyDiv);
         } else {
-            const role = m.role==='user'?'user-message':
-                         m.role==='assistant'?'assistant-message':'system';
+            const role = m.role === 'user' ? 'user-message'
+                : m.role === 'assistant' ? 'assistant-message' : 'system';
             el = appendMsgEl(role);
             el.innerHTML = marked.parse(m.text);
         }
 
-        if(prepend) messages.prepend(el); else messages.append(el);
-        loadedIds.add(m.id);               // ← 追加
+        if (prepend) messages.prepend(el); else messages.append(el);
+        loadedIds.add(m.id);
     });
   }
 
