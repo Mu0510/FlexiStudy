@@ -211,13 +211,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
       // ── text
       if (chunk.text !== undefined) {
-        if (active.thoughtMode) {       // 初回 text → バブルを正式化
-          active.bubble.classList.remove('typing');
-          active.bubble.classList.add('assistant-message');
-          active.bubble.id = ''; // typingBubble の id を削除
-          active.thoughtMode = false;
-          active.text        = '';
-        }
+        // 常にバブルを正式化
+        active.bubble.classList.remove('typing');
+        active.bubble.classList.add('assistant-message');
+        active.bubble.id = ''; // typingBubble の id を削除
+        active.thoughtMode = false; // thoughtMode は常に false にリセット
 
         active.text += chunk.text.replace(/^\n+/, '');
         active.bubble.innerHTML = marked.parse(active.text.trimEnd());
