@@ -741,12 +741,7 @@ window.addEventListener('DOMContentLoaded', () => {
                 if (content.type === 'markdown' && content.markdown) {
                     body = marked.parse(content.markdown);
                 } else if (content.type === 'diff' && Array.isArray(content.content)) {
-                    body = content.content.map(d => {
-                        let line = d.value ?? '';
-                        if (line.startsWith('+')) return `<span class="add">${line}</span>`;
-                        if (line.startsWith('-')) return `<span class="del">${line}</span>`;
-                        return line;
-                    }).join('<br>');
+                    body = content.content.map(d => {                        let line = d.value ?? '';                        if (line.startsWith('+')) return `<span class="add">${line}</span>`;                        if (line.startsWith('-')) return `<span class="del">${line}</span>`;                        return line;                    }).join('\n');
                     body = `<pre>${body}</pre>`;
                 } else if (typeof content === 'string') {
                     body = `<pre>${content}</pre>`;
@@ -841,15 +836,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (content.type === 'markdown') {
         contentHtml = marked.parse(content.markdown);
       } else if (content.type === 'diff') {
-        contentHtml = content.content.map(d => {
-          let line = d.value;
-          if (line.startsWith('+')) {
-            return `<span class="add">${line}</span>`;
-          } else if (line.startsWith('-')) {
-            return `<span class="del">${line}</span>`;
-          }
-          return line;
-        }).join('\n');
+        contentHtml = content.content.map(d => {          let line = d.value;          if (line.startsWith('+')) {            return `<span class="add">${line}</span>`;          } else if (line.startsWith('-')) {            return `<span class="del">${line}</span>`;          }          return line;        }).join('\n');
         contentHtml = `<pre>${contentHtml}</pre>`; // preタグで囲む
       } else {
         contentHtml = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
