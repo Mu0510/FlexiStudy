@@ -85,7 +85,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function resetActive() {
-    console.log('[DEBUG] resetActive');
     active = null;
     document.querySelector('#typingBubble')?.remove();
     setChatUIState(false); // レスポンス終了時にUIをリセット
@@ -332,14 +331,11 @@ window.addEventListener('DOMContentLoaded', () => {
     /* --- fetchHistory 応答を先に処理 --- */
     if (pendingHistory.has(message.id) && message.result?.messages){
         pendingHistory.delete(message.id);
-        console.log('[DEBUG] Received fetchHistory response for id:', message.id, 'messages count:', message.result.messages.length);
-
         const arr = message.result.messages.slice(); // Use slice to avoid modifying original array
         if (arr && arr.length) {
             // スクロール位置を保持
             const prevScrollHeight = messages.scrollHeight;
             const initialScrollTop = messages.scrollTop; // 履歴読み込み前のスクロール位置を記録
-            console.log('DEBUG: Before insert - prevScrollHeight:', prevScrollHeight, 'initialScrollTop:', initialScrollTop);
 
             // ドキュメントフラグメントにまとめて作成
             const frag = document.createDocumentFragment();
@@ -449,16 +445,13 @@ window.addEventListener('DOMContentLoaded', () => {
             messages.insertBefore(frag, messages.firstChild);
             // 強制的にリフローを発生させる
             messages.offsetHeight; // Accessing offsetHeight forces a reflow
-            console.log('DEBUG: After insert (forced reflow) - currentScrollHeight:', messages.scrollHeight);
 
             // スクロール位置を保つ (requestAnimationFrame を2回ネストしてDOM更新後に実行)
             requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                     const newScrollTop = initialScrollTop + (messages.scrollHeight - prevScrollHeight);
                     messages.scrollTop = newScrollTop;
-                    console.log('DEBUG: After double RAF - newScrollTop:', newScrollTop, 'messages.scrollTop:', messages.scrollTop);
                     isFetchingHistory = false; // 履歴取得完了
-                    console.log('[DEBUG] isFetchingHistory set to false.');
                 });
             });
 
@@ -847,32 +840,32 @@ window.addEventListener('DOMContentLoaded', () => {
   let isFetchingHistory = false; // 履歴取得中フラグ
 
   function handleScroll() {
-    console.log('[DEBUG] handleScroll called. scrollTop:', messages.scrollTop, 'finished:', finished, 'isFetchingHistory:', isFetchingHistory);
     // スクロール位置が上から1000px以内になったら履歴を読み込む
     if (messages.scrollTop < 1000 && !finished && !isFetchingHistory) {
       requestHistory();
     }
   }
 
-  function requestHistory(){
-    console.log('[DEBUG] requestHistory called. isFetchingHistory:', isFetchingHistory, 'finished:', finished);
+  function requestHistory(isInitialLoad = false){
+    console.log('[DEBUG] requestHistory called. isFetchingHistory:', isFetchingHistory, 'finished:', finished, 'isInitialLoad:', isInitialLoad);
     if (isFetchingHistory) return; // 既に取得中の場合は何もしない
     isFetchingHistory = true; // 取得開始
     console.log('[DEBUG] isFetchingHistory set to true.');
 
     const id = ++histReqId;
     pendingHistory.add(id);
-    console.log('[DEBUG] Sending fetchHistory request with id:', id, 'before:', oldestTs);
+    const limit = isInitialLoad ? 30 : 20; // 初回読み込みは30件、それ以外は20件
+    console.log('[DEBUG] Sending fetchHistory request with id:', id, 'before:', oldestTs, 'limit:', limit);
     ws.send(JSON.stringify({
       jsonrpc:'2.0',
       id,
       method:'fetchHistory',
-      params:{ limit:20, before: oldestTs }
+      params:{ limit: limit, before: oldestTs }
     }));
   }
 
   ws.addEventListener('open', () => {
-    requestHistory();
+    requestHistory(true); // 初回読み込み
     scrollBottom(true); // 初期表示時にも一番下までスクロール (強制)
     setChatUIState(false); // 初期状態を設定
   });
