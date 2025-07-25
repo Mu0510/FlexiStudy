@@ -6,47 +6,43 @@ const CONTEXT_LINES = 3; // 表示する周辺行数
 function generateContextualDiffHtml(oldText, newText) {
   const diff = Diff.diffLines(oldText, newText);
   let html = '';
-  let lastLineWasContext = false;
+  const linesToShow = new Set();
 
+  // 変更があった行とその周辺の行のインデックスを収集
   for (let i = 0; i < diff.length; i++) {
-    const part = diff[i];
-    const lines = part.value.split('\n');
-
-    if (part.added || part.removed) {
-      // 変更行の場合、その行と前後のCONTEXT_LINES行を表示
-      // 変更行の前のコンテキスト行を追加
-      for (let j = Math.max(0, i - CONTEXT_LINES); j < i; j++) {
-        const contextPart = diff[j];
-        if (!contextPart.added && !contextPart.removed) {
-          html += contextPart.value.split('\n').map(line => `<span class="context"> ${line}</span>`).join('\n') + '\n';
-        }
-      }
+    if (diff[i].added || diff[i].removed) {
       // 変更行自体を追加
-      html += lines.map(line => {
-        if (line.length === 0) return '';
-        const spanClass = part.added ? 'add' : part.removed ? 'del' : '';
-        const prefix = part.added ? '+' : part.removed ? '-' : ' ';
-        return `<span class="${spanClass}">${prefix}${line}</span>`;
-      }).join('\n') + '\n';
-      lastLineWasContext = false;
-    } else {
-      // コンテキスト行の場合
-      if (i > 0 && (diff[i - 1].added || diff[i - 1].removed)) {
-        // 直前のパートが変更行だった場合、その後のCONTEXT_LINES行を表示
-        for (let j = 0; j < Math.min(lines.length, CONTEXT_LINES); j++) {
-          html += `<span class="context"> ${lines[j]}</span>` + '\n';
-        }
-        if (lines.length > CONTEXT_LINES) {
-          html += '<span class="context">...</span>\n'; // 省略記号
-        }
-        lastLineWasContext = true;
-      } else if (!lastLineWasContext) {
-        // 連続するコンテキスト行の場合、省略記号を表示
-        html += '<span class="context">...</span>\n';
-        lastLineWasContext = true;
+      linesToShow.add(i);
+      // 前後のコンテキスト行を追加
+      for (let j = 1; j <= CONTEXT_LINES; j++) {
+        if (i - j >= 0) linesToShow.add(i - j);
+        if (i + j < diff.length) linesToShow.add(i + j);
       }
     }
   }
+
+  const sortedLinesToShow = Array.from(linesToShow).sort((a, b) => a - b);
+
+  let lastRenderedLineIndex = -1;
+  for (const index of sortedLinesToShow) {
+    // 省略記号の挿入
+    if (index > lastRenderedLineIndex + 1) {
+      html += '<span class="context">...</span>\n';
+    }
+
+    const part = diff[index];
+    const lines = part.value.split('\n');
+
+    // 各行を整形して追加
+    lines.forEach(line => {
+      if (line.length === 0 && (part.added || part.removed)) return; // 空の追加/削除行はスキップ
+      const spanClass = part.added ? 'add' : part.removed ? 'del' : 'context';
+      const prefix = part.added ? '+' : part.removed ? '-' : ' ';
+      html += `<span class="${spanClass}">${prefix}${line}</span>\n`;
+    });
+    lastRenderedLineIndex = index;
+  }
+
   return `<pre>${html}</pre>`;
 }
 
