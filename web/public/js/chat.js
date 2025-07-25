@@ -56,11 +56,39 @@ window.addEventListener('DOMContentLoaded', () => {
   let accumulatedText = '';       // 全チャンクを結合するバッファ
 
   let active = null; // { bubble, thoughtMode, text }
+  let isGeneratingResponse = false; // AIが応答を生成中かどうかを示すフラグ
+
+  // チャットUIの状態を制御する関数
+  function setChatUIState(generating) {
+    isGeneratingResponse = generating;
+    if (generating) {
+      sendBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="32" height="32"
+             stroke="black" stroke-width="3" stroke-linecap="round"
+             fill="none">
+          <path d="M6 6L18 18M6 18L18 6"/>
+        </svg>
+      `; // 停止ボタンのアイコン
+      sendBtn.removeEventListener('click', sendMessage);
+      sendBtn.addEventListener('click', cancelMessage);
+    } else {
+      sendBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="32" height="32"
+             stroke="black" stroke-width="3" stroke-linecap="round"
+             fill="none">
+          <path d="M12 5v14M5 12l7-7 7 7"/>
+        </svg>
+      `; // 送信ボタンのアイコン
+      sendBtn.removeEventListener('click', cancelMessage);
+      sendBtn.addEventListener('click', sendMessage);
+    }
+  }
 
   function resetActive() {
     console.log('[DEBUG] resetActive');
     active = null;
     document.querySelector('#typingBubble')?.remove();
+    setChatUIState(false); // レスポンス終了時にUIをリセット
   }
 
   let oldestCursor = null; // いちばん古いメッセージID を保持
@@ -745,7 +773,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // 送信
-  sendBtn.addEventListener('click', sendMessage);
   input.addEventListener('input', autoGrow);
   function autoGrow(){
     input.style.height = 'auto';                       // 一旦リセット
@@ -756,15 +783,22 @@ window.addEventListener('DOMContentLoaded', () => {
   input.addEventListener('keydown', e=>{
     if(e.key==='Enter' && e.altKey){
       e.preventDefault();   // textarea の改行を抑止
-      sendMessage();        // 既存関数を呼ぶ
+      if (!isGeneratingResponse) {
+        sendMessage();        // 既存関数を呼ぶ
+      }
     }
   });
+
   function sendMessage() {
+    if (isGeneratingResponse) return; // AI応答中は送信しない
+
     const text = input.value.trim();
     if (!text) return;
     appendMsg('user-message', text);
     createTypingBubble();         // **ここで一度だけ** 思考中バブルを作成
     accumulatedText = '';         // バッファ初期化
+
+    setChatUIState(true); // メッセージ送信時にUIを更新
 
     const req = {
       jsonrpc: '2.0',
@@ -775,6 +809,16 @@ window.addEventListener('DOMContentLoaded', () => {
     ws.send(JSON.stringify(req));
     input.value = '';
     scrollBottom(true); // メッセージ送信後に強制的に最下部までスクロール
+  }
+
+  function cancelMessage() {
+    const req = {
+      jsonrpc: '2.0',
+      method: 'cancel',
+      params: {}
+    };
+    ws.send(JSON.stringify(req));
+    setChatUIState(false); // キャンセル時にUIをリセット
   }
 
   function createTypingBubble() {
@@ -823,6 +867,7 @@ window.addEventListener('DOMContentLoaded', () => {
   ws.addEventListener('open', () => {
     requestHistory();
     scrollBottom(true); // 初期表示時にも一番下までスクロール (強制)
+    setChatUIState(false); // 初期状態を設定
   });
 
   messages.addEventListener('scroll', handleScroll);
