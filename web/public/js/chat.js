@@ -128,7 +128,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (msg.params.content.type === 'markdown') {
           contentHtml = marked.parse(msg.params.content.markdown);
         } else if (msg.params.content.type === 'diff') {
-          contentHtml = content.content.map(d => {
+          contentHtml = msg.params.content.content.map(d => {
             let line = d.value;
             if (line.startsWith('+')) {
               return `<span class="add">${line}</span>`;
@@ -139,7 +139,7 @@ window.addEventListener('DOMContentLoaded', () => {
           }).join('\n');
           contentHtml = `<pre>${contentHtml}</pre>`; // preタグで囲む
         } else {
-          contentHtml = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+          contentHtml = `<pre>${JSON.stringify(msg.params.content, null, 2)}</pre>`;
         }
         bodyEl.innerHTML = contentHtml;
       }
@@ -979,6 +979,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
     scrollBottom(true);
   }
+
+
+});
 
 });
 
