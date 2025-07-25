@@ -192,6 +192,12 @@
   padding:0;                          /* 余白はラッパー側で */
   caret-color:var(--text-color-dark);
 }
+
+@media (pointer:coarse) {
+  #chatInputArea textarea {
+    font-size: 16px; /* スマホなどのタッチデバイスでは16pxに */
+  }
+}
 #chatSend{
   position:absolute;right:16px;bottom:16px;        /* pill 内側との間隔も詰める */
   width:36px;height:36px;        /* 44→36 */

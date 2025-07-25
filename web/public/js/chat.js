@@ -720,6 +720,7 @@ window.addEventListener('DOMContentLoaded', () => {
       // キーボードが表示されているかどうかの判定
       const isKeyboardShowing = (documentHeight - visualViewportHeight - visualViewportOffsetTop) > 0;
 
+      /*
       if (isKeyboardShowing) {
         // キーボードが表示されている場合、入力エリアをキーボードの上に配置
         chatInputArea.style.bottom = `${documentHeight - visualViewportHeight - visualViewportOffsetTop}px`;
@@ -730,6 +731,7 @@ window.addEventListener('DOMContentLoaded', () => {
         chatInputArea.style.bottom = `env(safe-area-inset-bottom)`;
         chatMessages.style.paddingBottom = '16px'; // デフォルトのパディングに戻す
       }
+      */
       scrollBottom(true); // レイアウト調整後にスクロール位置を最下部に (強制)
     }
 
