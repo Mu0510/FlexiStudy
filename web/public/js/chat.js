@@ -776,7 +776,7 @@ window.addEventListener('DOMContentLoaded', () => {
    */
   function createToolCard({ callId, icon, label, command }) {
     const card = document.createElement('div');
-    card.cardElem.classList.add('tool-card');
+    card.classList.add('tool-card');
     card.dataset.toolCallId = callId; // IDをデータ属性として保存
 
     card.innerHTML = `
