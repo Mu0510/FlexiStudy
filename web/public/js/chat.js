@@ -142,7 +142,9 @@ window.addEventListener('DOMContentLoaded', () => {
       const { icon, label, locations } = msg.params;
       const command  = locations?.[0]?.path ?? '';
 
-      createToolCard({ callId: toolId, icon, label, command });
+      const card = createToolCard({ callId: toolId, icon, label, command });
+      messages.appendChild(card);
+      scrollBottom(true);
 
       // Agent へ ACK を返す  ←★これが無いと止まる★
       ws.send(JSON.stringify({
@@ -217,9 +219,7 @@ window.addEventListener('DOMContentLoaded', () => {
         active.bubble.id = ''; // typingBubble の id を削除
         active.thoughtMode = false; // thoughtMode は常に false にリセット
 
-        active.text += chunk.text.replace(/^\n+/, '');
-        active.bubble.textContent = active.text.trimEnd(); // リアルタイム更新
-        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
+        active.text += chunk.text.replace(/^\n+/, '');        active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // リアルタイム更新        if (shouldScroll) scrollBottom(true); // 判定結果に基づいてスクロール
       }
 
       // ACK は id があるときだけ
@@ -237,11 +237,13 @@ window.addEventListener('DOMContentLoaded', () => {
       resetActive();           // ← 既存処理を書き換え
       return;
     }
-    // 裸の result:null は無視
-    if (msg.result === null) return;
 
     // ─── 4) RPC 応答（error も含む）
     if (msg.id !== undefined) {
+      // RPC レスポンスが result:null の場合、現在のメッセージの終了と判断
+      if (msg.result === null) {
+        resetActive();
+      }
       handleRpcResponse(msg);
       return;
     }
@@ -314,23 +316,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
                 let el;
                 if (m.type === 'tool') {
-                    // Replicate createToolCard element creation logic
-                    el = document.createElement('div');
-                    el.classList.add('tool-card');
-                    el.dataset.toolCallId = m.params.toolCallId ?? m.id;
-
-                    el.innerHTML = `
-                        <div class="tool-card__header">
-                            <i class="tool-card__icon ${m.params.icon}"></i>
-                            <span class="tool-card__title">${m.params.label}</span>
-                            <code class="tool-card__command">${m.params.confirmation?.command || m.params.locations?.[0]?.path || ''}</code>
-                        </div>
-                        <pre class="tool-card__body"></pre>
-                    `;
-                    // Note: toolCards map is not updated here as these are historical messages.
-                    // If they need to be interactive, createToolCard should be called,
-                    // but that appends directly to messages, which we don't want here.
-                    // For now, just render the static card.
+                    // createToolCard を呼び出して要素を生成
+                    el = createToolCard({
+                        callId: m.params.toolCallId ?? m.id,
+                        icon: m.params.icon,
+                        label: m.params.label,
+                        command: m.params.confirmation?.command || m.params.locations?.[0]?.path || ''
+                    });
 
                     // ▼ body描画：params.content（or内容がなければ空文字）
                     let body = '';
@@ -348,11 +340,11 @@ window.addEventListener('DOMContentLoaded', () => {
                     } else {
                         body = '<span style="color:gray">（内容なし）</span>';
                     }
-                    // toolCard body
-                    const bodyDiv = document.createElement('div');
-                    bodyDiv.classList.add('tool-card__body'); // Use tool-card__body class
-                    bodyDiv.innerHTML = body;
-                    el.appendChild(bodyDiv);
+                    // toolCard body を更新
+                    const bodyDiv = el.querySelector('.tool-card__body');
+                    if (bodyDiv) {
+                        bodyDiv.innerHTML = body;
+                    }
 
                 } else {
                     const role = m.role === 'user' ? 'user-message'
@@ -830,14 +822,13 @@ window.addEventListener('DOMContentLoaded', () => {
       <pre class="tool-card__body"></pre>
     `;
 
-    messages.appendChild(card);
     toolCards.set(callId, {
       cardElem: card,
       bodyElem: card.querySelector('.tool-card__body')
     });
-    scrollBottom(true);
     console.log('[DEBUG] createToolCard: card added to toolCards. callId:', callId, 'toolCards size:', toolCards.size); // 追加
     console.log('[DEBUG] toolCards content:', toolCards); // 追加
+    return card; // 生成したカード要素を返す
   }
 
   /**
