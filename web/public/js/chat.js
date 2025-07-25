@@ -237,11 +237,11 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     // ─── 5) 既存のフォールバック（stdout/stderr はチャット外へ回すか無視）
-    if (msg.stdout) {
-      appendSystem(msg.stdout);  // system 用の表示に回す
-    } else if (msg.stderr) {
-      appendSystem(msg.stderr);
-    }
+    // if (msg.stdout) {
+    //   appendSystem(msg.stdout);  // system 用の表示に回す
+    // } else if (msg.stderr) {
+    //   appendSystem(msg.stderr);
+    // }
   });
 
   // メッセージ処理関数
