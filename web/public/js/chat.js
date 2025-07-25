@@ -29,6 +29,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
   let active = null; // { bubble, thoughtMode, text }
 
+  function resetActive() {
+    console.log('[DEBUG] resetActive');
+    active = null;
+    document.querySelector('#typingBubble')?.remove();
+  }
+
   let oldestCursor = null; // いちばん古いメッセージID を保持
   const pendingHistory = new Set();
   const loadedIds = new Set();
@@ -42,6 +48,9 @@ window.addEventListener('DOMContentLoaded', () => {
   window.ws = ws;  // ← これを1行追加！
   let requestId = 1;
   ws.addEventListener('message', e => {
+    ['pushToolCall','pushChunk','updateToolCall',
+     'pushMessage','streamAssistantMessageChunk']
+      .includes(msg.method) && console.log('[ACP]', msg.method, msg);
     let msg;
     try {
       msg = JSON.parse(e.data);
@@ -56,10 +65,7 @@ window.addEventListener('DOMContentLoaded', () => {
       const { icon, label, locations, toolCallId } = msg.params;
       const command = locations?.[0]?.path ?? '';
       createToolCard({ callId: toolCallId, icon, label, command });
-      // ★ ここで typingBubble を終わらせる
-      const thinking = document.querySelector('.thinking-bubble');
-      if (thinking) thinking.remove();
-      active = null;
+      resetActive(); // ← 追加
       return; // 通常処理は打ち切り
     }
 
@@ -90,12 +96,16 @@ window.addEventListener('DOMContentLoaded', () => {
       console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
       // ツール完了後のふつうのアシスタント返信
       appendMsg('assistant-message', msg.params.content); // appendAssistantBubble() の代わりに appendMsg() を使用
+      resetActive();             // ← 追加
       return;
     }
 
     if (msg.method === 'updateToolCall') {
       console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
       updateToolCard(msg.params);
+      if (msg.params.status === 'finished') {
+        resetActive();           // ← 追加
+      }
       return;
     }
 
@@ -165,8 +175,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // agentMessageFinished / messageCompleted でのみ完了判定
     if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-      active = null;
-      document.querySelector('#typingBubble')?.remove();
+      resetActive();           // ← 既存処理を書き換え
       return;
     }
     // 裸の result:null は無視
