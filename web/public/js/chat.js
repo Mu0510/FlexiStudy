@@ -345,11 +345,17 @@ window.addEventListener('DOMContentLoaded', () => {
             const limit = 5; // fetchHistory の limit
 
             /* (3) 一番古い ts を次の before に使う */
-            oldestTs = arr[0]?.ts ?? oldestTs;
+            // arr は古い順（昇順）で並んでいるので、先頭が最も古い
+            if (arr.length) {
+              oldestTs = arr[0].ts;     // ← ここでだけ更新する
+            }
 
             /* (4) 返ってきた件数が limit 未満なら最後まで読んだと判断 */
-            const newArr = arr.filter(m => !loadedIds.has(m.id));
-            if (newArr.length < limit) finished = true;
+            // ① limit 未満しか返ってこなかった（もう古い履歴が無い）
+            // ② 返ってきた全件が既に読み込み済み（newArr が空）
+            if (arr.length < limit || newArr.length === 0) {
+              finished = true;
+            }
 
             return;
         }
