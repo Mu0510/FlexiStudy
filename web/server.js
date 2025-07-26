@@ -116,6 +116,7 @@ function _startNewGeminiProcess() {
       let msg;
       try { msg = JSON.parse(line); }
       catch { msg = { stdout: line }; }
+      console.log('[Gemini CLI Output]', msg);
 
       // streamAssistantMessageChunk 以外のメッセージが来た場合、
       // ongoingText に溜まっているAIのテキストがあれば、ここで履歴に保存する
