@@ -99,12 +99,22 @@ function _startNewGeminiProcess() {
   console.log(`Attempting to start Gemini process with command: gemini ${GEMINI_ARGS.join(' ')}`);
   geminiProcess = spawn('gemini', GEMINI_ARGS, { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
 
+  // 新しいGeminiプロセスが起動したらinitializeメッセージを送信
+  const init = {
+    jsonrpc: '2.0',
+    id:      1,
+    method:  'initialize',
+    params:  { protocolVersion: '0.0.9' }
+  };
+  geminiProcess.stdin.write(JSON.stringify(init) + '\n');
+
   geminiProcess.on('error', (err) => {
     console.error('[Gemini SPAWN ERROR]', err);
     // Consider broadcasting an error message to clients here
   });
 
   console.log(`Gemini process started with PID: ${geminiProcess.pid}`);
+
 
   let buf = '';
   geminiProcess.stdout.on('data', data => {
@@ -235,18 +245,6 @@ startGemini();
 
 wss.on('connection', ws => {
   clients.add(ws);
-
-  // ── 初回だけ initialize を送るフラグ
-  if (!wss._sentInit) {
-    const init = {
-      jsonrpc: '2.0',
-      id:      1,
-      method:  'initialize',
-      params:  { protocolVersion: '0.0.9' }
-    };
-    geminiProcess.stdin.write(JSON.stringify(init) + '\n');
-    wss._sentInit = true;          // 以後は送らない
-  }
 
   ws.on('message', async data => { // async を追加
 
