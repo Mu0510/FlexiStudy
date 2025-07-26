@@ -93,20 +93,15 @@ const GEMINI_ARGS = [
   '--experimental-acp'
 ];
 
-let geminiProcess;
+let geminiProcess = null; // Initialize to null
 
-function startGemini() {
-  if (geminiProcess) {
-    console.log('Killing existing Gemini process...');
-    geminiProcess.kill();
-  }
-
+function _startNewGeminiProcess() {
   console.log(`Attempting to start Gemini process with command: gemini ${GEMINI_ARGS.join(' ')}`);
   geminiProcess = spawn('gemini', GEMINI_ARGS, { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
 
   geminiProcess.on('error', (err) => {
     console.error('[Gemini SPAWN ERROR]', err);
-    // エラーが発生した場合、クライアントに通知するなどの処理を追加することも検討
+    // Consider broadcasting an error message to clients here
   });
 
   console.log(`Gemini process started with PID: ${geminiProcess.pid}`);
@@ -207,8 +202,31 @@ function startGemini() {
 
   geminiProcess.on('close', (code, signal) => {
     console.log(`Gemini exited with code ${code} and signal ${signal}`);
-    resetHistory('gemini-exit'); // CLI が閉じたらクリア
+    // Only reset history if it's an unexpected exit, not a planned restart
+    if (geminiProcess !== null && geminiProcess.pid === this.pid) { // Check if this is the currently active process
+        resetHistory('gemini-exit'); // CLI が閉じたらクリア
+        geminiProcess = null; // Clear the reference
+    }
   });
+}
+
+function startGemini() {
+  if (geminiProcess) {
+    console.log('Killing existing Gemini process for restart...');
+    const oldPid = geminiProcess.pid;
+    geminiProcess.on('close', function(code, signal) { // Use 'function' to get 'this' context
+      if (this.pid === oldPid) { // Ensure this listener only acts for the process it was attached to
+        console.log(`Old Gemini process (PID: ${oldPid}) exited with code ${code} and signal ${signal}. Waiting 1 second before starting new process...`);
+        setTimeout(() => {
+          _startNewGeminiProcess();
+        }, 1000); // 1秒のディレイ
+      }
+    });
+    geminiProcess.kill();
+    geminiProcess = null; // Clear reference immediately to prevent new messages going to old process
+  } else {
+    _startNewGeminiProcess(); // Initial start
+  }
 }
 
 // サーバー起動時にGeminiプロセスを開始
