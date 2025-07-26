@@ -6,9 +6,7 @@ const { spawn, exec } = require('child_process');
 const WebSocket = require('ws');
 
 const PORT       = 5000;
-const IPC_DIR    = '/home/geminicli/GeminiCLI/web/ipc';
-const PIPE_IN    = path.join(IPC_DIR, 'gemini_in');
-const PIPE_OUT   = path.join(IPC_DIR, 'gemini_out');
+const IPC_DIR    = '/home/geminicli/GeminiCLI/web/ipc'; // この行は残すが、実際には使わない
 
 // 1分あたりのトークン上限（Free Tierの場合）
 const TOKENS_PER_MINUTE_LIMIT = 250000;
@@ -89,103 +87,125 @@ function resetHistory(reason='manual'){
 
 /* ──────────────────────────────────────────────── */
 
-const inStream  = fs.createReadStream(PIPE_OUT, { encoding: 'utf8' });
-const outStream = fs.createWriteStream(PIPE_IN,  { encoding: 'utf8' });
+const GEMINI_ARGS = [
+  '-m', 'gemini-2.5-flash',
+  '-y',
+  '--experimental-acp'
+];
 
-let buf = '';
-inStream.on('data', chunk => {
-  buf += chunk;
-  const lines = buf.split('\n');
-  buf = lines.pop() || '';
-  for (const line of lines) {
-    if (!line.trim()) continue;
-    let msg;
-    try { msg = JSON.parse(line); }
-    catch { msg = { stdout: line }; }
+let geminiProcess;
 
-    // streamAssistantMessageChunk 以外のメッセージが来た場合、
-    // ongoingText に溜まっているAIのテキストがあれば、ここで履歴に保存する
-    if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
-        const rec = { id:String(Date.now()), ts:Date.now(),
-                     role:'assistant', text:ongoingText.trimEnd() };
-        history.push(rec);
-        console.log('[History] Saved assistant message (before other message):', rec);
-        ongoingText = ''; // クリア
-    }
-
-    /* 1) AI チャンクなら一旦バッファに溜める */
-    if (msg.method === 'streamAssistantMessageChunk') {
-        const { chunk: c } = msg.params || {};
-        if (c?.text) {
-            ongoingText += c.text;
-        }
-        // ★追加★ thought があれば、thoughtChunk としてクライアントに送信
-        if (c?.thought) {
-            broadcast({ jsonrpc: '2.0', method: 'streamAssistantThoughtChunk', params: { thought: c.thought } });
-        }
-        broadcast(msg); // クライアントへライブ表示用
-        continue;
-    }
-
-    // 完了通知
-    const methodsToExclude = ['initialize', 'requestToolCallConfirmation', 'updateToolCall'];
-    if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
-        // ongoingText が空でない場合にのみ履歴に保存
-        if (ongoingText.length > 0) {
-            const rec = { id:String(Date.now()), ts:Date.now(),
-                         role:'assistant', text:ongoingText.trimEnd() };
-            // ② 完成形をクライアントへ送る
-            broadcast(rec);
-        }
-
-        // ④ 既存の完了通知も送信 (必要なら)
-        broadcast(msg);
-        continue;
-    }
-
-    /* 3) これまで通り user / system 行を保存 */
-    if (msg.role && msg.text) {
-        history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
-    }
-    // ── Agent → Client の updateToolCall を処理 ──
-    if (msg.method === 'updateToolCall') {
-      broadcast(msg);                               // UI へ
-
-      // ★★ ここが必須 ★★ : Agent へ応答を返す
-      outStream.write(JSON.stringify({
-        jsonrpc: '2.0',
-        id:      msg.id,       // 受信した id
-        result:  null          // void 応答
-      }) + '\n');
-
-      history.push({ ...msg, ts: Date.now(), type:'tool' });
-      return;
-    }
-    else if (msg.method === 'pushToolCall') {
-        // pushToolCall も履歴に保存
-        history.push({
-            ...msg,
-            ts: msg.ts || Date.now(), // タイムスタンプがなければ新規作成
-            type: 'tool'             // フロントエンドで判別しやすいように type を追加
-        });
-    }
-    else if (msg.method === 'requestToolCallConfirmation') {
-        // ツール関連のメッセージも、タイムスタンプとtypeを追加して履歴に保存
-        history.push({
-            ...msg,
-            ts: msg.ts || Date.now(), // タイムスタンプがなければ新規作成
-            type: 'tool'             // フロントエンドで判別しやすいように type を追加
-        });
-    }
-
-    broadcast(msg);   // 既存の配信
+function startGemini() {
+  if (geminiProcess) {
+    console.log('Killing existing Gemini process...');
+    geminiProcess.kill();
   }
-});
 
-/* ── ② Gemini からの行を処理する所で history.push 済み ──
-   ……この直後に inStream.on('end') を利用してキャッシュ自動消し …… */
-inStream.on('end', ()=> resetHistory('gemini-exit'));   // CLI が閉じたらクリア
-/* ──────────────────────────────────────────────── */
+  console.log('Starting new Gemini process...');
+  geminiProcess = spawn('gemini', GEMINI_ARGS, { stdio: ['pipe', 'pipe', 'pipe'] });
+
+  let buf = '';
+  geminiProcess.stdout.on('data', data => {
+    buf += data.toString();
+    const lines = buf.split('\n');
+    buf = lines.pop() || '';
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      let msg;
+      try { msg = JSON.parse(line); }
+      catch { msg = { stdout: line }; }
+
+      // streamAssistantMessageChunk 以外のメッセージが来た場合、
+      // ongoingText に溜まっているAIのテキストがあれば、ここで履歴に保存する
+      if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
+          const rec = { id:String(Date.now()), ts:Date.now(),
+                       role:'assistant', text:ongoingText.trimEnd() };
+          history.push(rec);
+          console.log('[History] Saved assistant message (before other message):', rec);
+          ongoingText = ''; // クリア
+      }
+
+      /* 1) AI チャンクなら一旦バッファに溜める */
+      if (msg.method === 'streamAssistantMessageChunk') {
+          const { chunk: c } = msg.params || {};
+          if (c?.text) {
+              ongoingText += c.text;
+          }
+          // ★追加★ thought があれば、thoughtChunk としてクライアントに送信
+          if (c?.thought) {
+              broadcast({ jsonrpc: '2.0', method: 'streamAssistantThoughtChunk', params: { thought: c.thought } });
+          }
+          broadcast(msg); // クライアントへライブ表示用
+          continue;
+      }
+
+      // 完了通知
+      const methodsToExclude = ['initialize', 'requestToolCallConfirmation', 'updateToolCall'];
+      if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
+          // ongoingText が空でない場合にのみ履歴に保存
+          if (ongoingText.length > 0) {
+              const rec = { id:String(Date.now()), ts:Date.now(),
+                           role:'assistant', text:ongoingText.trimEnd() };
+              // ② 完成形をクライアントへ送る
+              broadcast(rec);
+          }
+
+          // ④ 既存の完了通知も送信 (必要なら)
+          broadcast(msg);
+          continue;
+      }
+
+      /* 3) これまで通り user / system 行を保存 */
+      if (msg.role && msg.text) {
+          history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
+      }
+      // ── Agent → Client の updateToolCall を処理 ──
+      if (msg.method === 'updateToolCall') {
+        broadcast(msg);                               // UI へ
+
+        // ★★ ここが必須 ★★ : Agent へ応答を返す
+        geminiProcess.stdin.write(JSON.stringify({
+          jsonrpc: '2.0',
+          id:      msg.id,       // 受信した id
+          result:  null          // void 応答
+        }) + '\n');
+
+        history.push({ ...msg, ts: Date.now(), type:'tool' });
+        return;
+      }
+      else if (msg.method === 'pushToolCall') {
+          // pushToolCall も履歴に保存
+          history.push({
+              ...msg,
+              ts: msg.ts || Date.now(), // タイムスタンプがなければ新規作成
+              type: 'tool'             // フロントエンドで判別しやすいように type を追加
+          });
+      }
+      else if (msg.method === 'requestToolCallConfirmation') {
+          // ツール関連のメッセージも、タイムスタンプとtypeを追加して履歴に保存
+          history.push({
+              ...msg,
+              ts: msg.ts || Date.now(), // タイムスタンプがなければ新規作成
+              type: 'tool'             // フロントエンドで判別しやすいように type を追加
+          });
+      }
+
+      broadcast(msg);   // 既存の配信
+    }
+  });
+
+  geminiProcess.stderr.on('data', data => {
+    console.error('[Gemini ERROR]', data.toString());
+  });
+
+  geminiProcess.on('close', code => {
+    console.log('Gemini exited with code', code);
+    resetHistory('gemini-exit'); // CLI が閉じたらクリア
+  });
+}
+
+// サーバー起動時にGeminiプロセスを開始
+startGemini();
 
 wss.on('connection', ws => {
   clients.add(ws);
@@ -198,7 +218,7 @@ wss.on('connection', ws => {
       method:  'initialize',
       params:  { protocolVersion: '0.0.9' }
     };
-    outStream.write(JSON.stringify(init) + '\n');
+    geminiProcess.stdin.write(JSON.stringify(init) + '\n');
     wss._sentInit = true;          // 以後は送らない
   }
 
@@ -213,7 +233,7 @@ wss.on('connection', ws => {
     } catch (e) {
       console.error('Failed to parse incoming WebSocket message as JSON:', e);
       // If it's not JSON, treat it as a plain text command
-      outStream.write(text + '\n');
+      geminiProcess.stdin.write(text + '\n');
       return;
     }
 
@@ -275,6 +295,7 @@ wss.on('connection', ws => {
       /*   /clear コマンド  */
       if (inputText.trim() === '/clear'){
           resetHistory('command');
+          startGemini(); // Geminiプロセスを再起動
           return ws.send(JSON.stringify({ jsonrpc:'2.0', id:msg.id, result:null }));
       }
 
@@ -294,7 +315,7 @@ wss.on('connection', ws => {
     }
 
     // それ以外は Gemini へパススルー
-    outStream.write(JSON.stringify(msg) + '\n');
+    geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
   });
 
   ws.on('close', () => clients.delete(ws));
@@ -302,10 +323,16 @@ wss.on('connection', ws => {
 
 process.on('SIGINT', () => {
   console.log('SIGINT received. Forcing exit...');
+  if (geminiProcess) {
+    geminiProcess.kill();
+  }
   process.exit(0);
 });
 process.on('SIGTERM', () => {
   console.log('SIGTERM received. Forcing exit...');
+  if (geminiProcess) {
+    geminiProcess.kill();
+  }
   process.exit(0);
 });
 
