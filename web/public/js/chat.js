@@ -171,7 +171,12 @@ window.addEventListener('DOMContentLoaded', () => {
 
       const card = createToolCard({ callId: toolId, icon, label, command });
       messages.appendChild(card);
-      scrollBottom(true);
+      const shouldScroll = isNearBottom();
+      if (shouldScroll) {
+        requestAnimationFrame(() => {
+          scrollBottom(true);
+        });
+      }
 
       // Agent へ ACK を返す  ←★これが無いと止まる★
       ws.send(JSON.stringify({
@@ -1024,7 +1029,12 @@ window.addEventListener('DOMContentLoaded', () => {
     } else if (status === 'error') {
       card.cardElem.classList.add('tool-card--error');
     }
-    scrollBottom(true);
+    const shouldScroll = isNearBottom();
+    if (shouldScroll) {
+      requestAnimationFrame(() => {
+        scrollBottom(true);
+      });
+    }
   }
 
   // チャット入力欄以外の場所をクリックしたらフォーカスを外す
