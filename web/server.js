@@ -101,8 +101,15 @@ function startGemini() {
     geminiProcess.kill();
   }
 
-  console.log('Starting new Gemini process...');
+  console.log(`Attempting to start Gemini process with command: gemini ${GEMINI_ARGS.join(' ')}`);
   geminiProcess = spawn('gemini', GEMINI_ARGS, { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
+
+  geminiProcess.on('error', (err) => {
+    console.error('[Gemini SPAWN ERROR]', err);
+    // エラーが発生した場合、クライアントに通知するなどの処理を追加することも検討
+  });
+
+  console.log(`Gemini process started with PID: ${geminiProcess.pid}`);
 
   let buf = '';
   geminiProcess.stdout.on('data', data => {
@@ -198,8 +205,8 @@ function startGemini() {
     console.error('[Gemini ERROR]', data.toString());
   });
 
-  geminiProcess.on('close', code => {
-    console.log('Gemini exited with code', code);
+  geminiProcess.on('close', (code, signal) => {
+    console.log(`Gemini exited with code ${code} and signal ${signal}`);
     resetHistory('gemini-exit'); // CLI が閉じたらクリア
   });
 }
