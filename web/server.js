@@ -102,7 +102,7 @@ function startGemini() {
   }
 
   console.log('Starting new Gemini process...');
-  geminiProcess = spawn('gemini', GEMINI_ARGS, { stdio: ['pipe', 'pipe', 'pipe'] });
+  geminiProcess = spawn('gemini', GEMINI_ARGS, { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
 
   let buf = '';
   geminiProcess.stdout.on('data', data => {
