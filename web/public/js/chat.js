@@ -277,9 +277,10 @@ window.addEventListener('DOMContentLoaded', () => {
     if (msg.id !== undefined) {
       // RPC レスポンスが result:null の場合、現在のメッセージの終了と判断
       if (msg.result === null) {
-        setChatUIState(false); // ← 追加: UI状態をリセット
+        setChatUIState(false); // UI状態をリセット
+        resetActive();         // active状態と思考中バブルをリセット
       }
-      handleRpcResponse(msg); // この行は残します。
+      handleRpcResponse(msg); // ← この行を元に戻します。
       return;
     }
 
