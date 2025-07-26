@@ -87,7 +87,6 @@ window.addEventListener('DOMContentLoaded', () => {
   function resetActive() {
     active = null;
     document.querySelector('#typingBubble')?.remove();
-    setChatUIState(false); // レスポンス終了時にUIをリセット
   }
 
   let oldestCursor = null; // いちばん古いメッセージID を保持
@@ -278,9 +277,9 @@ window.addEventListener('DOMContentLoaded', () => {
     if (msg.id !== undefined) {
       // RPC レスポンスが result:null の場合、現在のメッセージの終了と判断
       if (msg.result === null) {
-        resetActive();
+        setChatUIState(false); // ← 追加: UI状態をリセット
       }
-      handleRpcResponse(msg);
+      handleRpcResponse(msg); // この行は残します。
       return;
     }
 
