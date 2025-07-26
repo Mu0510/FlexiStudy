@@ -169,9 +169,9 @@ window.addEventListener('DOMContentLoaded', () => {
       const { icon, label, locations } = msg.params;
       const command  = locations?.[0]?.path ?? '';
 
+      const shouldScroll = isNearBottom();
       const card = createToolCard({ callId: toolId, icon, label, command });
       messages.appendChild(card);
-      const shouldScroll = isNearBottom();
       if (shouldScroll) {
         requestAnimationFrame(() => {
           scrollBottom(true);
@@ -315,8 +315,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
         if (!toolCards.has(toolId)){
           const card = createToolCard({ callId: toolId, icon:params.icon, label:params.label, command:params.confirmation?.command||'' });
-          messages.appendChild(card); // ★この行を追加★
-          scrollBottom(true);         // ★この行を追加★
+          messages.appendChild(card);
+          const shouldScroll = isNearBottom();
+          if (shouldScroll) {
+            scrollBottom(true);
+          }
           // もし body が先に届いていたら注入
           if (pendingBodies.has(toolId)){
               const {status, content} = pendingBodies.get(toolId);
@@ -1050,6 +1053,7 @@ window.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    const shouldScroll = isNearBottom(); // DOM変更前に判定
     const bodyEl = card.bodyElem;
     if (!bodyEl) return;
 
@@ -1072,8 +1076,7 @@ window.addEventListener('DOMContentLoaded', () => {
     } else if (status === 'error') {
       card.cardElem.classList.add('tool-card--error');
     }
-    const shouldScroll = isNearBottom();
-    if (shouldScroll) {
+    if (shouldScroll) { // 冒頭で判定した shouldScroll を使用
       requestAnimationFrame(() => {
         scrollBottom(true);
       });
