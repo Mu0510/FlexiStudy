@@ -824,6 +824,7 @@ window.addEventListener('DOMContentLoaded', () => {
     lastSentRequestId = req.id; // 最後に送信したリクエストのIDを保存
     ws.send(JSON.stringify(req));
     input.value = '';
+    input.focus(); // ← この行を追加
     scrollBottom(true); // メッセージ送信後に強制的に最下部までスクロール
   }
 
