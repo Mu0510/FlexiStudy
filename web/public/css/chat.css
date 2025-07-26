@@ -269,24 +269,44 @@
   border: 1px solid #4e4e4e;
   border-radius: 8px;
   padding: 12px;
-  margin: 8px 0;
+  /* 変更: 幅と中央寄せ、マージン調整 */
+  width: 90%; /* max-width から width に変更 */
+  align-self: center;
+  margin: 0px 0 10px 0; /* assistant-message と同様に */
   font-family: ui-monospace, monospace;
+  font-size: 0.9em; /* フォントサイズを小さく */
 }
 
 .tool-card__header{
   display:flex;
-  align-items:center;
+  align-items:center; /* 中央揃えに戻す */
   gap:8px;
   margin-bottom:6px;
   font-weight:600;
+  color: #fff; /* ヘッダーの色を白に戻す */
 }
 
-.tool-card__icon{
-  width:18px; height:18px;
-  /* 好みで background-image など */
+.tool-card__icon-text{
+  width:auto; /* 幅を自動調整 */
+  height:18px;
+  padding: 2px 6px; /* パディングを追加 */
+  border: 1px solid rgba(255,255,255,0.3); /* 線だけの囲み */
+  border-radius: 4px; /* 角を丸く */
+  font-size: 0.8em; /* フォントサイズを調整 */
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.tool-card__command{opacity:.8;}
+.tool-card__title{
+  flex-grow: 1; /* 残りのスペースを埋める */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-card__command{color:#888 !important;}
 
 .tool-card__body{white-space:pre-wrap;}
 
@@ -294,9 +314,20 @@
 .tool-card__body .del   {color:#ff7b7b;}  /* - 行 */
 
 .tool-card--finished .tool-card__header {
-  color: #7ddc8e; /* 完了時の色 */
+  color: #fff; /* 完了時の色を白に */
 }
 
 .tool-card--error .tool-card__header {
   color: #ff7b7b; /* エラー時の色 */
+}
+
+/* ツール実行中のアニメーション */
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 210, 179, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(52, 210, 179, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 210, 179, 0); }
+}
+
+.tool-card--executing {
+  animation: pulse 1.5s infinite;
 }

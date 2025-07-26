@@ -956,16 +956,59 @@ window.addEventListener('DOMContentLoaded', () => {
    * @param {string} params.label - ツール名
    * @param {string} params.command - コマンド文字列
    */
+  function getToolIconText(iconName) {
+    switch (iconName) {
+      case 'pencil':
+        return 'Edit';
+      case 'search':
+        return 'Search';
+      case 'terminal':
+        return 'Shell';
+      case 'file':
+        return 'File';
+      case 'code':
+        return 'Code';
+      case 'web':
+        return 'Web';
+      case 'folder':
+        return 'Dir';
+      case 'info':
+        return 'Info';
+      default:
+        return iconName; // 未知のアイコン名の場合はそのまま表示
+    }
+  }
+
+  const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
+
+  function getRelativePath(absolutePath) {
+    if (absolutePath.startsWith(PROJECT_ROOT_PATH)) {
+      return absolutePath.substring(PROJECT_ROOT_PATH.length);
+    }
+    return absolutePath;
+  }
+
+  /**
+   * ツールカードを生成し、チャットに表示します。
+   * @param {object} params - ツール呼び出しのパラメータ
+   * @param {string} params.callId - ツール呼び出しのID
+   * @param {string} params.icon - アイコン名
+   * @param {string} params.label - ツール名
+   * @param {string} params.command - コマンド文字列
+   */
   function createToolCard({ callId, icon, label, command }) {
     const card = document.createElement('div');
     card.classList.add('tool-card');
     card.dataset.toolCallId = callId; // IDをデータ属性として保存
 
+    const iconText = getToolIconText(icon); // アイコン名からテキストを取得
+    const displayCommand = getRelativePath(command); // パスを短縮
+
     card.innerHTML = `
       <div class="tool-card__header">
-        <i class="tool-card__icon ${icon}"></i>
+        <span class="tool-card__icon-text">${iconText}</span>
         <span class="tool-card__title">${label}</span>
-        <code class="tool-card__command">${command}</code>
+        <code class="tool-card__command">${displayCommand}</code>
       </div>
       <pre class="tool-card__body"></pre>
     `;
@@ -1000,9 +1043,9 @@ window.addEventListener('DOMContentLoaded', () => {
     if (content?.__headerPatch) {
       const { icon, label, command } = content.__headerPatch;
       const h = card.cardElem.querySelector('.tool-card__header');
-      h.querySelector('.tool-card__icon').className = `tool-card__icon ${icon}`;
+      h.querySelector('.tool-card__icon-text').textContent = getToolIconText(icon);
       h.querySelector('.tool-card__title').textContent   = label;
-      h.querySelector('.tool-card__command').textContent = command;
+      h.querySelector('.tool-card__command').textContent = getRelativePath(command);
       // headerPatch は body ではないのでここで return して良い
       return;
     }
