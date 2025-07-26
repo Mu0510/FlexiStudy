@@ -1025,4 +1025,15 @@ window.addEventListener('DOMContentLoaded', () => {
     scrollBottom(true);
   }
 
+  // チャット入力欄以外の場所をクリックしたらフォーカスを外す
+  document.addEventListener('click', (e) => {
+    const chatInput = document.getElementById('chatInput');
+    const chatInputArea = document.getElementById('chatInputArea');
+
+    // クリックされた要素が chatInput または chatInputArea の子孫でない場合
+    if (chatInput && chatInputArea && !chatInputArea.contains(e.target)) {
+      chatInput.blur(); // フォーカスを外す
+    }
+  });
+
 });
