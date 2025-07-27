@@ -484,7 +484,16 @@ details[open] > summary:before {
 
 .tool-card__body {
   overflow-x: auto;
-  white-space: pre;
+  white-space: pre; /* 折り返しなし、横スクロール */
+  padding: 0 10px; /* 上下なし、左右にパディング */
+}
+
+.tool-card__body pre {
+  margin-bottom: 1em; /* preタグの下にマージンを追加 */
+}
+
+.tool-card__body pre:last-child {
+  margin-bottom: 0; /* 最後のpreタグはマージンなし */
 }
 
 /* Tool Card Status Indicator */
