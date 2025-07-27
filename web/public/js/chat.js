@@ -833,6 +833,7 @@ window.addEventListener('DOMContentLoaded', () => {
     lastSentRequestId = req.id; // 最後に送信したリクエストのIDを保存
     ws.send(JSON.stringify(req));
     input.value = '';
+    input.style.height = 'auto'; // 入力欄の高さをリセット
     input.focus(); // ← この行を追加
     scrollBottom(true); // メッセージ送信後に強制的に最下部までスクロール
   }
@@ -1009,12 +1010,14 @@ window.addEventListener('DOMContentLoaded', () => {
 
     card.innerHTML = `
       <div class="tool-card__header">
+        <div class="tool-card__status-indicator"></div>
         <span class="tool-card__icon-text">${iconText}</span>
         <span class="tool-card__title">${label}</span>
         <code class="tool-card__command">${displayCommand}</code>
       </div>
       <pre class="tool-card__body"></pre>
     `;
+    card.classList.add('tool-card--running'); // ツールカード作成時にrunningクラスを付与
 
     toolCards.set(callId, {
       cardElem: card,
@@ -1071,9 +1074,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
     // ステータスに応じた表示更新
     if (status === 'finished') {
+      card.cardElem.classList.remove('tool-card--running');
       card.cardElem.classList.add('tool-card--finished');
       resetActive();           // ← 追加
     } else if (status === 'error') {
+      card.cardElem.classList.remove('tool-card--running');
       card.cardElem.classList.add('tool-card--error');
     }
     if (shouldScroll) { // 冒頭で判定した shouldScroll を使用

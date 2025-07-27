@@ -486,3 +486,97 @@ details[open] > summary:before {
   overflow-x: auto;
   white-space: pre;
 }
+
+/* Tool Card Status Indicator */
+.tool-card {
+  position: relative; /* For positioning the status indicator */
+}
+
+.tool-card__header {
+  display: flex;
+  align-items: center;
+  overflow: hidden; /* Hide parts of the indicator that go outside */
+}
+
+.tool-card__status-indicator {
+  position: relative; /* Make it a positioning context for absolute children */
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid transparent; /* Keep transparent border */
+  border-top-color: transparent; /* Keep transparent border-top */
+  opacity: 0; /* Hidden by default */
+  transition: opacity 0.3s ease-in-out;
+  display: flex; /* Keep flex for centering checkmark/X */
+  justify-content: center;
+  align-items: center;
+  font-size: 1em;
+  color: var(--text-color-dark);
+  margin-left: 4px;
+}
+
+.tool-card--running .tool-card__status-indicator {
+  opacity: 1;
+}
+
+.tool-card--running .tool-card__status-indicator::before {
+  content: '';
+  position: absolute; /* Position absolutely within the indicator */
+  top: 0%; /* 垂直方向の位置を調整 */
+  transform: translateY(-50%); /* Vertically center */
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--primary-color);
+  animation: chunky-pulse 1.2s infinite alternate steps(3); /* 3段階の動きを往復 */
+}
+
+/* Finished state: show checkmark */
+.tool-card--finished .tool-card__status-indicator {
+  opacity: 1;
+  animation: none; /* Stop any animations on the indicator itself */
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.tool-card--finished .tool-card__status-indicator::before {
+  content: '✔'; /* Checkmark character */
+  color: var(--primary-color);
+  animation: none; /* Stop dot animation */
+  width: auto; /* Reset width/height for checkmark */
+  height: auto;
+  background-color: transparent;
+  position: static; /* Reset positioning for checkmark */
+  transform: none; /* Reset transform for checkmark */
+}
+
+/* Error state: show X mark */
+.tool-card--error .tool-card__status-indicator {
+  opacity: 1;
+  animation: none;
+  border-color: transparent;
+  background-color: transparent;
+}
+
+.tool-card--error .tool-card__status-indicator::before {
+  content: '✖'; /* X mark character */
+  color: var(--danger-color);
+  animation: none;
+  width: auto;
+  height: auto;
+  background-color: transparent;
+  position: static;
+  transform: none;
+}
+
+@keyframes chunky-pulse {
+  0% { left: 0px; opacity: 0.3; transform: scale(0.5); } /* . */
+  33% { left: 2px; opacity: 0.6; transform: scale(0.8); } /* o */
+  66% { left: 4px; opacity: 1.0; transform: scale(1.0); } /* O */
+  100% { left: 6px; opacity: 0.3; transform: scale(0.5); } /* . */
+}
+
+/* @keyframes spin { */
+/*   0% { transform: rotate(0deg); } */
+/*   100% { transform: rotate(360deg); } */
+/* } */
