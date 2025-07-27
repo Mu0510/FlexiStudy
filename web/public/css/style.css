@@ -489,17 +489,102 @@ details[open] > summary:before {
   padding: 0 10px; /* 上下なし、左右にパディング */
 }
 
-.tool-card__body pre {
+ .tool-card__body pre {
+  padding: 0 5px; /* 左右にパディングを追加 */
   margin-bottom: 1em; /* preタグの下にマージンを追加 */
+ }
+
+.tool-card__icon-text {
+  /* flex-shrink: 0; /* 縮小しない */
+  /* width: 40px; /* 固定幅 */
 }
 
-.tool-card__break {
+.tool-card__title {
+  flex-grow: 1; /* 残りのスペースを埋める */
+  flex-shrink: 1; /* 縮小を許可 */
+  min-width: 0; /* flexアイテムの最小幅を0に設定 */
+  white-space: nowrap; /* 折り返しを禁止 */
+  overflow: hidden; /* はみ出た部分を隠す */
+  text-overflow: ellipsis; /* はみ出た部分を省略記号で表示 */
+}
+
+.tool-card__line-break {
   flex-basis: 100%; /* 強制的に改行 */
   height: 0; /* 高さは0 */
 }
 
 .tool-card__command {
-  margin-top: 5px; /* 2行目からの表示を考慮して上マージンを追加 */
+  margin-left: 20px; /* インデント */
+  flex-basis: calc(100% - 20px); /* インデント分を考慮した幅 */
+}
+
+.tool-card__icon-text {
+  flex-shrink: 0; /* 縮小しない */
+  width: 40px; /* 固定幅 */
+}
+
+.tool-card__title {
+  flex-grow: 1; /* 残りのスペースを埋める */
+  flex-shrink: 1; /* 縮小を許可 */
+  min-width: 0; /* flexアイテムの最小幅を0に設定 */
+  white-space: nowrap; /* 折り返しを禁止 */
+  overflow: hidden; /* はみ出た部分を隠す */
+  text-overflow: ellipsis; /* はみ出た部分を省略記号で表示 */
+}
+
+.tool-card__line-break {
+  flex-basis: 100%; /* 強制的に改行 */
+  height: 0; /* 高さは0 */
+}
+
+.tool-card__command {
+  margin-left: 20px; /* インデント */
+  flex-basis: calc(100% - 20px); /* インデント分を考慮した幅 */
+}
+
+.tool-card__icon-text {
+  flex-shrink: 0; /* 縮小しない */
+  width: 40px; /* 固定幅 */
+}
+
+.tool-card__title {
+  flex-grow: 1; /* 残りのスペースを埋める */
+  flex-shrink: 1; /* 縮小を許可 */
+  min-width: 0; /* flexアイテムの最小幅を0に設定 */
+  white-space: nowrap; /* 折り返しを禁止 */
+  overflow: hidden; /* はみ出た部分を隠す */
+  text-overflow: ellipsis; /* はみ出た部分を省略記号で表示 */
+}
+
+.tool-card__line-break {
+  flex-basis: 100%; /* 強制的に改行 */
+  height: 0; /* 高さは0 */
+}
+
+.tool-card__command {
+  margin-left: 20px; /* インデント */
+  flex-basis: calc(100% - 20px); /* インデント分を考慮した幅 */
+}
+
+.tool-card__icon-text {
+  flex-shrink: 0; /* 縮小しない */
+  width: 40px; /* 固定幅 */
+}
+
+.tool-card__title {
+  flex-grow: 1; /* 残りのスペースを埋める */
+  flex-shrink: 1; /* 縮小を許可 */
+  min-width: 0; /* flexアイテムの最小幅を0に設定 */
+}
+
+.tool-card__line-break {
+  flex-basis: 100%; /* 強制的に改行 */
+  height: 0; /* 高さは0 */
+}
+
+.tool-card__command {
+  margin-left: 20px; /* インデント */
+  flex-basis: calc(100% - 20px); /* インデント分を考慮した幅 */
 }
 
 /* Tool Card Status Indicator */

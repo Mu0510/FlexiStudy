@@ -401,43 +401,49 @@ window.addEventListener('DOMContentLoaded', () => {
                                     body = '<span style="color:gray">（内容なし）</span>';
                                 }
                                 bodyDiv.innerHTML = body;
-                                adjustToolCardBodyHeight(el, bodyDiv); // 履歴読み込み時にも高さを調整
-                            }
-
-                        } else if (m.method === 'updateToolCall') {
-                            // Find the existing tool card element in our temporary map
-                            const el = historicalToolCards.get(toolCallId);
-                            if (el) {
-                                const bodyDiv = el.querySelector('.tool-card__body');
-                                if (bodyDiv) {
-                                    let body = '';
-                                    if (m.params?.content) {
-                                        const content = m.params.content;
-                                        if (content.type === 'markdown' && content.markdown) {
-                                            body = marked.parse(content.markdown);
-                                        } else if (content.type === 'diff') {
-                                            body = generateContextualDiffHtml(content.oldText, content.newText);
-                                        } else if (typeof content === 'string') {
-                                            body = `<pre>${content}</pre>`;
-                                        } else {
-                                            body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
-                                        }
-                                    } else {
-                                        body = '<span style="color:gray">（内容なし）</span>';
-                                    }
-                                    bodyDiv.innerHTML = body;
-                                    adjustToolCardBodyHeight(el, bodyDiv); // 履歴読み込み時にも高さを調整
+                                    // DOMレンダリング後に高さを調整
+                                    requestAnimationFrame(() => {
+                                        adjustToolCardBodyHeight(el, bodyDiv);
+                                    });
                                 }
-                                // Update status if needed
-                                if (m.params.status === 'finished') {
-                                    el.classList.add('tool-card--finished');
-                                } else if (m.params.status === 'error') {
-                                    el.classList.add('tool-card--error');
+
+                            } else if (m.method === 'updateToolCall') {
+                                // Find the existing tool card element in our temporary map
+                                const el = historicalToolCards.get(toolCallId);
+                                if (el) {
+                                    const bodyDiv = el.querySelector('.tool-card__body');
+                                    if (bodyDiv) {
+                                        let body = '';
+                                        if (m.params?.content) {
+                                            const content = m.params.content;
+                                            if (content.type === 'markdown' && content.markdown) {
+                                                body = marked.parse(content.markdown);
+                                            } else if (content.type === 'diff') {
+                                                body = generateContextualDiffHtml(content.oldText, content.newText);
+                                            } else if (typeof content === 'string') {
+                                                body = `<pre>${content}</pre>`;
+                                            } else {
+                                                body = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                                            }
+                                        } else {
+                                            body = '<span style="color:gray">（内容なし）</span>';
+                                        }
+                                        bodyDiv.innerHTML = body;
+                                        // DOMレンダリング後に高さを調整
+                                        requestAnimationFrame(() => {
+                                            adjustToolCardBodyHeight(el, bodyDiv);
+                                        });
+                                    }
+                                    // Update status if needed
+                                    if (m.params.status === 'finished') {
+                                        el.classList.add('tool-card--finished');
+                                    } else if (m.params.status === 'error') {
+                                        el.classList.add('tool-card--error');
+                                    }
                                 }
                             }
                         }
-                    }
-                });
+                    });
 
                 // Second pass: Append all messages (including consolidated tool cards) to the fragment
                 // We need to maintain the original order of messages as they appeared in `arr`
@@ -1015,7 +1021,7 @@ window.addEventListener('DOMContentLoaded', () => {
         <div class="tool-card__status-indicator"></div>
         <span class="tool-card__icon-text">${iconText}</span>
         <span class="tool-card__title">${label}</span>
-        <div class="tool-card__break"></div> <!-- commandを次の行に表示するための要素 -->
+        <div class="tool-card__line-break"></div> <!-- commandを次の行に表示するための要素 -->
         <code class="tool-card__command">${displayCommand}</code>
       </div>
       <pre class="tool-card__body"></pre>
@@ -1100,7 +1106,7 @@ window.addEventListener('DOMContentLoaded', () => {
    */
   function adjustToolCardBodyHeight(cardElem, bodyEl) {
     const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-    const maxHeightThreshold = viewportHeight * 0.60; // 75%から60%に変更
+    const maxHeightThreshold = viewportHeight * 0.50; // 60%から50%に変更
 
     // body以外の要素の高さを計算
     const headerHeight = cardElem.querySelector('.tool-card__header').offsetHeight;
