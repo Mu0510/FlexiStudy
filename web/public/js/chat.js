@@ -401,6 +401,7 @@ window.addEventListener('DOMContentLoaded', () => {
                                     body = '<span style="color:gray">（内容なし）</span>';
                                 }
                                 bodyDiv.innerHTML = body;
+                                adjustToolCardBodyHeight(el, bodyDiv); // 履歴読み込み時にも高さを調整
                             }
 
                         } else if (m.method === 'updateToolCall') {
@@ -425,6 +426,7 @@ window.addEventListener('DOMContentLoaded', () => {
                                         body = '<span style="color:gray">（内容なし）</span>';
                                     }
                                     bodyDiv.innerHTML = body;
+                                    adjustToolCardBodyHeight(el, bodyDiv); // 履歴読み込み時にも高さを調整
                                 }
                                 // Update status if needed
                                 if (m.params.status === 'finished') {
@@ -1013,6 +1015,7 @@ window.addEventListener('DOMContentLoaded', () => {
         <div class="tool-card__status-indicator"></div>
         <span class="tool-card__icon-text">${iconText}</span>
         <span class="tool-card__title">${label}</span>
+        <div class="tool-card__break"></div> <!-- commandを次の行に表示するための要素 -->
         <code class="tool-card__command">${displayCommand}</code>
       </div>
       <pre class="tool-card__body"></pre>
@@ -1070,6 +1073,8 @@ window.addEventListener('DOMContentLoaded', () => {
         contentHtml = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
       }
       bodyEl.innerHTML = contentHtml;
+
+      adjustToolCardBodyHeight(card.cardElem, bodyEl); // 新しい関数を呼び出す
     }
 
     // ステータスに応じた表示更新
@@ -1087,6 +1092,33 @@ window.addEventListener('DOMContentLoaded', () => {
       });
     }
   }
+
+  /**
+   * ツールカードのbodyのmax-heightを調整し、必要に応じてスクロールを有効にする関数
+   * @param {HTMLElement} cardElem - ツールカードの要素
+   * @param {HTMLElement} bodyEl - ツールカードのbody要素
+   */
+  function adjustToolCardBodyHeight(cardElem, bodyEl) {
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const maxHeightThreshold = viewportHeight * 0.60; // 75%から60%に変更
+
+    // body以外の要素の高さを計算
+    const headerHeight = cardElem.querySelector('.tool-card__header').offsetHeight;
+    const bodyPadding = 20; // tool-card__bodyの上下パディングを考慮 (padding: 0 10px; なので上下は0ですが、将来的な変更に備えて残します)
+
+    // bodyの現在の高さを取得
+    const currentBodyHeight = bodyEl.scrollHeight; // スクロール可能な高さを取得
+
+    // カード全体の高さが閾値を超える場合
+    if ((headerHeight + currentBodyHeight + bodyPadding) > maxHeightThreshold) {
+      const calculatedMaxHeight = maxHeightThreshold - headerHeight - bodyPadding;
+      bodyEl.style.maxHeight = `${calculatedMaxHeight}px`;
+    } else {
+      bodyEl.style.maxHeight = ''; // リセット
+    }
+  }
+
+  // チャット入力欄以外の場所をクリックしたらフォーカスを外す
 
   // チャット入力欄以外の場所をクリックしたらフォーカスを外す
   document.addEventListener('click', (e) => {

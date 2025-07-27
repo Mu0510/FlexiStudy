@@ -484,6 +484,7 @@ details[open] > summary:before {
 
 .tool-card__body {
   overflow-x: auto;
+  overflow-y: auto; /* 縦スクロールを有効にする */
   white-space: pre; /* 折り返しなし、横スクロール */
   padding: 0 10px; /* 上下なし、左右にパディング */
 }
@@ -492,8 +493,13 @@ details[open] > summary:before {
   margin-bottom: 1em; /* preタグの下にマージンを追加 */
 }
 
-.tool-card__body pre:last-child {
-  margin-bottom: 0; /* 最後のpreタグはマージンなし */
+.tool-card__break {
+  flex-basis: 100%; /* 強制的に改行 */
+  height: 0; /* 高さは0 */
+}
+
+.tool-card__command {
+  margin-top: 5px; /* 2行目からの表示を考慮して上マージンを追加 */
 }
 
 /* Tool Card Status Indicator */
@@ -504,6 +510,7 @@ details[open] > summary:before {
 .tool-card__header {
   display: flex;
   align-items: center;
+  flex-wrap: wrap; /* 複数行表示を可能にする */
   overflow: hidden; /* Hide parts of the indicator that go outside */
 }
 
