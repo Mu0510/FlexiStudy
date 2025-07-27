@@ -142,7 +142,7 @@
   text-align: left;
   word-break: break-word;
   box-sizing: border-box;
-  margin: 0px 0 20px 0;
+  margin: 5px 0 20px 0;
 }
 
 .assistant-message.typing {
