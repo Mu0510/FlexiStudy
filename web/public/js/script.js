@@ -1,12 +1,4 @@
-// Dashboard specific JavaScript
-        document.addEventListener('DOMContentLoaded', () => {
-            console.log("DOMContentLoaded event fired. Script is running!"); // 追加
-            let currentDate = new Date();
-            const datePicker = document.getElementById('date-picker');
-            const dateText = document.getElementById('date-text');
-            const dailySummaryContainer = document.getElementById('daily-summary-container');
-            const dailyGoalContainer = document.getElementById('daily-goal-container');
-            const logsContainer = document.getElementById('logs-container');
+// Dashboard specific JavaScript        document.addEventListener('DOMContentLoaded', () => {            console.log("DOMContentLoaded event fired. Script is running!"); // 追加            // URLパラメータを解析する関数            const getUrlParameter = (name) => {                name = name.replace(/[[]/, '\[').replace(/[[]/, '\]');                const regex = new RegExp('[\?&]' + name + '=([^&#]*)');                const results = regex.exec(location.search);                return results === null ? '' : decodeURIComponent(results[1].replace(/\+/g, ' '));            };            const chatParam = getUrlParameter('chat');            // chat.jsがロードされるのを待ってからボタンをクリック            const checkChatJsLoaded = setInterval(() => {                if (window.chatInitialized) { // chat.jsで設定されるフラグ                    clearInterval(checkChatJsLoaded);                    if (chatParam === 'fullscreen') {                        const fullscreenButton = document.getElementById('fullscreenToggle');                        if (fullscreenButton) {                            fullscreenButton.click();                        }                    } else if (chatParam === 'hidden') {                        const closeButton = document.getElementById('chatClose');                        if (closeButton) {                            closeButton.click();                        }                    }                }            }, 100); // 100msごとにチェック            let currentDate = new Date();            const datePicker = document.getElementById('date-picker');            const dateText = document.getElementById('date-text');            const dailySummaryContainer = document.getElementById('daily-summary-container');            const dailyGoalContainer = document.getElementById('daily-goal-container');            const logsContainer = document.getElementById('logs-container');
 
             const formatDate = (date) => {
                 const year = date.getFullYear();
