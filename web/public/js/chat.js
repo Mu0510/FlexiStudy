@@ -114,7 +114,7 @@ window.addEventListener('DOMContentLoaded', () => {
   function initWebSocket() {
     if (ws) return; // 既に接続済みなら何もしない
 
-    ws = new WebSocket(`ws://${location.host}/ws`);
+    ws = new WebSocket(`wss://${location.host}/ws`);
     window.ws = ws;
 
     ws.addEventListener('message', e => {

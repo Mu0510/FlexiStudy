@@ -1,5 +1,5 @@
 const express   = require('express');
-const http      = require('http');
+const https     = require('https');
 const path      = require('path');
 const fs        = require('fs');
 const { spawn, exec } = require('child_process');
@@ -60,7 +60,10 @@ async function waitForTokenCooldown(estimatedTokens) {
   lastRequestTime = Date.now();
 }
 
-const server = http.createServer(app);
+const server = https.createServer({
+  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
+}, app);
 const wss    = new WebSocket.Server({ server, path: '/ws' });
 const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
@@ -88,6 +91,7 @@ function resetHistory(reason='manual'){
 /* ──────────────────────────────────────────────── */
 
 const GEMINI_ARGS = [
+  '-d', // デバッグモードを有効化
   '-m', 'gemini-2.5-flash',
   '-y',
   '--experimental-acp'
