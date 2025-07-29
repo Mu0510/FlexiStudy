@@ -1,0 +1,21 @@
+{
+  "name": "Gemini CLI Dashboard",
+  "short_name": "GeminiCLI",
+  "description": "Gemini CLIの学習ダッシュボード",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1a1a",
+  "theme_color": "#333333",
+  "icons": [
+    {
+      "src": "/assets/images/icon_2.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/images/icon_2.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
