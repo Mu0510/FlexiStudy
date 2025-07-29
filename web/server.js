@@ -1,26 +1,12 @@
-const express  = require('express');
-const https    = require('https');
-const path     = require('path');
-const fs       = require('fs');
+const express   = require('express');
+const http      = require('http');
+const path      = require('path');
+const fs        = require('fs');
 const { spawn, exec } = require('child_process');
 const WebSocket = require('ws');
 
-const app = express();
-
-const PORT = 443;
- const IPC_DIR = '/home/geminicli/GeminiCLI/web/ipc';
-
-const server = https.createServer({
-  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
-}, app);
-
-const wss = new WebSocket.Server({ server, path: '/ws' });
-
-server.listen(PORT, () => {
-  console.log(`HTTPS + WSS server running on port ${PORT}`);
-});
-
+const PORT       = 5000;
+const IPC_DIR    = '/home/geminicli/GeminiCLI/web/ipc'; // この行は残すが、実際には使わない
 
 // 1分あたりのトークン上限（Free Tierの場合）
 const TOKENS_PER_MINUTE_LIMIT = 250000;
@@ -29,6 +15,7 @@ const MILLIS_PER_TOKEN = 60000 / TOKENS_PER_MINUTE_LIMIT;
 // 前回のリクエスト時間
 let lastRequestTime = 0;
 
+const app    = express();
 
 // index.html の Content-Type を明示的に設定
 app.use(express.static(path.join(__dirname, 'public')));
@@ -73,11 +60,8 @@ async function waitForTokenCooldown(estimatedTokens) {
   lastRequestTime = Date.now();
 }
 
-const options = {
-  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
-};
-
+const server = http.createServer(app);
+const wss    = new WebSocket.Server({ server, path: '/ws' });
 const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
 
@@ -315,16 +299,6 @@ wss.on('connection', ws => {
     }));
     }
 
-    if (msg.method === 'startChat') {
-      console.log('[DEBUG] startChat called');
-      // 必要に応じて初期化処理を書く
-      return ws.send(JSON.stringify({
-        jsonrpc: '2.0',
-        id: msg.id,
-        result: { ok: true }
-      }));
-    }
-
     /* ── ③ クライアント→サーバー受信部 (ws.on 'message') に追記 ── */
     if (msg.method === 'sendUserMessage') {
       const inputText = msg.params?.chunks?.[0]?.text || '';
@@ -386,3 +360,6 @@ process.on('SIGTERM', () => {
   process.exit(0);
 });
 
+server.listen(443, () => {
+  console.log(`HTTPS + WSS server running on port 443`);
+});
