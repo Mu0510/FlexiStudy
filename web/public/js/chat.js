@@ -1,6 +1,10 @@
 let toolCards = new Map(); // toolCallId -> toolCardElement
 let pendingBodies = new Map();
 
+let ws = null; // WebSocketインスタンスをグローバルスコープで宣言
+let requestId = 1;
+let lastSentRequestId = null; // 最後に送信したリクエストのIDを保持
+
 // 旧バージョン generateContextualDiffHtml を全部置き換え
 function generateContextualDiffHtml(oldText, newText, ctx = 3) {
   const patch = Diff.structuredPatch('old','new',oldText,newText,'','',{context:ctx});
@@ -35,6 +39,11 @@ function generateContextualDiffHtml(oldText, newText, ctx = 3) {
 }
 
 window.addEventListener('DOMContentLoaded', () => {
+  // 初期ロード時にチャットパネルが表示されている場合、WebSocketを初期化
+  const chatPanel = document.getElementById('chatPanel');
+  if (chatPanel.style.display !== 'none') {
+    initWebSocket();
+  }
   // dvh のフォールバック
   function setVH() {
     document.documentElement.style.setProperty('--vh', window.innerHeight * 0.01 + 'px');
@@ -98,204 +107,216 @@ window.addEventListener('DOMContentLoaded', () => {
   
   let nextToolCallId = 1;           // 好きなスキームで
 
-  // WebSocket 接続
-  const ws = new WebSocket(`ws://${location.host}/ws`);
-  window.ws = ws;  // ← これを1行追加！
   let requestId = 1;
   let lastSentRequestId = null; // 最後に送信したリクエストのIDを保持
-  ws.addEventListener('message', e => {
-    console.log('[DEBUG] Received WebSocket message:', e.data); // 追加
-    let msg;
-    try {
-      msg = JSON.parse(e.data);
-    } catch (err) {
-      console.error('❌ JSON parse error on chunk:', err, e.data);
-      return;
-    }
-    ['pushToolCall','pushChunk','updateToolCall',
-     'pushMessage','streamAssistantMessageChunk'].includes(msg.method)
-      && console.log('[ACP]', msg.method, msg.params);
-    
 
-    if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
-      // 実行ログを対応カードに追記
-      const entry = toolCards.get(msg.params.callId ?? msg.params.toolCallId); // ← callId で引く
-      if (entry) {
-        let textContent = msg.params.chunk.text;
-        // diff 行の色付け
-        if (msg.params.chunk.type === 'diff') {
-          textContent = textContent.split('\n').map(line => {
-            if (line.startsWith('+')) {
-              return `<span class="add">${line}</span>`;
-            } else if (line.startsWith('-')) {
-              return `<span class="del">${line}</span>`;
-            }
-            return line;
-          }).join('\n');
-        }
-        entry.bodyElem.innerHTML += textContent; // innerHTML を使用して span タグを反映
-        scrollBottom(); // autoScroll() の代わりに scrollBottom() を使用
+  // WebSocket 接続
+  function initWebSocket() {
+    if (ws) return; // 既に接続済みなら何もしない
+
+    ws = new WebSocket(`ws://${location.host}/ws`);
+    window.ws = ws;
+
+    ws.addEventListener('message', e => {
+      console.log('[DEBUG] Received WebSocket message:', e.data); // 追加
+      let msg;
+      try {
+        msg = JSON.parse(e.data);
+      } catch (err) {
+        console.error('❌ JSON parse error on chunk:', err, e.data);
+        return;
       }
-      return;
-    }
+      ['pushToolCall','pushChunk','updateToolCall',
+       'pushMessage','streamAssistantMessageChunk'].includes(msg.method)
+        && console.log('[ACP]', msg.method, msg.params);
+      
 
-    if (msg.method === 'pushMessage') {
-      console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
-      // ツール完了後のふつうのアシスタント返信
-      appendMsg('assistant-message', msg.params.content); // appendAssistantBubble() の代わりに appendMsg() を使用
-      resetActive();             // ← 追加
-      return;
-    }
-
-    if (msg.method === 'updateToolCall') {
-      console.log('[DEBUG] updateToolCall msg.params:', msg.params); // 追加
-      updateToolCard({
-        callId: msg.params.callId ?? msg.params.toolCallId,
-        status: msg.params.status,
-        content: msg.params.content
-      });
-      return;
-    }
-
-    if (msg.method === 'pushToolCall') {
-      // ----- ① 確認付きならダイアログへ -----
-      if (msg.params.confirmation) {
-        showToolConfirmationDialog(msg);   // この関数内で ACK を返している
+      if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
+        // 実行ログを対応カードに追記
+        const entry = toolCards.get(msg.params.callId ?? msg.params.toolCallId); // ← callId で引く
+        if (entry) {
+          let textContent = msg.params.chunk.text;
+          // diff 行の色付け
+          if (msg.params.chunk.type === 'diff') {
+            textContent = textContent.split('\n').map(line => {
+              if (line.startsWith('+')) {
+                return `<span class="add">${line}</span>`;
+              } else if (line.startsWith('-')) {
+                return `<span class="del">${line}</span>`;
+              }
+              return line;
+            }).join('\n');
+          }
+          entry.bodyElem.innerHTML += textContent; // innerHTML を使用して span タグを反映
+          scrollBottom(); // autoScroll() の代わりに scrollBottom() を使用
+        }
         return;
       }
 
-      // ----- ② 通常ツール呼び出し -----
-      const toolId   = msg.params.toolCallId ?? msg.id;   // サーバがくれる ID を優先
-      const { icon, label, locations } = msg.params;
-      const command  = locations?.[0]?.path ?? '';
+      if (msg.method === 'pushMessage') {
+        console.log('[DEBUG]', msg.method, JSON.stringify(msg.params, null, 2));
+        // ツール完了後のふつうのアシスタント返信
+        appendMsg('assistant-message', msg.params.content); // appendAssistantBubble() の代わりに appendMsg() を使用
+        resetActive();             // ← 追加
+        return;
+      }
 
-      const shouldScroll = isNearBottom();
-      const card = createToolCard({ callId: toolId, icon, label, command });
-      messages.appendChild(card);
-      if (shouldScroll) {
-        requestAnimationFrame(() => {
-          scrollBottom(true);
+      if (msg.method === 'updateToolCall') {
+        console.log('[DEBUG] updateToolCall msg.params:', msg.params); // 追加
+        updateToolCard({
+          callId: msg.params.callId ?? msg.params.toolCallId,
+          status: msg.params.status,
+          content: msg.params.content
         });
+        return;
       }
 
-      // Agent へ ACK を返す  ←★これが無いと止まる★
-      ws.send(JSON.stringify({
-        jsonrpc: '2.0',
-        id:      msg.id,        // 受信した pushToolCall の id
-        result:  { id: toolId } // 自分で決めた toolId
-      }));
+      if (msg.method === 'pushToolCall') {
+        // ----- ① 確認付きならダイアログへ ----- 
+        if (msg.params.confirmation) {
+          showToolConfirmationDialog(msg);   // この関数内で ACK を返している
+          return;
+        }
 
-      resetActive();
-      return;
-    }
+        // ----- ② 通常ツール呼び出し ----- 
+        const toolId   = msg.params.toolCallId ?? msg.id;   // サーバがくれる ID を優先
+        const { icon, label, locations } = msg.params;
+        const command  = locations?.[0]?.path ?? '';
 
-    if (msg.method === 'streamAssistantThoughtChunk') {
-      const { thought } = msg.params;
-      const shouldScroll = isNearBottom();
-
-      if (!active) {
-        active = {
-          bubble: createTypingBubble(),
-          thoughtMode: true,
-          text: ''
-        };
-      }
-
-      active.bubble.innerHTML = marked.parse(thought.trim());
-      if (shouldScroll) scrollBottom(true);
-      return;
-    }
-
-    if (msg.method && msg.method !== 'streamAssistantMessageChunk') {
-      handleNotification(msg);
-      return;
-    }
-
-    if (msg.method === 'historyCleared'){
-      messages.innerHTML = '';
-      loadedIds.clear();
-      oldestTs = null; 
-      finished = false;
-      pendingHistory.clear();
-      return;
-    }
-
-    if (msg.role && msg.text){           // これは既存の if があるはず
-      appendMsg(msg.role+'-message', msg.text);
-      return;
-    }
-
-    if (msg.method === 'streamAssistantMessageChunk') {
-      const { chunk } = msg.params;
-      const shouldScroll = isNearBottom(); // チャンク処理前にスクロール位置を判定
-
-      // ─────────────────────────────
-      // ① 新しい応答の開始判定
-      //    ・active が無い  ＝ 1 本目
-      //    ・active はあるが thoughtMode==false かつ
-      //      今回は thought チャンク ＝ 2 本目以降の開始
-      // ─────────────────────────────
-      if (!active) {
-        active = {
-          bubble: createTypingBubble(),
-          thoughtMode: false,
-          text: ''
-        };
-      }
-
-      // ── text
-      if (chunk.text !== undefined) {
-        // 常にバブルを正式化
-        active.bubble.classList.remove('typing');
-        active.bubble.classList.add('assistant-message');
-        active.bubble.id = ''; // typingBubble の id を削除
-        active.thoughtMode = false; // thoughtMode は常に false にリセット
-
-        active.text += chunk.text.replace(/^\n+/, '');
-        active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // リアルタイム更新
-
-        // 判定結果に基づいてスクロールを遅延実行
+        const shouldScroll = isNearBottom();
+        const card = createToolCard({ callId: toolId, icon, label, command });
+        messages.appendChild(card);
         if (shouldScroll) {
           requestAnimationFrame(() => {
             scrollBottom(true);
           });
         }
+
+        // Agent へ ACK を返す  ←★これが無いと止まる★
+        ws.send(JSON.stringify({
+          jsonrpc: '2.0',
+          id:      msg.id,        // 受信した pushToolCall の id
+          result:  { id: toolId } // 自分で決めた toolId
+        }));
+
+        resetActive();
+        return;
       }
 
-      // ACK は id があるときだけ
+      if (msg.method === 'streamAssistantThoughtChunk') {
+        const { thought } = msg.params;
+        const shouldScroll = isNearBottom();
+
+        if (!active) {
+          active = {
+            bubble: createTypingBubble(),
+            thoughtMode: true,
+            text: ''
+          };
+        }
+
+        active.bubble.innerHTML = marked.parse(thought.trim());
+        if (shouldScroll) scrollBottom(true);
+        return;
+      }
+
+      if (msg.method && msg.method !== 'streamAssistantMessageChunk') {
+        handleNotification(msg);
+        return;
+      }
+
+      if (msg.method === 'historyCleared'){
+        messages.innerHTML = '';
+        loadedIds.clear();
+        oldestTs = null; 
+        finished = false;
+        pendingHistory.clear();
+        return;
+      }
+
+      if (msg.role && msg.text){           // これは既存の if があるはず
+        appendMsg(msg.role+'-message', msg.text);
+        return;
+      }
+
+      if (msg.method === 'streamAssistantMessageChunk') {
+        const { chunk } = msg.params;
+        const shouldScroll = isNearBottom(); // チャンク処理前にスクロール位置を判定
+
+        // ─────────────────────────────
+        // ① 新しい応答の開始判定
+        //    ・active が無い  ＝ 1 本目
+        //    ・active はあるが thoughtMode==false かつ
+        //      今回は thought チャンク ＝ 2 本目以降の開始
+        // ─────────────────────────────
+        if (!active) {
+          active = {
+            bubble: createTypingBubble(),
+            thoughtMode: false,
+            text: ''
+          };
+        }
+
+        // ── text
+        if (chunk.text !== undefined) {
+          // 常にバブルを正式化
+          active.bubble.classList.remove('typing');
+          active.bubble.classList.add('assistant-message');
+          active.bubble.id = ''; // typingBubble の id を削除
+          active.thoughtMode = false; // thoughtMode は常に false にリセット
+
+          active.text += chunk.text.replace(/^\n+/, '');
+          active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // リアルタイム更新
+
+          // 判定結果に基づいてスクロールを遅延実行
+          if (shouldScroll) {
+            requestAnimationFrame(() => {
+              scrollBottom(true);
+            });
+          }
+        }
+
+        // ACK は id があるときだけ
+        if (msg.id !== undefined) {
+          ws.send(JSON.stringify({ jsonrpc:'2.0', id: msg.id, result:null }));
+        }
+        return;
+      }
+
+      // agentMessageFinished / messageCompleted でのみ完了判定
+      if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
+        if (active) {
+          active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // 最終確定
+        }
+        resetActive();           // ← 既存処理を書き換え
+        return;
+      }
+
+      // ─── 4) RPC 応答（error も含む）
       if (msg.id !== undefined) {
-        ws.send(JSON.stringify({ jsonrpc:'2.0', id: msg.id, result:null }));
+        // RPC レスポンスが result:null の場合、現在のメッセージの終了と判断
+        if (msg.result === null) {
+          setChatUIState(false); // UI状態をリセット
+          resetActive();         // active状態と思考中バブルをリセット
+        }
+        handleRpcResponse(msg); // ← この行を元に戻します。
+        return;
       }
-      return;
-    }
 
-    // agentMessageFinished / messageCompleted でのみ完了判定
-    if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-      if (active) {
-        active.bubble.innerHTML = marked.parse(active.text.trimEnd()); // 最終確定
-      }
-      resetActive();           // ← 既存処理を書き換え
-      return;
-    }
+      // ─── 5) 既存のフォールバック（stdout/stderr はチャット外へ回すか無視）
+      // if (msg.stdout) {
+      //   appendSystem(msg.stdout);  // system 用の表示に回す
+      // } else if (msg.stderr) {
+      //   appendSystem(msg.stderr);
+      // }
+    });
 
-    // ─── 4) RPC 応答（error も含む）
-    if (msg.id !== undefined) {
-      // RPC レスポンスが result:null の場合、現在のメッセージの終了と判断
-      if (msg.result === null) {
-        setChatUIState(false); // UI状態をリセット
-        resetActive();         // active状態と思考中バブルをリセット
-      }
-      handleRpcResponse(msg); // ← この行を元に戻します。
-      return;
-    }
-
-    // ─── 5) 既存のフォールバック（stdout/stderr はチャット外へ回すか無視）
-    // if (msg.stdout) {
-    //   appendSystem(msg.stdout);  // system 用の表示に回す
-    // } else if (msg.stderr) {
-    //   appendSystem(msg.stderr);
-    // }
-  });
+    ws.addEventListener('open', () => {
+      requestHistory(true); // 初回読み込み
+      scrollBottom(true); // 初期表示時にも一番下までスクロール (強制)
+      setChatUIState(false); // 初期状態を設定
+    });
+  }
 
   // メッセージ処理関数
   /**
@@ -570,19 +591,19 @@ window.addEventListener('DOMContentLoaded', () => {
     scrollBottom(); // 条件付きスクロール
   }
 
-  // 初期は開いた状態
-  panel.style.display = 'flex';
-  openBtn.style.display = 'none';
-  console.log('chatPanel display:', panel.style.display);
-  console.log('chatOpenBtn display:', openBtn.style.display);
-
   /* 閉じる（×） */
   closeBtn.addEventListener('click', () => {
     panel.style.display   = 'none';
-    resizer.style.display = 'none';
     openBtn.style.display = 'block';          // 右下 FAB
-    // 左カラムを全幅に
-    leftColumn.style.display = '';
+
+    if (window.isChatHiddenOnLoad) {
+      resizer.style.display = 'none';
+      leftColumn.style.flex = '1 1 100%';
+    } else {
+      resizer.style.display = ''; // リサイザーを表示
+      leftColumn.style.display = ''; // 左カラムを表示
+      leftColumn.style.flex = ''; // CSSのデフォルトに戻す
+    }
   });
 
   /* 開く（右下 FAB）*/
@@ -591,12 +612,17 @@ window.addEventListener('DOMContentLoaded', () => {
     resizer.style.display = '';               // 横/縦リサイズ復活
     openBtn.style.display = 'none';
     if(!isFull){                               // 通常レイアウト
-      leftColumn.style.display = '';
+      leftColumn.style.flex = ''; // CSSのデフォルトに戻す
+    }
+    if (!ws) { // WebSocketがまだ接続されていない場合のみ接続を開始
+      initWebSocket();
     }
   });
 
+  
+
   /* 全画面トグル（⛶⇆↙）を置き換え */
-  let isFull          = false;
+  let isFull          = window.isChatFullscreenOnLoad; // 初期ロード時にfullscreenならtrue
   let prevBasis       = null;   // flex-basis
   let prevMaxWidth    = null;   // max-width
   let prevPanelStyle  = null;   // インライン幅が全部ここにある
@@ -621,8 +647,9 @@ window.addEventListener('DOMContentLoaded', () => {
 
     } else {
       // ── 保存しておいた値で復元 ──
-      leftColumn.style.display = '';
-      resizer.style.display    = '';
+      leftColumn.style.display = ''; // leftColumnを表示
+      resizer.style.display    = ''; // resizerを表示
+      leftColumn.style.flex    = ''; // leftColumnのflexをCSSのデフォルトに戻す
       panel.style.flex         = '';
       panel.style.flexBasis    = prevBasis;
       panel.style.maxWidth     = prevMaxWidth;
@@ -904,11 +931,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }));
   }
 
-  ws.addEventListener('open', () => {
-    requestHistory(true); // 初回読み込み
-    scrollBottom(true); // 初期表示時にも一番下までスクロール (強制)
-    setChatUIState(false); // 初期状態を設定
-  });
+
 
   messages.addEventListener('scroll', handleScroll);
 
