@@ -275,81 +275,88 @@ wss.on('connection', ws => {
     }
 
     // メソッドに応じて処理を分岐
-    if (msg.method === 'fetchHistory') {
-        // fetchHistory が呼ばれた時点で ongoingText にAIのレスポンスが蓄積されていれば履歴に保存
+    switch (msg.method) {
+      case 'fetchHistory': {
         if (ongoingText.length > 0) {
-            const rec = {
-                id: String(Date.now()),
-                ts: Date.now(),
-                role: 'assistant',
-                text: ongoingText.trimEnd(),
-            };
-            history.push(rec);
-            console.log('[History] Saved assistant message (on fetchHistory):', rec);
-            ongoingText = ''; // クリア
+          const rec = {
+            id: String(Date.now()),
+            ts: Date.now(),
+            role: 'assistant',
+            text: ongoingText.trimEnd(),
+          };
+          history.push(rec);
+          console.log('[History] Saved assistant message (on fetchHistory):', rec);
+          ongoingText = ''; // クリア
         }
 
         const { limit = 20, before } = msg.params || {};
         let chunk;
         if (!before) {
-            chunk = history.slice(-limit);
+          chunk = history.slice(-limit);
         } else {
-            chunk = history.filter(rec => rec.ts < before).slice(-limit);
+          chunk = history.filter(rec => rec.ts < before).slice(-limit);
         }
         chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
 
         ws.send(JSON.stringify({
-            jsonrpc: '2.0',
-            id: msg.id,
-            result: { messages: chunk }
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { messages: chunk }
         }));
+        break;
+      }
 
-    } else if (msg.method === 'startChat') {
+      case 'startChat': {
         console.log('[DEBUG] startChat called');
         ws.send(JSON.stringify({
-            jsonrpc: '2.0',
-            id: msg.id,
-            result: { ok: true }
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { ok: true }
         }));
-        return; // ★★★ この return が重要 ★★★
+        break;
+      }
 
-    } else if (msg.method === 'sendUserMessage') {
+      case 'sendUserMessage': {
         const inputText = msg.params?.chunks?.[0]?.text || '';
 
         if (ongoingText.length > 0) {
-            const rec = {
-                id: String(Date.now()),
-                ts: Date.now(),
-                role: 'assistant',
-                text: ongoingText.trimEnd(),
-            };
-            history.push(rec);
-            console.log('[History] Saved assistant message:', rec);
-            ongoingText = '';
+          const rec = {
+            id: String(Date.now()),
+            ts: Date.now(),
+            role: 'assistant',
+            text: ongoingText.trimEnd(),
+          };
+          history.push(rec);
+          console.log('[History] Saved assistant message:', rec);
+          ongoingText = '';
         }
 
         if (inputText.trim() === '/clear') {
-            resetHistory('command');
-            startGemini();
-            ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
+          resetHistory('command');
+          startGemini();
+          ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
         } else {
-            const rec = {
-                id: String(Date.now()),
-                ts: Date.now(),
-                role: 'user',
-                text: inputText
-            };
-            history.push(rec);
-            broadcastExcept(ws, rec);
+          const rec = {
+            id: String(Date.now()),
+            ts: Date.now(),
+            role: 'user',
+            text: inputText
+          };
+          history.push(rec);
+          broadcastExcept(ws, rec);
 
-            const estimatedTokens = estimateTokensFromText(inputText);
-            await waitForTokenCooldown(estimatedTokens);
-            geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
+          const estimatedTokens = estimateTokensFromText(inputText);
+          await waitForTokenCooldown(estimatedTokens);
+          geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
         }
+        break;
+      }
 
-    } else {
+      default: {
         // その他のメソッドはすべてGeminiへパススルー
         geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
+        break;
+      }
     }
   });
 
