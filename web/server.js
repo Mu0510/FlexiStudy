@@ -11,8 +11,8 @@ const PORT = 443;
  const IPC_DIR = '/home/geminicli/GeminiCLI/web/ipc';
 
 const server = https.createServer({
-  key: fs.readFileSync('/home/geminicli/100.115.189.36-key.pem'),
-  cert: fs.readFileSync('/home/geminicli/100.115.189.36.pem')
+  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
 }, app);
 
 const wss = new WebSocket.Server({ server, path: '/ws' });
@@ -73,10 +73,7 @@ async function waitForTokenCooldown(estimatedTokens) {
   lastRequestTime = Date.now();
 }
 
-const options = {
-  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
-  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
-};
+
 
 const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
