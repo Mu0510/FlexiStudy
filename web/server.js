@@ -129,7 +129,7 @@ function _startNewGeminiProcess() {
       let msg;
       try { msg = JSON.parse(line); }
       catch { msg = { stdout: line }; }
-      console.log('[Gemini CLI Output]', msg);
+      console.log('[Gemini CLI Output] ' + JSON.stringify(msg));
 
       // streamAssistantMessageChunk 以外のメッセージが来た場合、
       // ongoingText に溜まっているAIのテキストがあれば、ここで履歴に保存する
@@ -137,7 +137,7 @@ function _startNewGeminiProcess() {
           const rec = { id:String(Date.now()), ts:Date.now(),
                        role:'assistant', text:ongoingText.trimEnd() };
           history.push(rec);
-          console.log('[History] Saved assistant message (before other message):', rec);
+          console.log('[History] Saved assistant message (before other message): ' + JSON.stringify(rec));
           ongoingText = ''; // クリア
       }
 
@@ -211,7 +211,7 @@ function _startNewGeminiProcess() {
   });
 
   geminiProcess.stderr.on('data', data => {
-    console.error('[Gemini ERROR]', data.toString());
+    console.error('[Gemini ERROR] ' + data.toString());
   });
 
   geminiProcess.on('close', (code, signal) => {
