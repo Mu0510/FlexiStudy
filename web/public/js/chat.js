@@ -615,10 +615,11 @@ window.addEventListener('DOMContentLoaded', () => {
   
 
   /* 全画面トグル（⛶⇆↙）を置き換え */
-  window.isChatFullscreen = window.isChatFullscreenOnLoad; // 初期ロード時にfullscreenならtrue
-  let prevBasis       = null;   // flex-basis
-  let prevMaxWidth    = null;   // max-width
-  let prevPanelStyle  = null;   // インライン幅が全部ここにある
+  // ローカルストレージから状態を読み込む
+  window.isChatFullscreen = JSON.parse(localStorage.getItem('isChatFullscreen')) ?? window.isChatFullscreenOnLoad;
+  let prevBasis       = localStorage.getItem('chatPanelFlexBasis') || null;   // flex-basis
+  let prevMaxWidth    = localStorage.getItem('chatPanelMaxWidth') || null;   // max-width
+  let prevPanelStyle  = localStorage.getItem('chatPanelStyle') || null;   // インライン幅が全部ここにある
 
   // チャットパネルのレイアウトを適用する関数
   function applyChatPanelLayout() {
@@ -635,7 +636,7 @@ window.addEventListener('DOMContentLoaded', () => {
       // ── 保存しておいた値で復元 ──
       leftColumn.style.display = ''; // leftColumnを表示
       resizer.style.display    = ''; // resizerを表示
-      leftColumn.style.flex    = ''; // leftColumnのflexをCSSのデフォルトに戻す
+      leftColumn.style.flex    = localStorage.getItem('leftColumnFlexBasis') || ''; // leftColumnのflexをローカルストレージから復元
       panel.style.flex         = '';
       panel.style.flexBasis    = prevBasis;
       panel.style.maxWidth     = prevMaxWidth;
@@ -646,12 +647,16 @@ window.addEventListener('DOMContentLoaded', () => {
 
   fullBtn.addEventListener('click', () => {
     window.isChatFullscreen = !window.isChatFullscreen;
+    localStorage.setItem('isChatFullscreen', window.isChatFullscreen); // 状態を保存
 
     if (window.isChatFullscreen) {
       // ── 入る前の状態を保存 ──
       prevBasis      = panel.style.flexBasis || '';
       prevMaxWidth   = panel.style.maxWidth  || '';
       prevPanelStyle = panel.getAttribute('style') || ''; // 念のため全部
+      localStorage.setItem('chatPanelFlexBasis', prevBasis); // 保存
+      localStorage.setItem('chatPanelMaxWidth', prevMaxWidth); // 保存
+      localStorage.setItem('chatPanelStyle', prevPanelStyle); // 保存
     }
     applyChatPanelLayout();
   });

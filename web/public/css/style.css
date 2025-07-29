@@ -381,6 +381,9 @@ details[open] > summary:before {
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
+    html {
+        font-size: 12px; /* スマートフォンなどの小さい画面で基本フォントサイズを小さくする */
+    }
     .main-content-wrapper {
         width: auto; /* Allow content to take full width */
         margin: 20px; /* Add 20px margin on all sides */
