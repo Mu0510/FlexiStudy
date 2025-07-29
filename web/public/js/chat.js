@@ -1148,8 +1148,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   // チャット入力欄以外の場所をクリックしたらフォーカスを外す
-
-  // チャット入力欄以外の場所をクリックしたらフォーカスを外す
   document.addEventListener('click', (e) => {
     const chatInput = document.getElementById('chatInput');
     const chatInputArea = document.getElementById('chatInputArea');
@@ -1159,5 +1157,80 @@ window.addEventListener('DOMContentLoaded', () => {
       chatInput.blur(); // フォーカスを外す
     }
   });
+
+  // chatInput のフォーカスイベントを監視
+  const chatInput = document.getElementById('chatInput');
+  if (chatInput) {
+    chatInput.addEventListener('focus', () => {
+      console.log('[DEBUG] chatInput: Focus event fired.');
+    });
+    chatInput.addEventListener('blur', () => {
+      console.log('[DEBUG] chatInput: Blur event fired.');
+    });
+  }
+
+  // DOMContentLoaded での初期要素参照をログ
+  const initialChatInput = document.getElementById('chatInput');
+  const initialChatInputArea = document.getElementById('chatInputArea');
+  const initialChatPanel = document.getElementById('chatPanel'); // 追加
+  console.log('[DEBUG] DOMContentLoaded - initialChatInput:', initialChatInput);
+  console.log('[DEBUG] DOMContentLoaded - initialChatInputArea:', initialChatInputArea);
+  console.log('[DEBUG] DOMContentLoaded - initialChatPanel:', initialChatPanel); // 追加
+
+  // チャット入力欄以外の場所をクリックしたらフォーカスを外す
+  document.addEventListener('click', (e) => {
+    const currentChatInput = document.getElementById('chatInput');
+    const currentChatInputArea = document.getElementById('chatInputArea');
+    const currentChatPanel = document.getElementById('chatPanel'); // 追加
+
+    console.log('[DEBUG] Click event target:', e.target);
+    console.log('[DEBUG] currentChatInput:', currentChatInput);
+    console.log('[DEBUG] currentChatInputArea:', currentChatInputArea);
+    console.log('[DEBUG] currentChatPanel:', currentChatPanel); // 追加
+    console.log('[DEBUG] chatInputArea contains target:', currentChatInputArea && currentChatInputArea.contains(e.target));
+    console.log('[DEBUG] e.target === initialChatInput:', e.target === initialChatInput);
+    console.log('[DEBUG] currentChatInput === initialChatInput:', currentChatInput === initialChatInput);
+    console.log('[DEBUG] currentChatInputArea === initialChatInputArea:', currentChatInputArea === initialChatInputArea);
+    console.log('[DEBUG] currentChatPanel === initialChatPanel:', currentChatPanel === initialChatPanel); // 追加
+
+    // クリックされた要素が chatInput または chatInputArea の子孫でない場合
+    if (currentChatInput && currentChatInputArea && !currentChatInputArea.contains(e.target)) {
+      console.log('[DEBUG] Blurring chatInput because click was outside chatInputArea.');
+      currentChatInput.blur(); // フォーカスを外す
+    }
+  });
+
+  // MutationObserver を設定して appContainer の変更を監視
+  const appContainerElement = document.getElementById('appContainer'); // 既存の appContainer を取得
+  if (appContainerElement) {
+    const observer = new MutationObserver((mutationsList) => {
+      for (const mutation of mutationsList) {
+        if (mutation.type === 'childList') {
+          console.log('[DEBUG] appContainer childList changed:', mutation);
+          mutation.removedNodes.forEach(node => {
+            if (node.id === 'chatPanel') {
+              console.log('[DEBUG] chatPanel was REMOVED from DOM!');
+            }
+            if (node.id === 'leftColumn') {
+              console.log('[DEBUG] leftColumn was REMOVED from DOM!');
+            }
+          });
+          mutation.addedNodes.forEach(node => {
+            if (node.id === 'chatPanel') {
+              console.log('[DEBUG] chatPanel was ADDED to DOM!');
+            }
+            if (node.id === 'leftColumn') {
+              console.log('[DEBUG] leftColumn was ADDED to DOM!');
+            }
+          });
+        }
+      }
+    });
+
+    observer.observe(appContainerElement, { childList: true, subtree: true });
+    console.log('[DEBUG] MutationObserver started for appContainer.');
+  }
+
+  
 
 });
