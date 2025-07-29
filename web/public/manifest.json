@@ -2,7 +2,7 @@
   "name": "Gemini CLI Dashboard",
   "short_name": "GeminiCLI",
   "description": "Gemini CLIの学習ダッシュボード",
-  "start_url": "/",
+  "start_url": "/?chat=hidden",
   "display": "standalone",
   "background_color": "#1a1a1a",
   "theme_color": "#333333",
