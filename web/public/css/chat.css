@@ -335,3 +335,41 @@
 #chatMessages a {
   color: #ff7777; /* リンクの色を #ff7777 に変更 */
 }
+
+/* コードブロックのスタイル */
+.user-message pre,
+.assistant-message pre {
+  position: relative; /* コピーボタンの配置基準 */
+  white-space: pre; /* 折り返さずに横スクロール */
+  word-wrap: normal; /* 長い単語の折り返しを無効にする */
+  overflow-x: auto;      /* 横スクロールを有効にする */
+  max-width: 100%;       /* 親要素の幅を超えないようにする */
+  background-color: rgba(0, 0, 0, 0.2); /* コードブロックの背景色 */
+  padding: 10px;
+  border-radius: 5px;
+}
+
+.user-message code,
+.assistant-message code {
+  font-family: monospace; /* 等幅フォントを適用 */
+}
+
+.copy-button {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 0.8em;
+  opacity: 0;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.user-message pre:hover .copy-button,
+.assistant-message pre:hover .copy-button {
+  opacity: 1;
+}
