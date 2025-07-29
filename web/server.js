@@ -91,7 +91,6 @@ function resetHistory(reason='manual'){
 /* ──────────────────────────────────────────────── */
 
 const GEMINI_ARGS = [
-  '-d', // デバッグモードを有効化
   '-m', 'gemini-2.5-flash',
   '-y',
   '--experimental-acp'
