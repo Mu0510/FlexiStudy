@@ -1,6 +1,6 @@
 {
-  "name": "Gemini CLI Dashboard",
-  "short_name": "GeminiCLI",
+  "name": "Gemini Study",
+  "short_name": "Gemini Study",
   "description": "Gemini CLIの学習ダッシュボード",
   "start_url": "/?chat=hidden",
   "display": "standalone",
