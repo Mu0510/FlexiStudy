@@ -73,7 +73,10 @@ async function waitForTokenCooldown(estimatedTokens) {
   lastRequestTime = Date.now();
 }
 
-
+const options = {
+  key: fs.readFileSync(path.join(__dirname, 'certs', 'key.pem')),
+  cert: fs.readFileSync(path.join(__dirname, 'certs', 'cert.pem'))
+};
 
 const clients = new Set();
 const history = [];          // メモリ上の簡易ログ（最新が末尾）
@@ -140,20 +143,6 @@ function _startNewGeminiProcess() {
       try { msg = JSON.parse(line); }
       catch { msg = { stdout: line }; }
       console.log('[Gemini CLI Output]', msg);
-
-      // ACP初期化シーケンスの処理
-      if (msg.id === 1 && msg.result?.protocolVersion) {
-        console.log('[ACP] Initialize successful. Sending startChat...');
-        const startChatRequest = {
-          jsonrpc: '2.0',
-          id: 2, // initialize の次なので id: 2
-          method: 'startChat',
-          params: {}
-        };
-        geminiProcess.stdin.write(JSON.stringify(startChatRequest) + '\n');
-        // このメッセージはクライアントにブロードキャストする必要はないので、ここで continue
-        continue;
-      }
 
       // streamAssistantMessageChunk 以外のメッセージが来た場合、
       // ongoingText に溜まっているAIのテキストがあれば、ここで履歴に保存する
@@ -288,87 +277,95 @@ wss.on('connection', ws => {
       return;
     }
 
-    // メソッドに応じて処理を分岐
-    switch (msg.method) {
-      case 'fetchHistory': {
-        if (ongoingText.length > 0) {
-          const rec = {
-            id: String(Date.now()),
-            ts: Date.now(),
-            role: 'assistant',
-            text: ongoingText.trimEnd(),
-          };
-          history.push(rec);
-          console.log('[History] Saved assistant message (on fetchHistory):', rec);
-          ongoingText = ''; // クリア
-        }
-
-        const { limit = 20, before } = msg.params || {};
-        let chunk;
-        if (!before) {
-          chunk = history.slice(-limit);
-        } else {
-          chunk = history.filter(rec => rec.ts < before).slice(-limit);
-        }
-        chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-
-        ws.send(JSON.stringify({
-          jsonrpc: '2.0',
-          id: msg.id,
-          result: { messages: chunk }
-        }));
-        break;
+    // フロントからの “fetchHistory” をここで処理
+    if (msg.method === 'fetchHistory') {
+      // fetchHistory が呼ばれた時点で ongoingText にAIのレスポンスが蓄積されていれば履歴に保存
+      if (ongoingText.length > 0) {
+        const rec = {
+          id: String(Date.now()),
+          ts: Date.now(),
+          role: 'assistant',
+          text: ongoingText.trimEnd(),
+        };
+        history.push(rec);
+        console.log('[History] Saved assistant message (on fetchHistory):', rec);
+        ongoingText = ''; // クリア
       }
 
-      case 'startChat': {
-        // クライアントからのstartChatは無視する
-        // Geminiプロセスへは初期化シーケンスの一部としてサーバーから送信するため
-        console.log('[DEBUG] Ignoring startChat from client.');
-        break;
-      }
+      const { limit = 20, before } = msg.params || {};
 
-      case 'sendUserMessage': {
-        const inputText = msg.params?.chunks?.[0]?.text || '';
-
-        if (ongoingText.length > 0) {
-          const rec = {
-            id: String(Date.now()),
-            ts: Date.now(),
-            role: 'assistant',
-            text: ongoingText.trimEnd(),
-          };
-          history.push(rec);
-          console.log('[History] Saved assistant message:', rec);
-          ongoingText = '';
-        }
-
-        if (inputText.trim() === '/clear') {
-          resetHistory('command');
-          startGemini();
-          ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
-        } else {
-          const rec = {
-            id: String(Date.now()),
-            ts: Date.now(),
-            role: 'user',
-            text: inputText
-          };
-          history.push(rec);
-          broadcastExcept(ws, rec);
-
-          const estimatedTokens = estimateTokensFromText(inputText);
-          await waitForTokenCooldown(estimatedTokens);
-          geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
-        }
-        break;
-      }
-
-      default: {
-        // その他のメソッドはすべてGeminiへパススルー
-        geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
-        break;
-      }
+      let chunk;
+      if (!before) {
+        // 起動時 or 明示的に before=null なら最新 limit 件をそのまま返す
+        chunk = history.slice(-limit);
+      } else {
+        // スクロール読み込み
+      chunk = history
+          .filter(rec => rec.ts < before)
+          .slice(-limit);
     }
+
+    // タイムスタンプでソートしてから送信
+    chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+
+    return ws.send(JSON.stringify({
+      jsonrpc: '2.0',
+      id:     msg.id,
+      result: { messages: chunk }
+    }));
+    }
+
+    if (msg.method === 'startChat') {
+      console.log('[DEBUG] startChat called');
+      // 必要に応じて初期化処理を書く
+      return ws.send(JSON.stringify({
+        jsonrpc: '2.0',
+        id: msg.id,
+        result: { ok: true }
+      }));
+    }
+
+    /* ── ③ クライアント→サーバー受信部 (ws.on 'message') に追記 ── */
+    if (msg.method === 'sendUserMessage') {
+      const inputText = msg.params?.chunks?.[0]?.text || '';
+
+      // AIのレスポンスが蓄積されていれば履歴に保存
+      if (ongoingText.length > 0) {
+        const rec = {
+          id: String(Date.now()),
+          ts: Date.now(),
+          role: 'assistant',
+          text: ongoingText.trimEnd(),
+        };
+        history.push(rec);
+        console.log('[History] Saved assistant message:', rec);
+        ongoingText = ''; // クリア
+      }
+
+      /*   /clear コマンド  */
+      if (inputText.trim() === '/clear'){
+          resetHistory('command');
+          startGemini(); // Geminiプロセスを再起動
+          return ws.send(JSON.stringify({ jsonrpc:'2.0', id:msg.id, result:null }));
+      }
+
+      /*   ユーザ発言を履歴へも保存して broadcast  */
+      const rec = { id: String(Date.now()), ts: Date.now(),
+                    role:'user', text: inputText };
+      history.push(rec);                     // メモリキャッシュ
+      broadcastExcept(ws, rec); // 新：送信元以外にだけ送る
+    }
+
+
+    // Gemini CLIへのメッセージ送信前にクールダウンを適用
+    if (msg.method === 'sendUserMessage' && msg.params && msg.params.chunks && msg.params.chunks[0] && msg.params.chunks[0].text) {
+      const inputText = msg.params.chunks[0].text;
+      const estimatedTokens = estimateTokensFromText(inputText);
+      await waitForTokenCooldown(estimatedTokens);
+    }
+
+    // それ以外は Gemini へパススルー
+    geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
   });
 
   ws.on('close', () => clients.delete(ws));

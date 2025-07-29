@@ -525,6 +525,7 @@ window.addEventListener('DOMContentLoaded', () => {
     if (message.error){
       // エラーハンドリング
       console.error('RPC Error:', message.error);
+      showRpcError(message.error);
     } else {
       // 任意の結果処理があればここで
       console.log('RPC Result:', message.result);
