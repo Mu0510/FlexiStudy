@@ -597,13 +597,13 @@ window.addEventListener('DOMContentLoaded', () => {
     openBtn.style.display = 'block';          // 右下 FAB
 
     if (window.isChatHiddenOnLoad) {
-      resizer.style.display = 'none';
-      leftColumn.style.flex = '1 1 100%';
+      resizer.style.display = 'none'; // chat=hidden の場合はリサイザーを非表示
+      leftColumn.style.flex = '1 1 100%'; // leftColumn を全幅に
     } else {
-      resizer.style.display = ''; // リサイザーを表示
-      leftColumn.style.display = ''; // 左カラムを表示
-      leftColumn.style.flex = ''; // CSSのデフォルトに戻す
+      resizer.style.display = ''; // 通常時はリサイザーを表示
+      leftColumn.style.flex = ''; // leftColumn の flex をデフォルトに戻す
     }
+    leftColumn.style.display = ''; // leftColumn は常に表示
   });
 
   /* 開く（右下 FAB）*/
