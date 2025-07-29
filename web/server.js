@@ -264,6 +264,23 @@ wss.on('connection', ws => {
     const text = data.toString().trim();
     if (!text) return;
 
+    // ★★★ 強制デバッグコード ★★★
+    if (text.includes('"method":"startChat"')) {
+        console.log(`[DEBUG] 強制的にstartChatメッセージを捕捉: ${text}`);
+        try {
+            const tempMsg = JSON.parse(text);
+            ws.send(JSON.stringify({
+                jsonrpc: '2.0',
+                id: tempMsg.id,
+                result: { ok: true, note: 'forcefully caught' }
+            }));
+        } catch (e) {
+            console.error('強制的に捕捉したメッセージの解析に失敗しました');
+        }
+        return; // 以降の処理をすべて停止
+    }
+    // ★★★ デバッグコード終了 ★★★
+
     let msg;
     try {
       msg = JSON.parse(text);
