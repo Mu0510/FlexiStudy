@@ -100,8 +100,8 @@ const GEMINI_ARGS = [
 let geminiProcess = null; // Initialize to null
 
 function _startNewGeminiProcess() {
-  console.log(`Attempting to start Gemini process with command: gemini ${GEMINI_ARGS.join(' ')}`);
-  geminiProcess = spawn('gemini', GEMINI_ARGS, { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
+  console.log(`Attempting to start Gemini process with command: sudo -u geminicli gemini ${GEMINI_ARGS.join(' ')}`);
+  geminiProcess = spawn('sudo', ['-u', 'geminicli', 'gemini', ...GEMINI_ARGS], { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
 
   // 新しいGeminiプロセスが起動したらinitializeメッセージを送信
   const init = {
