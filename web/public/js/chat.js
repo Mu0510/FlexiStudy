@@ -596,24 +596,17 @@ window.addEventListener('DOMContentLoaded', () => {
     panel.style.display   = 'none';
     openBtn.style.display = 'block';          // 右下 FAB
 
-    if (window.isChatHiddenOnLoad) {
-      resizer.style.display = 'none'; // chat=hidden の場合はリサイザーを非表示
-      leftColumn.style.flex = '1 1 100%'; // leftColumn を全幅に
-    } else {
-      resizer.style.display = ''; // 通常時はリサイザーを表示
-      leftColumn.style.flex = ''; // leftColumn の flex をデフォルトに戻す
-    }
+    // チャットを閉じるときは常にダッシュボードを最大化し、リサイザーを非表示にする
+    resizer.style.display = 'none';
     leftColumn.style.display = ''; // leftColumn は常に表示
+    leftColumn.style.flex = '1 1 100%'; // leftColumn を全幅に
   });
 
   /* 開く（右下 FAB）*/
   openBtn.addEventListener('click', () => {
     panel.style.display   = 'flex';
-    resizer.style.display = '';               // 横/縦リサイズ復活
     openBtn.style.display = 'none';
-    if(!isFull){                               // 通常レイアウト
-      leftColumn.style.flex = ''; // CSSのデフォルトに戻す
-    }
+    applyChatPanelLayout(); // 最後に記憶していたレイアウトを適用
     if (!ws) { // WebSocketがまだ接続されていない場合のみ接続を開始
       initWebSocket();
     }
@@ -622,20 +615,14 @@ window.addEventListener('DOMContentLoaded', () => {
   
 
   /* 全画面トグル（⛶⇆↙）を置き換え */
-  let isFull          = window.isChatFullscreenOnLoad; // 初期ロード時にfullscreenならtrue
+  window.isChatFullscreen = window.isChatFullscreenOnLoad; // 初期ロード時にfullscreenならtrue
   let prevBasis       = null;   // flex-basis
   let prevMaxWidth    = null;   // max-width
   let prevPanelStyle  = null;   // インライン幅が全部ここにある
 
-  fullBtn.addEventListener('click', () => {
-    isFull = !isFull;
-
-    if (isFull) {
-      // ── 入る前の状態を保存 ──
-      prevBasis      = panel.style.flexBasis || '';
-      prevMaxWidth   = panel.style.maxWidth  || '';
-      prevPanelStyle = panel.getAttribute('style') || ''; // 念のため全部
-
+  // チャットパネルのレイアウトを適用する関数
+  function applyChatPanelLayout() {
+    if (window.isChatFullscreen) {
       // ── ダッシュボードを隠し、幅100%へ ──
       leftColumn.style.display = 'none';
       resizer.style.display    = 'none';
@@ -644,7 +631,6 @@ window.addEventListener('DOMContentLoaded', () => {
       panel.style.flexBasis    = '100%';
       fullBtn.textContent      = '↙';
       openBtn.style.display    = 'none';
-
     } else {
       // ── 保存しておいた値で復元 ──
       leftColumn.style.display = ''; // leftColumnを表示
@@ -656,6 +642,18 @@ window.addEventListener('DOMContentLoaded', () => {
       panel.setAttribute('style', prevPanelStyle); // さらに完全復元
       fullBtn.textContent      = '⛶';
     }
+  }
+
+  fullBtn.addEventListener('click', () => {
+    window.isChatFullscreen = !window.isChatFullscreen;
+
+    if (window.isChatFullscreen) {
+      // ── 入る前の状態を保存 ──
+      prevBasis      = panel.style.flexBasis || '';
+      prevMaxWidth   = panel.style.maxWidth  || '';
+      prevPanelStyle = panel.getAttribute('style') || ''; // 念のため全部
+    }
+    applyChatPanelLayout();
   });
 
   // 「resizer」要素を Pointer Events で掴めるように
