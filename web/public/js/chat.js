@@ -147,7 +147,7 @@ window.addEventListener('DOMContentLoaded', () => {
               return line;
             }).join('\n');
           }
-          entry.bodyElem.innerHTML += textContent; // innerHTML を使用して span タグを反映
+          entry.bodyElem.insertAdjacentHTML('beforeend', textContent); // innerHTML を使用して span タグを反映
           scrollBottom(); // autoScroll() の代わりに scrollBottom() を使用
         }
         return;
