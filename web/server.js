@@ -311,6 +311,7 @@ wss.on('connection', ws => {
             id: msg.id,
             result: { ok: true }
         }));
+        return; // ★★★ この return が重要 ★★★
 
     } else if (msg.method === 'sendUserMessage') {
         const inputText = msg.params?.chunks?.[0]?.text || '';
