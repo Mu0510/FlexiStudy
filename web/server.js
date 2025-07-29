@@ -141,6 +141,20 @@ function _startNewGeminiProcess() {
       catch { msg = { stdout: line }; }
       console.log('[Gemini CLI Output]', msg);
 
+      // ACP初期化シーケンスの処理
+      if (msg.id === 1 && msg.result?.protocolVersion) {
+        console.log('[ACP] Initialize successful. Sending startChat...');
+        const startChatRequest = {
+          jsonrpc: '2.0',
+          id: 2, // initialize の次なので id: 2
+          method: 'startChat',
+          params: {}
+        };
+        geminiProcess.stdin.write(JSON.stringify(startChatRequest) + '\n');
+        // このメッセージはクライアントにブロードキャストする必要はないので、ここで continue
+        continue;
+      }
+
       // streamAssistantMessageChunk 以外のメッセージが来た場合、
       // ongoingText に溜まっているAIのテキストがあれば、ここで履歴に保存する
       if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
@@ -264,23 +278,6 @@ wss.on('connection', ws => {
     const text = data.toString().trim();
     if (!text) return;
 
-    // ★★★ 強制デバッグコード ★★★
-    if (text.includes('"method":"startChat"')) {
-        console.log(`[DEBUG] 強制的にstartChatメッセージを捕捉: ${text}`);
-        try {
-            const tempMsg = JSON.parse(text);
-            ws.send(JSON.stringify({
-                jsonrpc: '2.0',
-                id: tempMsg.id,
-                result: { ok: true, note: 'forcefully caught' }
-            }));
-        } catch (e) {
-            console.error('強制的に捕捉したメッセージの解析に失敗しました');
-        }
-        return; // 以降の処理をすべて停止
-    }
-    // ★★★ デバッグコード終了 ★★★
-
     let msg;
     try {
       msg = JSON.parse(text);
@@ -324,12 +321,9 @@ wss.on('connection', ws => {
       }
 
       case 'startChat': {
-        console.log('[DEBUG] startChat called');
-        ws.send(JSON.stringify({
-          jsonrpc: '2.0',
-          id: msg.id,
-          result: { ok: true }
-        }));
+        // クライアントからのstartChatは無視する
+        // Geminiプロセスへは初期化シーケンスの一部としてサーバーから送信するため
+        console.log('[DEBUG] Ignoring startChat from client.');
         break;
       }
 
