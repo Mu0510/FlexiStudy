@@ -751,6 +751,19 @@ window.addEventListener('DOMContentLoaded', () => {
   function stopResize() {
     document.removeEventListener('pointermove', doResize);
     document.removeEventListener('pointerup', stopResize);
+
+    // リサイズ後の flexBasis をローカルストレージに保存
+    localStorage.setItem('leftColumnFlexBasis', leftColumn.style.flexBasis);
+    localStorage.setItem('chatPanelFlexBasis', panel.style.flexBasis);
+
+    // 全画面切り替え時の復元にも影響するため、prevBasis, prevMaxWidth, prevPanelStyle も更新
+    // これらは全画面切り替え時に使用される変数なので、リサイズ後も最新の状態を反映させる
+    prevBasis = panel.style.flexBasis || '';
+    prevMaxWidth = panel.style.maxWidth || ''; // maxWidth はリサイズで直接変更されないが、念のため
+    prevPanelStyle = panel.getAttribute('style') || '';
+    localStorage.setItem('chatPanelFlexBasis', prevBasis);
+    localStorage.setItem('chatPanelMaxWidth', prevMaxWidth);
+    localStorage.setItem('chatPanelStyle', prevPanelStyle);
   }
 
   // visualViewport のリサイズイベントで入力エリアの位置を調整
