@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CardHeader, CardTitle } from "@/components/ui/card"
@@ -14,35 +14,217 @@ interface ChatPanelProps {
   onModeChange: (mode: "floating" | "sidebar" | "fullscreen") => void
 }
 
+interface ChatMessage {
+  id: number | string;
+  type: "user" | "bot" | "tool";
+  content: string;
+  timestamp: string;
+  // tool-specific properties
+  icon?: string;
+  label?: string;
+  command?: string;
+  status?: "running" | "finished" | "error";
+  isThinking?: boolean; // 新しく追加
+}
+
 export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProps) {
   const [message, setMessage] = useState("")
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      type: "bot" as const,
-      content: "承知いたしました。直近のコミットにリセットします。",
-      timestamp: "14:32",
-    },
-    {
-      id: 2,
-      type: "user" as const,
-      content: "git reset --hard HEAD",
-      timestamp: "14:33",
-    },
-    {
-      id: 3,
-      type: "bot" as const,
-      content:
-        "HEAD is now at 56e7b4c fix: チャットパネルのリサイズ状態をローカルストレージに保存\n\n関数に、リサイズ後のチャットパネルとテキストエリアをローカルストレージに保存する処理を追加。\n\n全画面切り替え時の復元もリサイズ後の値が反映されるよう、、も更新。",
-      timestamp: "14:33",
-    },
-    {
-      id: 4,
-      type: "bot" as const,
-      content: "直近のコミットにリセットしました。\nこれで、style.cssとchat.cssの変更は元に戻っています。",
-      timestamp: "14:34",
-    },
-  ])
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const ws = useRef<WebSocket | null>(null)
+  const requestId = useRef(1)
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      if (ws.current) {
+        ws.current.close()
+        ws.current = null
+      }
+      return
+    }
+
+    if (!ws.current) {
+      ws.current = new WebSocket(`ws://${location.host.split(':')[0]}:3001/ws`)
+
+      ws.current.onopen = () => {
+        console.log("WebSocket connected")
+        ws.current?.send(JSON.stringify({
+          jsonrpc: "2.0",
+          id: requestId.current++,
+          method: "fetchHistory",
+          params: { limit: 30 }
+        }))
+      }
+
+      ws.current.onmessage = (event) => {
+        const msg = JSON.parse(event.data)
+        console.log("Received:", msg)
+
+        if (msg.method === "streamAssistantThoughtChunk") {
+          setMessages((prevMessages) => {
+            const lastMessage = prevMessages[prevMessages.length - 1];
+            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
+              // 既存のボットメッセージを思考中に設定
+              return prevMessages.map((m, index) =>
+                index === prevMessages.length - 1
+                  ? { ...m, content: msg.params.thought || "...思考中...", isThinking: true }
+                  : m
+              );
+            } else {
+              // 新しい思考中メッセージとして追加
+              return [
+                ...prevMessages,
+                {
+                  id: Date.now(),
+                  type: "bot",
+                  content: msg.params.thought || "...思考中...",
+                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                  isThinking: true,
+                },
+              ];
+            }
+          });
+        } else if (msg.method === "streamAssistantMessageChunk") {
+          setMessages((prevMessages) => {
+            const lastMessage = prevMessages[prevMessages.length - 1]
+            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
+              return prevMessages.map((m, index) =>
+                index === prevMessages.length - 1
+                  ? { ...m, content: m.content + (msg.params.chunk.text || ""), isThinking: false } // isThinkingをfalseに
+                  : m
+              )
+            } else {
+              return [
+                ...prevMessages,
+                {
+                  id: Date.now(),
+                  type: "bot",
+                  content: msg.params.chunk.text || "",
+                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                  isThinking: false, // 新しいメッセージは思考中ではない
+                },
+              ]
+            }
+          })
+        } else if (msg.method === "addMessage") {
+          setMessages((prevMessages) => {
+            const lastMessage = prevMessages[prevMessages.length - 1];
+            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
+              // 既存のボットメッセージを確定
+              return prevMessages.map((m, index) =>
+                index === prevMessages.length - 1
+                  ? { ...m, content: msg.params.message.text, status: "finished", isThinking: false } // 完了時にisThinkingをfalseに
+                  : m
+              );
+            } else {
+              // 新しいメッセージとして追加
+              return [
+                ...prevMessages,
+                {
+                  id: msg.params.message.id,
+                  type: msg.params.message.role === "user" ? "user" : "bot",
+                  content: msg.params.message.text,
+                  timestamp: new Date(msg.params.message.ts).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                  status: "finished",
+                  isThinking: false,
+                },
+              ];
+            }
+          });
+        } else if (msg.method === "pushToolCall") {
+          setMessages((prevMessages) => {
+            const lastMessage = prevMessages[prevMessages.length - 1];
+            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
+              // 既存のボットメッセージを確定
+              const updatedMessages = prevMessages.map((m, index) =>
+                index === prevMessages.length - 1
+                  ? { ...m, status: "finished", isThinking: false } // 完了時にisThinkingをfalseに
+                  : m
+              );
+              return [
+                ...updatedMessages,
+                {
+                  id: msg.params.toolCallId || msg.id,
+                  type: "tool",
+                  content: "",
+                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                  icon: msg.params.icon,
+                  label: msg.params.label,
+                  command: msg.params.locations?.[0]?.path || "",
+                  status: "running",
+                },
+              ];
+            } else {
+              return [
+                ...prevMessages,
+                {
+                  id: msg.params.toolCallId || msg.id,
+                  type: "tool",
+                  content: "",
+                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                  icon: msg.params.icon,
+                  label: msg.params.label,
+                  command: msg.params.locations?.[0]?.path || "",
+                  status: "running",
+                },
+              ];
+            }
+          });
+          ws.current?.send(JSON.stringify({
+            jsonrpc: "2.0",
+            id: msg.id,
+            result: { id: msg.params.toolCallId || msg.id }
+          }))
+        } else if (msg.method === "updateToolCall") {
+          setMessages((prevMessages) =>
+            prevMessages.map((m) =>
+              m.id === (msg.params.toolCallId || msg.params.callId)
+                ? {
+                    ...m,
+                    content: msg.params.content?.markdown || JSON.stringify(msg.params.content, null, 2),
+                    status: msg.params.status,
+                  }
+                : m
+            )
+          )
+        } else if (msg.method === "historyCleared") {
+          setMessages([]);
+        } else if (msg.result && msg.result.messages) {
+          const historyMessages = msg.result.messages.map((m: any) => ({
+            id: m.id,
+            type: m.role === "user" ? "user" : m.type === "tool" ? "tool" : "bot",
+            content: m.text || m.content?.markdown || JSON.stringify(m.content, null, 2),
+            timestamp: new Date(m.ts).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+            icon: m.type === "tool" ? m.params.icon : undefined,
+            label: m.type === "tool" ? m.params.label : undefined,
+            command: m.type === "tool" ? m.params.locations?.[0]?.path || "" : undefined,
+            status: m.type === "tool" ? m.params.status : "finished",
+            isThinking: false,
+          }));
+          setMessages((prevMessages) => [...historyMessages, ...prevMessages]);
+        }
+      }
+
+      ws.current.onclose = () => {
+        console.log("WebSocket disconnected")
+      }
+
+      ws.current.onerror = (error) => {
+        console.error("WebSocket error:", error)
+      }
+    }
+
+    return () => {
+      if (ws.current) {
+        ws.current.close()
+        ws.current = null
+      }
+    }
+  }, [isOpen])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const quickActions = [
     { icon: Database, label: "データベース操作", color: "text-blue-600" },
@@ -52,16 +234,24 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
   ]
 
   const handleSendMessage = () => {
-    if (!message.trim()) return
+    if (!message.trim() || !ws.current) return
 
-    const newMessage = {
-      id: messages.length + 1,
-      type: "user" as const,
+    const userMessage: ChatMessage = {
+      id: Date.now(),
+      type: "user",
       content: message,
       timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
     }
+    setMessages((prevMessages) => [...prevMessages, userMessage])
 
-    setMessages([...messages, newMessage])
+    ws.current.send(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: requestId.current++,
+        method: "sendUserMessage",
+        params: { chunks: [{ text: message }] },
+      })
+    )
     setMessage("")
   }
 
@@ -72,6 +262,30 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
     "top-0 right-0 w-96 h-full rounded-none border-l": mode === "sidebar",
     "inset-0 w-full h-full rounded-none border-none": mode === "fullscreen",
   })
+
+  const getToolIconText = (iconName?: string) => {
+    switch (iconName) {
+      case 'pencil': return 'Edit';
+      case 'search': return 'Search';
+      case 'terminal': return 'Shell';
+      case 'file': return 'File';
+      case 'code': return 'Code';
+      case 'web': return 'Web';
+      case 'folder': return 'Dir';
+      case 'info': return 'Info';
+      default: return iconName || 'Tool';
+    }
+  };
+
+  const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
+
+  const getRelativePath = (absolutePath?: string) => {
+    if (!absolutePath) return '';
+    if (absolutePath.startsWith(PROJECT_ROOT_PATH)) {
+      return absolutePath.substring(PROJECT_ROOT_PATH.length);
+    }
+    return absolutePath;
+  };
 
   return (
     <div className={panelClasses}>
@@ -129,32 +343,58 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.map((msg) => (
-            <div key={msg.id} className={cn("flex space-x-3", msg.type === "user" ? "justify-end" : "justify-start")}>
-              {msg.type === "bot" && (
-                <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <Bot className="w-5 h-5 text-white" />
+            <div key={msg.id}>
+              {msg.type === "tool" ? (
+                <div className={cn(
+                  "tool-card bg-gray-800 text-white rounded-lg p-3 shadow-md",
+                  "w-11/12 mx-auto my-1 mb-3",
+                  msg.status === "finished" && "border-l-4 border-green-500",
+                  msg.status === "error" && "border-l-4 border-red-500"
+                )}>
+                  <div className="tool-card__header flex items-center gap-2 font-semibold text-sm mb-1">
+                    <span className="tool-card__icon-text text-xs border border-gray-500 rounded px-1 py-0.5">
+                      {getToolIconText(msg.icon)}
+                    </span>
+                    <span className="tool-card__title flex-grow">{msg.label}</span>
+                    <code className="tool-card__command text-gray-400 text-xs">
+                      {getRelativePath(msg.command)}
+                    </code>
+                  </div>
+                  <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-900 p-2 rounded">
+                    {msg.content}
+                  </pre>
                 </div>
-              )}
+              ) : (
+                <div className={cn("flex space-x-3", msg.type === "user" ? "justify-end" : "justify-start")}>
+                  {msg.type === "bot" && (
+                    <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <Bot className="w-5 h-5 text-white" />
+                    </div>
+                  )}
 
-              <div
-                className={cn(
-                  "max-w-[80%] rounded-2xl px-4 py-3",
-                  msg.type === "user" ? "bg-primary-800 text-neutral-100" : "bg-neutral-200 text-neutral-900",
-                )}
-              >
-                <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
-                <div className={cn("text-xs mt-2", msg.type === "user" ? "text-neutral-100" : "text-neutral-500")}>
-                  {msg.timestamp}
-                </div>
-              </div>
+                  <div
+                    className={cn(
+                      "rounded-2xl",
+                      msg.type === "user" ? "bg-primary-800 text-neutral-100 max-w-[70%] px-4 py-3 my-2" : "w-[90%] bg-transparent text-neutral-900 p-0 my-1 mb-5",
+                      msg.type === "bot" && msg.isThinking && "animate-pulse"
+                    )}
+                  >
+                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                    <div className={cn("text-xs mt-2", msg.type === "user" ? "text-neutral-100" : "text-neutral-500")}>
+                      {msg.timestamp}
+                    </div>
+                  </div>
 
-              {msg.type === "user" && (
-                <div className="w-8 h-8 bg-primary-800 rounded-lg flex items-center justify-center flex-shrink-0">
-                  <User className="w-4 h-4 text-white" />
+                  {msg.type === "user" && (
+                    <div className="w-8 h-8 bg-primary-800 rounded-lg flex items-center justify-center flex-shrink-0">
+                      <User className="w-4 h-4 text-white" />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Input */}
