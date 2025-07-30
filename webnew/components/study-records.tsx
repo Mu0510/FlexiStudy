@@ -149,46 +149,45 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
               className="p-4 cursor-pointer hover:bg-slate-50"
               onClick={() => toggleSession(session.session_id)}
             >
-              <div className="flex flex-col">
-                <div className="flex items-center justify-between w-full">
-                  <div className="flex items-center space-x-2">
-                    <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 text-base">
-                      {session.subject}
-                    </Badge>
-                    <span className="text-sm text-slate-500">(ID: {session.session_id})</span>
-                  </div>
-                  <span className="text-lg font-semibold text-slate-800 whitespace-nowrap">
-                    {session.start_time} - {session.end_time}
-                  </span>
-                  <div className="flex items-center space-x-2">
-                    <Badge className="bg-green-100 text-green-800 border-green-200 text-base">
-                      {formatDuration(session.total_duration)}
-                    </Badge>
-                    {openSessions[session.session_id] ? <ChevronUp className="w-5 h-5 text-slate-500" /> : <ChevronDown className="w-5 h-5 text-slate-500" />}
-                  </div>
+              <div className="grid grid-cols-[3.5rem_1fr] gap-x-4">
+                <div className="row-span-2 flex items-center justify-center">
+                  <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 text-base h-fit truncate">
+                    {session.subject}
+                  </Badge>
                 </div>
-                {!isMobile && (
-                  <div className="mt-2">
+
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between w-full">
+                    <div className="w-24 text-left">
+                      <span className="text-sm text-slate-500">(ID: {session.session_id})</span>
+                    </div>
+                    <div className="w-[8.8rem] text-center">
+                      <span className="text-lg font-semibold text-slate-800 whitespace-nowrap">
+                        {session.start_time} - {session.end_time}
+                      </span>
+                    </div>
+                    <div className="w-[13.2rem] text-right">
+                      <div className="flex items-center justify-end space-x-2">
+                        <Badge className="bg-green-100 text-green-800 border-green-200 text-base">
+                          {formatDuration(session.total_duration)}
+                        </Badge>
+                        {openSessions[session.session_id] ? <ChevronUp className="w-5 h-5 text-slate-500" /> : <ChevronDown className="w-5 h-5 text-slate-500" />}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-1">
                     <p className="text-slate-700 flex items-center text-sm">
                       <MessageSquare className="w-4 h-4 mr-2 text-slate-400 flex-shrink-0" />
                       <span className="truncate">{session.summary.startsWith(`${session.subject}：`) ? session.summary.substring(session.subject.length + 1) : session.summary}</span>
                     </p>
                   </div>
-                )}
+                </div>
               </div>
             </CardHeader>
             {openSessions[session.session_id] && (
               <CardContent className="p-6 pt-0">
                 <div className="border-t pt-4 mt-4">
-                  {isMobile && (
-                    <div className="mb-4">
-                      <h4 className="font-semibold text-slate-800 mb-2">セッション概要</h4>
-                      <p className="text-slate-700 flex items-start">
-                        <MessageSquare className="w-4 h-4 mr-2 text-slate-400 flex-shrink-0 mt-1" />
-                        <span>{session.summary.startsWith(`${session.subject}：`) ? session.summary.substring(session.subject.length + 1) : session.summary}</span>
-                      </p>
-                    </div>
-                  )}
                   <h4 className="font-semibold text-slate-800 mb-3">セッション詳細</h4>
                   <div className="space-y-3">
                     {session.logs.map((detail, index) => (
