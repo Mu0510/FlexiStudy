@@ -181,7 +181,7 @@ export const useChat = (isOpen: boolean) => {
     }
 
     if (!ws.current) {
-      ws.current = new WebSocket(`wss://${window.location.host}/ws`);
+      ws.current = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
 
       ws.current.onopen = () => {
         console.log('WebSocket connected');
