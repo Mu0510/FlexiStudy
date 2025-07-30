@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,6 +31,7 @@ interface ChatMessage {
 export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProps) {
   const [message, setMessage] = useState("")
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [isThinkingMessageId, setIsThinkingMessageId] = useState<string | number | null>(null);
   const ws = useRef<WebSocket | null>(null)
   const requestId = useRef(1)
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -62,20 +64,21 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 
         if (msg.method === "streamAssistantThoughtChunk") {
           setMessages((prevMessages) => {
-            const lastMessage = prevMessages[prevMessages.length - 1];
-            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
-              // 既存のボットメッセージを思考中に設定
-              return prevMessages.map((m, index) =>
-                index === prevMessages.length - 1
+            if (isThinkingMessageId) {
+              // 既存の思考中メッセージを更新
+              return prevMessages.map((m) =>
+                m.id === isThinkingMessageId
                   ? { ...m, content: msg.params.thought || "...思考中...", isThinking: true }
                   : m
               );
             } else {
               // 新しい思考中メッセージとして追加
+              const newId = Date.now();
+              setIsThinkingMessageId(newId);
               return [
                 ...prevMessages,
                 {
-                  id: Date.now(),
+                  id: newId,
                   type: "bot",
                   content: msg.params.thought || "...思考中...",
                   timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
@@ -86,14 +89,15 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
           });
         } else if (msg.method === "streamAssistantMessageChunk") {
           setMessages((prevMessages) => {
-            const lastMessage = prevMessages[prevMessages.length - 1]
-            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
-              return prevMessages.map((m, index) =>
-                index === prevMessages.length - 1
-                  ? { ...m, content: m.content + (msg.params.chunk.text || ""), isThinking: false } // isThinkingをfalseに
+            if (isThinkingMessageId) {
+              // 既存の思考中メッセージを更新し、思考中フラグを解除
+              return prevMessages.map((m) =>
+                m.id === isThinkingMessageId
+                  ? { ...m, content: m.content + (msg.params.chunk.text || ""), isThinking: false }
                   : m
-              )
+              );
             } else {
+              // 新しいメッセージとして追加 (思考中メッセージがなかった場合)
               return [
                 ...prevMessages,
                 {
@@ -101,74 +105,55 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                   type: "bot",
                   content: msg.params.chunk.text || "",
                   timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                  isThinking: false, // 新しいメッセージは思考中ではない
-                },
-              ]
-            }
-          })
-        } else if (msg.method === "addMessage") {
-          setMessages((prevMessages) => {
-            const lastMessage = prevMessages[prevMessages.length - 1];
-            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
-              // 既存のボットメッセージを確定
-              return prevMessages.map((m, index) =>
-                index === prevMessages.length - 1
-                  ? { ...m, content: msg.params.message.text, status: "finished", isThinking: false } // 完了時にisThinkingをfalseに
-                  : m
-              );
-            } else {
-              // 新しいメッセージとして追加
-              return [
-                ...prevMessages,
-                {
-                  id: msg.params.message.id,
-                  type: msg.params.message.role === "user" ? "user" : "bot",
-                  content: msg.params.message.text,
-                  timestamp: new Date(msg.params.message.ts).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                  status: "finished",
                   isThinking: false,
                 },
               ];
             }
           });
+        } else if (msg.method === "addMessage") {
+          setMessages((prevMessages) => {
+            let updatedMessages = prevMessages;
+            if (isThinkingMessageId) {
+              // 思考中メッセージを削除
+              updatedMessages = prevMessages.filter((m) => m.id !== isThinkingMessageId);
+              setIsThinkingMessageId(null); // 思考中メッセージIDをリセット
+            }
+
+            // 新しいメッセージを追加
+            return [
+              ...updatedMessages,
+              {
+                id: msg.params.message.id,
+                type: msg.params.message.role === "user" ? "user" : "bot",
+                content: msg.params.message.text,
+                timestamp: new Date(msg.params.message.ts).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                status: "finished",
+                isThinking: false,
+              },
+            ];
+          });
         } else if (msg.method === "pushToolCall") {
           setMessages((prevMessages) => {
-            const lastMessage = prevMessages[prevMessages.length - 1];
-            if (lastMessage && lastMessage.type === "bot" && lastMessage.status !== "finished") {
-              // 既存のボットメッセージを確定
-              const updatedMessages = prevMessages.map((m, index) =>
-                index === prevMessages.length - 1
-                  ? { ...m, status: "finished", isThinking: false } // 完了時にisThinkingをfalseに
-                  : m
-              );
-              return [
-                ...updatedMessages,
-                {
-                  id: msg.params.toolCallId || msg.id,
-                  type: "tool",
-                  content: "",
-                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                  icon: msg.params.icon,
-                  label: msg.params.label,
-                  command: msg.params.locations?.[0]?.path || "",
-                  status: "running",
-                },
-              ];
-            } else {
-              return [
-                ...prevMessages,
-                {
-                  id: msg.params.toolCallId || msg.id,
-                  type: "tool",
-                  content: "",
-                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                  icon: msg.params.icon,
-                  label: msg.params.label,
-                  command: msg.params.locations?.[0]?.path || "",
-                  status: "running",
-                },
-              ];
+            let updatedMessages = prevMessages;
+            if (isThinkingMessageId) {
+              // 思考中メッセージを削除
+              updatedMessages = prevMessages.filter((m) => m.id !== isThinkingMessageId);
+              setIsThinkingMessageId(null); // 思考中メッセージIDをリセット
             }
+
+            return [
+              ...updatedMessages,
+              {
+                id: msg.params.toolCallId || msg.id,
+                type: "tool",
+                content: "",
+                timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+                icon: msg.params.icon,
+                label: msg.params.label,
+                command: msg.params.locations?.[0]?.path || "",
+                status: "running",
+              },
+            ];
           });
           ws.current?.send(JSON.stringify({
             jsonrpc: "2.0",
