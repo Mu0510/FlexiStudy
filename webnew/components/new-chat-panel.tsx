@@ -197,6 +197,7 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
               )}
             >
               <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: activeMessage.content }} />
+              {console.log("Active Message Content:", activeMessage.content)} {/* ここにログを追加 */}
             </div>
           </div>
         )}

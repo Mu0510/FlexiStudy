@@ -1,6 +1,6 @@
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { marked } from 'marked'; // markedをインポート
+import { marked } from 'marked';
 
 interface Message {
   id: string;
@@ -106,28 +106,39 @@ export const useChat = () => {
       if (msg.method === 'streamAssistantThoughtChunk') {
         const { thought } = msg.params;
         setActiveMessage(prev => ({
-          id: prev?.id || `thought-${Date.now()}`, // アクティブでない場合は新しいIDを生成
+          id: prev?.id || msg.id || `thought-${Date.now()}`,
           type: 'thought',
-          content: marked.parse(thought.trim()), // ここでmarked.parseを適用
+          content: marked.parse(thought.trim()),
         }));
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
+        // 既存のactiveMessageのIDを保持
+        const currentId = activeMessage?.id || msg.id || `assistant-${Date.now()}`;
+
+        // chunk.thought が存在する場合は、thought として処理
+        if (chunk?.thought !== undefined) {
+          setActiveMessage(prev => ({
+            id: currentId, // IDは変更しない
+            type: 'thought', // タイプをthoughtに設定
+            content: marked.parse(chunk.thought.trim()),
+          }));
+        }
         // chunk.textが存在するかどうかを確認
-        if (chunk?.text !== undefined) { // ここを修正
+        if (chunk?.text !== undefined) {
           setActiveMessage(prev => {
             const currentContent = prev?.content || '';
             const newContent = currentContent + chunk.text.replace(/^\n+/, '');
             return {
-              id: prev?.id || `assistant-${Date.now()}`, // アクティブでない場合は新しいIDを生成
-              type: 'assistant',
-              content: marked.parse(newContent.trimEnd()), // ここでmarked.parseを適用
+              id: currentId, // IDは変更しない
+              type: 'assistant', // タイプをassistantに設定
+              content: marked.parse(newContent.trimEnd()),
             };
           });
         }
         // msg.idが存在する場合はACK
         if (msg.id !== undefined && ws.current) {
           ws.current.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
-          console.log('[DEBUG] Sent ACK for streamAssistantMessageChunk'); // 追加
+          console.log('[DEBUG] Sent ACK for streamAssistantMessageChunk');
         }
       } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
         if (activeMessage) {
@@ -326,7 +337,7 @@ export const useChat = () => {
     return () => {
       ws.current?.close();
     };
-  }, [updateToolCardData]); // 依存関係からactiveMessageを削除
+  }, []); // 依存関係を空配列に変更
 
   // ユーザーメッセージを送信する関数
   const sendMessage = useCallback((text: string) => {
@@ -335,6 +346,7 @@ export const useChat = () => {
     const messageId = `user-${Date.now()}`;
     setMessages(prev => [...prev, { id: messageId, role: 'user', content: text }]);
     setIsGeneratingResponse(true);
+    setActiveMessage(null); // ここでactiveMessageをリセット
 
     const reqId = requestIdCounter.current++;
     lastSentRequestId.current = reqId;
