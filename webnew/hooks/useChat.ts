@@ -18,7 +18,7 @@ interface ActiveMessage {
   id: string;
   type: 'thought' | 'assistant';
   content: string;
-  // bubbleRef: React.RefObject<HTMLDivElement>; // これはレンダリングコンポーネントで処理されるかもしれません
+  thoughtMode: boolean; // chat.js の active.thoughtMode に対応
 }
 
 interface ToolCardData {
@@ -108,33 +108,40 @@ export const useChat = () => {
         setActiveMessage(prev => ({
           id: prev?.id || msg.id || `thought-${Date.now()}`,
           type: 'thought',
-          content: marked.parse(thought.trim()),
+          content: thought.trim(),
+          thoughtMode: true,
         }));
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
         // 既存のactiveMessageのIDを保持
         const currentId = activeMessage?.id || msg.id || `assistant-${Date.now()}`;
 
-        // chunk.thought が存在する場合は、thought として処理
-        if (chunk?.thought !== undefined) {
-          setActiveMessage(prev => ({
+        // chunk.thought または chunk.text が存在する場合にactiveMessageを更新
+        setActiveMessage(prev => {
+          const currentContent = prev?.content || '';
+          let newContent = currentContent;
+          let newType: 'thought' | 'assistant' = prev?.type || 'thought'; // デフォルトはthought
+          let newThoughtMode = prev?.thoughtMode || false; // デフォルトはfalse
+
+          if (chunk?.thought !== undefined) {
+            newContent = chunk.thought.trim();
+            newType = 'thought'; // thoughtが来たらthoughtタイプ
+            newThoughtMode = true; // thoughtModeをtrueに
+          }
+
+          if (chunk?.text !== undefined) {
+            // textが来たらassistantタイプに切り替え、既存のコンテンツに追加
+            newContent = (newType === 'thought' ? '' : currentContent) + chunk.text.replace(/^\n+/, '');
+            newType = 'assistant';
+            newThoughtMode = false; // textが来たらthoughtModeはfalse
+          }
+          return {
             id: currentId, // IDは変更しない
-            type: 'thought', // タイプをthoughtに設定
-            content: marked.parse(chunk.thought.trim()),
-          }));
-        }
-        // chunk.textが存在するかどうかを確認
-        if (chunk?.text !== undefined) {
-          setActiveMessage(prev => {
-            const currentContent = prev?.content || '';
-            const newContent = currentContent + chunk.text.replace(/^\n+/, '');
-            return {
-              id: currentId, // IDは変更しない
-              type: 'assistant', // タイプをassistantに設定
-              content: marked.parse(newContent.trimEnd()),
-            };
-          });
-        }
+            type: newType,
+            content: newContent.trimEnd(),
+            thoughtMode: newThoughtMode,
+          };
+        });
         // msg.idが存在する場合はACK
         if (msg.id !== undefined && ws.current) {
           ws.current.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
@@ -346,7 +353,13 @@ export const useChat = () => {
     const messageId = `user-${Date.now()}`;
     setMessages(prev => [...prev, { id: messageId, role: 'user', content: text }]);
     setIsGeneratingResponse(true);
-    setActiveMessage(null); // ここでactiveMessageをリセット
+    // chat.js の createTypingBubble() に相当する処理
+    setActiveMessage({
+      id: `thought-${Date.now()}`, // 新しいIDを生成
+      type: 'thought',
+      content: '…思考中…', // 初期コンテンツ
+      thoughtMode: true, // 思考中モード
+    });
 
     const reqId = requestIdCounter.current++;
     lastSentRequestId.current = reqId;

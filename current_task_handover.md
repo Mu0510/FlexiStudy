@@ -1,10 +1,10 @@
-## 作業引き継ぎ資料: 新規チャットパネル実装
+## 作業引き継ぎ資料: 新規チャットパネル実装 (2025年7月31日更新)
 
-### 1. タスクの目標
+### 1. 最終目標
 
 既存のWebアプリケーション (`web/public/js/chat.js`) のチャット機能を、新しいNext.jsアプリケーション (`webnew` ディレクトリ以下) のコンポーネント (`webnew/components/new-chat-panel.tsx`) として完全に再現すること。特に、`chat.js`の「繊細な」挙動（思考中表示、ツールカードの動的な更新、スクロール挙動など）の再現が求められています。
 
-### 2. 現在の作業状況
+### 2. 現在の作業状況と問題点
 
 *   **新規コンポーネントの作成:**
     *   `webnew/components/new-chat-panel.tsx` が作成され、基本的なチャットUI（メッセージ表示エリア、入力欄、送信ボタン）が実装されています。
@@ -12,38 +12,57 @@
 *   **UI統合:**
     *   `webnew/app/page.tsx` に `NewChatPanel` が組み込まれ、`webnew/components/sidebar.tsx` に新しいチャットパネルを開くためのボタンが追加されています。
 *   **WebSocket接続の調整:**
-    *   `webnew/server.js` がWebSocketサーバーをポート `3001` で起動していることを確認しました。
-    *   `webnew/hooks/useChat.ts` のWebSocket接続URLを `ws://${window.location.hostname}:3001/ws` に修正しました。
+    *   `webnew/server.js` がWebSocketサーバーをポート `3001` で起動しています。
+    *   `webnew/hooks/useChat.ts` のWebSocket接続URLは `ws://${window.location.hostname}:3001/ws` に設定済みです。
 
-### 3. 発生している問題と課題
+**【未解決の問題】**
 
-*   **WebSocket接続の不安定さ:**
-    *   `ws://localhost:3001/ws` への接続を試みていますが、ユーザーからは「websocketの接続が確立できてないみたい」との報告があります。環境依存の可能性も考慮し、接続の安定性を再確認する必要があります。
-*   **`chat.js`機能の再現不足:**
-    *   ユーザーから「chat.jsの機能が中々再現しきれてないな、結構繊細なんだよなあいつ、再現するには…」とのフィードバックがあり、特に以下の「繊細な」挙動の再現が不十分であると推測されます。
-        *   **`active`変数の挙動:** `chat.js`では、`active`変数が思考中バブルやアシスタントメッセージのストリーム処理の状態を管理しています。これには、思考中表示の開始・更新・終了、メッセージの確定などが含まれます。現在のReact実装でこの状態遷移が正確に再現されているか要確認です。
-        *   **ツールカードの動的な更新:** `chat.js`では`toolCards`と`pendingBodies`というMapを使用して、ツールカードのヘッダー情報とボディコンテンツが非同期に届く場合でも正しく更新されるように制御しています。特に`pushToolCall`と`updateToolCall`の連携が重要です。
-        *   **スクロール挙動:** `chat.js`の`scrollBottom`関数は、ユーザーがチャットの最下部に近い場合にのみ自動スクロールを行うという「繊細な」挙動を持っています。履歴読み込み時のスクロール位置維持も考慮されています。
-        *   **WebSocketメッセージ処理の順序と状態遷移:** `chat.js`の`ws.addEventListener('message', ...)`内の`if`/`else if`の順序と、それらが`active`状態や`toolCards`に与える影響が非常に重要です。このロジックをReactの`useState`や`useRef`、`useEffect`で正確に再現する必要があります。
+1.  **アシスタントのストリーミングメッセージが表示されない、または一瞬で消える:**
+    *   **現象:** ユーザーがメッセージを送信すると、アシスタントの「思考中」メッセージ（`streamAssistantThoughtChunk`）は一瞬表示されるが、その後のアシスタントの返答（`streamAssistantMessageChunk`の`chunk.text`）が表示されない、または一瞬表示されてすぐに消えてしまう。
+    *   **ログの観察:**
+        *   `streamAssistantThoughtChunk`と`streamAssistantMessageChunk`の両方がクライアントに正常に受信され、`useChat.ts`内で`activeMessage.content`が更新されていることはコンソールログで確認済み。
+        *   `activeMessage.content`のログは、`thought`の内容から`text`の内容へと正しく変化している。
+        *   `useChat.ts`からサーバーへのACKも送信されている。
+    *   **現在の推測される原因:**
+        *   `chat.js`の`active`オブジェクトはDOM要素への直接参照を持ち、`innerHTML`を直接操作することでリアルタイム更新を実現していた。Reactの`useState`で管理される`activeMessage`は、DOM要素への直接参照を持たないため、`chat.js`と同じようなリアルタイム更新の挙動を再現できていない可能性がある。
+        *   `streamAssistantMessageChunk`が`chunk.thought`と`chunk.text`の両方を持つ場合（または`thought`が先に、その後に`text`が来る場合）、`setActiveMessage`が同じイベントループ内で複数回呼び出され、状態が上書きされてしまうことで、UIの更新が追いついていない可能性がある。
+        *   `activeMessage`の`id`は固定するように修正済みだが、`activeMessage.type`が`thought`から`assistant`に切り替わる際に、Reactのレンダリングサイクルが適切に処理できていない可能性がある。
+
+2.  **WebSocketの二重接続（解消済みだが念のため記載）:**
+    *   **現象:** 以前、WebSocket接続が複数回確立され、同じメッセージが二重に受信される問題があった。
+    *   **対応:** `webnew/hooks/useChat.ts`の`useEffect`の依存関係を空配列`[]`に変更することで、コンポーネントマウント時に一度だけ接続が確立されるように修正済み。この問題は解消されているはず。
+
+### 3. これまでの主な変更点
+
+*   `webnew/hooks/useChat.ts`:
+    *   `marked`ライブラリのインポートと、`streamAssistantThoughtChunk`, `streamAssistantMessageChunk`, `updateToolCall`, 履歴メッセージの処理における`marked.parse`の適用。
+    *   `useEffect`の依存関係を空配列`[]`に変更し、WebSocketの二重接続を防止。
+    *   `streamAssistantMessageChunk`の処理において、`chunk.thought`と`chunk.text`の両方を適切に処理し、`activeMessage`の`id`を固定し、`type`を適切に切り替えるように修正。
+    *   `sendMessage`時に`activeMessage`を`null`にリセットするように修正。
+*   `webnew/components/new-chat-panel.tsx`:
+    *   `useChat`フックの統合。
+    *   スクロールロジック（`isNearBottom`, `scrollBottom`）の実装。
+    *   `messagesEndRef`の削除と`messagesContainerRef`への統一。
+    *   `activeMessage.content`のデバッグログを追加。
+*   `webnew/server.js`:
+    *   WebSocketの`on('close')`, `on('error')`、およびGeminiプロセスの`on('close')`に詳細なログを追加。
+    *   `streamAssistantMessageChunk`の処理で`ongoingText`が空でない場合の`history.push`の前にデバッグログを追加。
 
 ### 4. 次のGeminiエージェントへの引き継ぎ事項
 
-1.  **WebSocket接続の最終確認とデバッグ:**
-    *   `webnew`アプリケーションが `http://localhost:3000` で、WebSocketサーバー (`webnew/server.js`) が `ws://localhost:3001` でそれぞれ正しく起動していることを確認してください。
-    *   ブラウザの開発者ツール（コンソール、ネットワークタブ）を使用して、WebSocket接続が確立されているか、エラーが発生していないか、メッセージが正しく送受信されているかを詳細に確認してください。
-    *   必要であれば、`webnew/server.js`と`webnew/hooks/useChat.ts`にデバッグログを追加し、メッセージのフローを追跡してください。
+1.  **アシスタントのストリーミングメッセージ表示問題の解決:**
+    *   `webnew/hooks/useChat.ts`の`activeMessage`の状態更新ロジックを再検討し、`chat.js`の`active`オブジェクトの挙動（特に`thoughtMode`の切り替えとDOMの直接操作）をReactのState管理でどのように再現するかを深く分析してください。
+    *   `activeMessage`の`type`が`thought`から`assistant`に切り替わる際に、UIがスムーズに更新されるように、`new-chat-panel.tsx`のレンダリングロジックを調整する必要があるかもしれません。
+    *   Reactの`key`プロパティが正しく使用されているか、`activeMessage`の更新がReactのレンダリングサイクルに適切に組み込まれているかを確認してください。
+    *   `useReducer`など、より複雑な状態管理パターンを検討することも有効かもしれません。
 
-2.  **`web/public/js/chat.js`のメッセージ処理ロジックの徹底的な再分析と移植:**
-    *   `chat.js`の `ws.addEventListener('message', ...)` ブロックを再度、**行単位で**詳細に分析してください。
-    *   特に、`streamAssistantThoughtChunk`, `streamAssistantMessageChunk`, `agentMessageFinished`, `messageCompleted`, `pushToolCall`, `updateToolCall`, `pushChunk`, `pushMessage`, `fetchHistory` の各メッセージタイプが、`active`変数、`toolCards`、`pendingBodies`、`history`といったグローバル変数にどのように影響を与えているかを正確に把握してください。
-    *   これらの挙動を、`webnew/hooks/useChat.ts` 内のReactのstate (`useState`) とref (`useRef`) を用いて、**可能な限り忠実に**再現してください。特に、状態の更新順序と依存関係に注意を払ってください。
-    *   `chat.js`の`resetActive()`関数が、`active`変数を`null`にし、`#typingBubble`をDOMから削除する挙動を、Reactのstate管理でどのように実現するかを検討してください。
-    *   `generateContextualDiffHtml`のようなユーティリティ関数も、必要に応じて正確に移植してください。
+2.  **`chat.js`の`resetActive()`関数の完全な再現:**
+    *   `chat.js`の`resetActive()`が`active`変数を`null`にし、`#typingBubble`をDOMから削除する挙動を、Reactのstate管理でどのように実現するかを再確認してください。
 
-3.  **スクロール挙動の再現:**
-    *   `chat.js`の `isNearBottom()` と `scrollBottom()` 関数のロジックを分析し、`new-chat-panel.tsx` の `useEffect` や `useRef` を用いて、自動スクロールと履歴読み込み時のスクロール位置維持を正確に再現してください。
+3.  **ツールカードの動的な更新の検証:**
+    *   `pushToolCall`と`updateToolCall`の連携が正しく機能し、ツールカードのヘッダー情報とボディコンテンツが非同期に届く場合でも正しく更新されることを確認してください。
 
-4.  **UIの最終調整:**
-    *   `useChat.ts`からのデータが正確になったら、`new-chat-panel.tsx`のUIがそのデータを適切に表示しているかを確認し、必要に応じてCSSやコンポーネントの構造を微調整してください。
+4.  **スクロール挙動の最終確認:**
+    *   `chat.js`の `isNearBottom()` と `scrollBottom()` 関数のロジックが、`new-chat-panel.tsx`で正確に再現されていることを確認してください。
 
 このタスクは、元のJavaScriptコードの深い理解と、それをReactのベストプラクティスに適合させるための慎重な作業が求められます。頑張ってください！

@@ -167,10 +167,9 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
                   className={cn(
                     "rounded-2xl px-4 py-3",
                     msg.role === "user" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800",
-                    // msg.isThinking && "animate-pulse" // isThinking is not in Message interface
                   )}
                 >
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                  <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} />
                   {/* Removed timestamp for now, not in Message interface */}
                 </div>
                 {msg.role === "user" && (
@@ -193,10 +192,10 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
               className={cn(
                 "rounded-2xl px-4 py-3",
                 "bg-gray-200 text-gray-800",
-                activeMessage.type === "thought" && "animate-pulse" // Apply pulse for thought mode
+                activeMessage.thoughtMode && "animate-pulse" // Apply pulse for thought mode
               )}
             >
-              <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: activeMessage.content }} />
+              <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: marked.parse(activeMessage.content) }} />
               {console.log("Active Message Content:", activeMessage.content)} {/* ここにログを追加 */}
             </div>
           </div>
