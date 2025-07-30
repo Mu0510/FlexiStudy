@@ -30,12 +30,26 @@ export function useChat(isOpen: boolean) {
   const reqId = useRef(1);
   const toolIndexMap = useRef<Map<number, number>>(new Map()); // toolId -> messages array index
   const pendingBodies = useRef<Map<number, any>>(new Map()); // toolId -> pending body
+  const currentThinkingMessageIdRef = useRef<string | number | null>(null);
+  const currentActiveMessageRef = useRef<string | number | null>(null); // New ref for active assistant/thinking message
+
+  const resetActiveMessageRefs = useCallback(() => {
+    setMessages(prev => prev.map(m => {
+      if (m.id === currentThinkingMessageIdRef.current || m.id === currentActiveMessageRef.current) {
+        return { ...m, isThinking: false };
+      }
+      return m;
+    }));
+    currentThinkingMessageIdRef.current = null;
+    currentActiveMessageRef.current = null;
+  }, []);
 
   const resetHistory = useCallback(() => {
     setMessages([]);
     toolIndexMap.current.clear();
     pendingBodies.current.clear();
-  }, []);
+    resetActiveMessageRefs(); // Reset active refs on history clear
+  }, [resetActiveMessageRefs]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -110,58 +124,100 @@ export function useChat(isOpen: boolean) {
         case "streamAssistantThoughtChunk": {
           const { thought } = msg.params;
           setMessages(prev => {
-            const lastBotMessageIndex = prev.findLastIndex(m => m.type === "bot");
-            if (lastBotMessageIndex !== -1 && prev[lastBotMessageIndex].isThinking) {
-              return prev.map((m, idx) =>
-                idx === lastBotMessageIndex
-                  ? { ...m, content: m.content + (thought || "") }
-                  : m
-              );
-            } else {
-              const newThinkingMessage: ChatMessage = {
-                id: `thinking-${Date.now()}`,
+            let updatedMessages = [...prev];
+            let targetMessageIndex = updatedMessages.findIndex(m => m.id === currentActiveMessageRef.current);
+
+            if (targetMessageIndex === -1) {
+              // If no active message, create a new thinking message
+              const newId = `thinking-${Date.now()}`;
+              currentActiveMessageRef.current = newId;
+              updatedMessages.push({
+                id: newId,
                 type: "bot",
                 content: thought || "思考中...",
                 timestamp: timestamp(),
                 isThinking: true,
+              });
+            } else {
+              // Update existing active message
+              updatedMessages[targetMessageIndex] = {
+                ...updatedMessages[targetMessageIndex],
+                content: updatedMessages[targetMessageIndex].content + (thought || ""),
+                isThinking: true,
               };
-              return [...prev, newThinkingMessage];
             }
+            return updatedMessages;
           });
           break;
         }
         case "streamAssistantMessageChunk": {
           const { chunk } = msg.params;
-          setMessages(prev => prev.map(m =>
-            m.isThinking
-              ? { ...m, content: m.content + (chunk?.text || ""), isThinking: false }
-              : m
-          ));
+          setMessages(prev => {
+            let updatedMessages = [...prev];
+            let targetMessageIndex = updatedMessages.findIndex(m => m.id === currentActiveMessageRef.current);
+
+            // 思考中メッセージがあれば、そのisThinkingをfalseに設定し、refをクリア
+            if (currentThinkingMessageIdRef.current) {
+              const thinkingIndex = updatedMessages.findIndex(m => m.id === currentThinkingMessageIdRef.current);
+              if (thinkingIndex !== -1) {
+                updatedMessages[thinkingIndex] = { ...updatedMessages[thinkingIndex], isThinking: false };
+              }
+              currentThinkingMessageIdRef.current = null;
+            }
+
+            if (targetMessageIndex === -1) {
+              // If no current active message, create a new one
+              const newId = `assistant-${Date.now()}`;
+              currentActiveMessageRef.current = newId;
+              updatedMessages.push({
+                id: newId,
+                type: "bot",
+                content: chunk?.text || "",
+                timestamp: timestamp(),
+                isThinking: true, // Still thinking/streaming
+              });
+            } else {
+              // Append to existing active message
+              updatedMessages[targetMessageIndex] = {
+                ...updatedMessages[targetMessageIndex],
+                content: updatedMessages[targetMessageIndex].content + (chunk?.text || ""),
+                isThinking: true, // Still thinking/streaming
+              };
+            }
+            return updatedMessages;
+          });
           break;
         }
         case "pushMessage":
         case "messageCompleted":
         case "agentMessageFinished": {
-          const { message } = msg.params || msg; // messageCompleted/agentMessageFinished might send message directly
+          const { message } = msg.params || msg;
           if (message && message.role && message.text) {
             setMessages(prev => {
-              // If there's an ongoing thinking message, update it
-              const lastThinkingMessageIndex = prev.findLastIndex(m => m.isThinking);
-              if (lastThinkingMessageIndex !== -1) {
-                return prev.map((m, idx) =>
-                  idx === lastThinkingMessageIndex
-                    ? { ...m, content: message.text, isThinking: false, id: message.id || m.id }
-                    : m
-                );
+              let updatedMessages = [...prev];
+              let targetMessageIndex = updatedMessages.findIndex(m => m.id === currentActiveMessageRef.current);
+
+              if (targetMessageIndex !== -1) {
+                // Update the active message with final content and set isThinking to false
+                updatedMessages[targetMessageIndex] = {
+                  ...updatedMessages[targetMessageIndex],
+                  content: message.text,
+                  isThinking: false,
+                  id: message.id || updatedMessages[targetMessageIndex].id, // Update ID if provided
+                };
               } else {
-                // Otherwise, add as a new message
-                return [...prev, {
+                // If no active message, add as a new message
+                updatedMessages.push({
                   id: message.id || `msg-${Date.now()}`,
                   type: message.role === "user" ? "user" : "bot",
                   content: message.text,
                   timestamp: timestamp(),
-                }];
+                  isThinking: false,
+                });
               }
+              currentActiveMessageRef.current = null; // Clear active ref
+              currentThinkingMessageIdRef.current = null; // Clear thinking ref
+              return updatedMessages;
             });
           }
           break;
@@ -210,7 +266,7 @@ export function useChat(isOpen: boolean) {
       ws.close();
       wsRef.current = null;
     };
-  }, [isOpen, resetHistory]);
+  }, [isOpen, resetHistory, resetActiveMessageRefs]);
 
   const sendUserMessage = useCallback((text: string) => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {

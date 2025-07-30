@@ -1,0 +1,7 @@
+feat: Integrate chat.js logic into React components
+
+Refactor chat panel functionality by migrating WebSocket communication and message handling from direct DOM manipulation (chat.js) to a React-based architecture.
+
+- **`webnew/hooks/useChat.ts`**: Implemented a custom hook to manage WebSocket connection, JSON-RPC requests, and ACP method handling (pushToolCall, updateToolCall, streamAssistantThoughtChunk, streamAssistantMessageChunk, pushMessage, messageCompleted, agentMessageFinished, historyCleared, fetchHistory).
+- **`webnew/components/chat-panel.tsx`**: Updated to consume messages and send user input via the `useChat` hook. Preserved existing UI structure and styling while integrating new message types (e.g., tool call confirmations).
+- **WebSocket Connection Fix**: Corrected WebSocket connection URL in `useChat.ts` to match the server's port (3001) and protocol (ws).
