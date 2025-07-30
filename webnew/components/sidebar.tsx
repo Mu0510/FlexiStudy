@@ -1,0 +1,157 @@
+"use client"
+
+import Image from "next/image"
+import { Button } from "@/components/ui/button"
+import { Sheet, SheetContent } from "@/components/ui/sheet"
+import {
+  LayoutDashboard,
+  BookOpen,
+  BarChart3,
+  FileText,
+  Settings as SettingsIcon,
+  MessageSquare,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
+
+interface SidebarProps {
+  activeView: string
+  onViewChange: (view: string) => void
+  collapsed: boolean
+  onToggleCollapse: () => void
+  isMobileMenuOpen: boolean
+  setIsMobileMenuOpen: (isOpen: boolean) => void
+  onChatClick: () => void
+}
+
+const menuItems = [
+  { id: "dashboard", label: "ダッシュボード", icon: LayoutDashboard },
+  { id: "records", label: "学習記録", icon: BookOpen },
+  { id: "analytics", label: "グラフ分析", icon: BarChart3 },
+  { id: "exams", label: "模試分析", icon: FileText },
+  { id: "settings", label: "設定", icon: SettingsIcon },
+]
+
+// Component for the navigation links and chat button, used by both desktop and mobile sidebars
+function SidebarNavContent({ activeView, onViewChange, onChatClick, onLinkClick, collapsed = false }: any) {
+  const handleViewChange = (view: string) => {
+    onViewChange(view)
+    onLinkClick?.() // Close mobile sheet on navigation
+  }
+
+  const handleChatClick = () => {
+    onChatClick()
+    onLinkClick?.() // Close mobile sheet on chat click
+  }
+
+  return (
+    <div className={cn("flex flex-col flex-1", collapsed ? "pt-2" : "pt-0")}>
+      <nav className="flex-1 px-2 space-y-2">
+        {menuItems.map((item) => {
+          const Icon = item.icon
+          return (
+            <Button
+              key={item.id}
+              variant={activeView === item.id ? "default" : "ghost"}
+              className={cn(
+                "w-full justify-start h-12 transition-all duration-200",
+                collapsed ? "px-3 justify-center" : "px-4",
+                activeView === item.id
+                  ? "bg-gradient-to-r from-primary-800 to-primary-700 text-neutral-100 shadow-lg"
+                  : "hover:bg-neutral-200 text-neutral-800",
+              )}
+              onClick={() => handleViewChange(item.id)}
+              title={item.label} // Tooltip for collapsed view
+            >
+              <Icon className={cn("w-5 h-5", !collapsed && "mr-3")} />
+              {!collapsed && <span className="font-medium">{item.label}</span>}
+            </Button>
+          )
+        })}
+      </nav>
+
+      <div className="p-2 border-t border-neutral-200">
+        <Button
+          variant="outline"
+          className={cn(
+            "w-full justify-start h-12 border-2 border-accent-200 hover:border-accent-300 hover:bg-accent-50 text-accent-600 transition-all duration-200",
+            collapsed ? "px-3 justify-center" : "px-4",
+          )}
+          onClick={handleChatClick}
+          title="Gemini Chat" // Tooltip for collapsed view
+        >
+          <MessageSquare className={cn("w-5 h-5", !collapsed && "mr-3")} />
+          {!collapsed && <span className="font-medium">Gemini Chat</span>}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+export function Sidebar({ 
+  activeView, 
+  onViewChange, 
+  collapsed, 
+  onToggleCollapse, 
+  isMobileMenuOpen, 
+  setIsMobileMenuOpen, 
+  onChatClick 
+}: SidebarProps) {
+  return (
+    <>
+      {/* --- Desktop Sidebar --- */}
+      <aside
+        className={cn(
+          "fixed left-0 top-0 h-screen border-r border-neutral-300 transition-all duration-300 z-40 hidden lg:flex flex-col bg-neutral-100",
+          collapsed ? "w-16" : "w-64",
+        )}
+      >
+        {/* Desktop Header */}
+        <div className="p-4 border-b border-neutral-300 h-[65px]">
+            <div className="flex items-center justify-between h-full">
+              {!collapsed && (
+                <div className="flex items-center space-x-3">
+                  <Image src="/images/logo.svg" alt="FlexiStudy Logo" width={32} height={32} />
+                  <h1 className="text-xl font-bold text-slate-800">
+                    FlexiStudy
+                  </h1>
+                </div>
+              )}
+               <Button variant="ghost" size="sm" onClick={onToggleCollapse} className="p-2">
+                {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+              </Button>
+            </div>
+        </div>
+        <SidebarNavContent 
+            activeView={activeView} 
+            onViewChange={onViewChange} 
+            onChatClick={onChatClick} 
+            collapsed={collapsed}
+        />
+      </aside>
+
+      {/* --- Mobile Sidebar (Sheet) --- */}
+      <div className="lg:hidden">
+        <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
+          <SheetContent side="left" className="w-64 bg-neutral-100 p-0 flex flex-col">
+            {/* Mobile Header */}
+            <div className="p-4 border-b border-neutral-300">
+                <div className="flex items-center space-x-3">
+                    <Image src="/images/logo.svg" alt="FlexiStudy Logo" width={32} height={32} />
+                    <h1 className="text-xl font-bold text-slate-800">FlexiStudy</h1>
+                </div>
+            </div>
+            <SidebarNavContent 
+              activeView={activeView} 
+              onViewChange={onViewChange} 
+              onChatClick={onChatClick} 
+              onLinkClick={() => setIsMobileMenuOpen(false)}
+            />
+          </SheetContent>
+        </Sheet>
+      </div>
+    </>
+  )
+}
+

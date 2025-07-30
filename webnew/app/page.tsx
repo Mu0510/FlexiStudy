@@ -1,0 +1,138 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Sidebar } from "@/components/sidebar"
+import { Dashboard } from "@/components/dashboard"
+import { StudyRecords } from "@/components/study-records"
+import { Analytics } from "@/components/analytics"
+import { ExamAnalysis } from "@/components/exam-analysis"
+import { Settings } from "@/components/settings"
+import { ChatPanel } from "@/components/chat-panel"
+import { MobileHeader } from "@/components/mobile-header"
+
+export default function StudyApp() {
+  const [activeView, setActiveView] = useState("records")
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMode, setChatMode] = useState<"floating" | "sidebar" | "fullscreen">("floating")
+  const [logData, setLogData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const date = new Date();
+    return date.toISOString().split('T')[0]; // Get YYYY-MM-DD format
+  });
+
+  useEffect(() => {
+    const fetchLogData = async (date: string) => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/logs/${date}`);
+        if (!response.ok) {
+          if (response.status === 404) {
+            setLogData(null); // No data for this date
+          } else {
+            const errorData = await response.json();
+            throw new Error(errorData.details || `HTTP error! status: ${response.status}`);
+          }
+        } else {
+          const rawData = await response.json();
+          
+          // Transform the data to fit the frontend's expected structure
+          const transformedData = {
+            daily_summary: {
+              date: date, // Use the date we fetched for
+              total_duration: rawData.total_day_study_minutes,
+              subjects: rawData.subjects_studied,
+              summary: rawData.daily_summary,
+            },
+            sessions: rawData.sessions.map((session: any) => ({
+            session_id: session.session_id,
+            subject: session.subject,
+            start_time: session.session_start_time,
+            end_time: session.session_end_time,
+            total_duration: session.total_study_minutes, // Rename key
+            summary: session.summary,
+            logs: session.details.map((detail: any) => ({
+              ...detail,
+              type: detail.event_type, // Rename key
+            })),
+          })),
+          };
+          
+          setLogData(transformedData);
+        }
+      } catch (e: any) {
+        setError(e.message);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLogData(selectedDate);
+  }, [selectedDate]);
+
+  const handleDateChange = (newDate: string) => {
+    setSelectedDate(newDate);
+  };
+
+  const renderActiveView = () => {
+    // isLoading and error checks are now handled inside the specific components
+    switch (activeView) {
+      case "dashboard":
+        return <Dashboard />;
+      case "records":
+        return <StudyRecords 
+                  logData={logData} 
+                  onDateChange={handleDateChange} 
+                  selectedDate={selectedDate}
+                  isLoading={isLoading}
+                  error={error} 
+               />;
+      case "analytics":
+        return <Analytics />;
+      case "exams":
+        return <ExamAnalysis />;
+      case "settings":
+        return <Settings />;
+      default:
+        return <Dashboard />;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-neutral-100 to-neutral-300">
+      <MobileHeader
+        onMenuClick={() => setIsMobileMenuOpen(true)}
+        onChatClick={() => setChatOpen(!chatOpen)}
+      />
+
+      <div className="flex">
+        <Sidebar
+          activeView={activeView}
+          onViewChange={setActiveView}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          isMobileMenuOpen={isMobileMenuOpen}
+          setIsMobileMenuOpen={setIsMobileMenuOpen}
+          onChatClick={() => {
+            setChatOpen(true)
+            setChatMode("sidebar")
+          }}
+        />
+
+        <main
+          className={`flex-1 transition-all duration-300 p-6 pt-20 lg:pt-6 ${
+            sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
+          }`}
+        >
+          <div className="max-w-7xl mx-auto">{renderActiveView()}</div>
+        </main>
+
+        <ChatPanel isOpen={chatOpen} mode={chatMode} onClose={() => setChatOpen(false)} onModeChange={setChatMode} />
+      </div>
+    </div>
+  )
+}
