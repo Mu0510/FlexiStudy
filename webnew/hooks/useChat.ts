@@ -27,7 +27,7 @@ interface ToolCardData {
   label: string;
   command: string;
   status: 'running' | 'finished' | 'error';
-  content: any; // これは文字列、マークダウン、diffなどになります。
+  content: string; // HTMLコンテンツを保持するように変更
 }
 
 // diffレンダリングのためのヘルパー関数（chat.jsから移植）
@@ -57,6 +57,7 @@ export const useChat = () => {
   const requestIdCounter = useRef<number>(1);
   const lastSentRequestId = useRef<number | null>(null);
   const pendingToolBodies = useRef<Map<string, { status: string, content: any }>>(new Map());
+  const toolCards = useRef<Map<string, { cardElem: any, bodyElem: any }>>(new Map()); // chat.js の toolCards に対応
 
   // 履歴関連の状態
   const historyState = useRef({
@@ -90,7 +91,7 @@ export const useChat = () => {
       // 初期の履歴フェッチとUI状態の設定
       // requestHistory(true); // requestHistoryを実装する必要があります
       setIsGeneratingResponse(false);
-    };
+    }
 
     ws.current.onmessage = (event) => {
       console.log('[DEBUG] Received WebSocket message:', event.data);
@@ -172,6 +173,7 @@ export const useChat = () => {
         const { icon, label, locations } = msg.params;
         const command = locations?.[0]?.path ?? '';
 
+        // chat.js の createToolCard に相当する処理
         updateToolCardData(toolId, {
           callId: toolId,
           icon,
@@ -201,67 +203,53 @@ export const useChat = () => {
             id: msg.id,
             result: { id: toolId }
           }));
-          console.log('[DEBUG] Sent ACK for pushToolCall'); // 追加
+          console.log('[DEBUG] Sent ACK for pushToolCall');
         }
-        setActiveMessage(null); // アクティブなメッセージがあればリセット
+        setActiveMessage(null); // chat.js の resetActive() に相当
       } else if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         const { status, content } = msg.params;
 
-        // ヘッダーパッチが存在するか確認
+        // chat.js の pendingBodies ロジックを再現
+        // まだヘッダが来ていない（toolCardsDataにエントリがない）場合、一旦キャッシュ
+        if (!toolCardsData.has(toolId)) {
+          pendingToolBodies.current.set(toolId, { status, content });
+          return;
+        }
+
+        // __headerPatch が存在する場合、ヘッダー情報を更新
         if (content?.__headerPatch) {
           const { icon, label, command } = content.__headerPatch;
           updateToolCardData(toolId, { icon, label, command });
-        } else {
-          let processedContent = '';
-          if (content) {
-            if (content.type === 'markdown') {
-              processedContent = marked.parse(content.markdown); // ここでmarked.parseを適用
-            } else if (content.type === 'diff') {
-              processedContent = generateContextualDiffHtml(content.oldText, content.newText);
-            } else {
-              processedContent = JSON.stringify(content, null, 2);
-            }
-          }
+          return; // headerPatch は body ではないのでここで return
+        }
 
-          updateToolCardData(toolId, { status, content: processedContent });
-          // メインのメッセージ配列のメッセージも更新
-          setMessages(prevMessages => prevMessages.map(m =>
-            m.id === toolId ? { ...m, status, content: processedContent } : m
-          ));
-        }
-        // 保留中のボディがあれば処理
-        const pending = pendingToolBodies.current.get(toolId);
-        if (pending) {
-          // 保留中のボディが存在する場合、それはpushToolCallの前にupdateToolCallが呼び出されたことを意味します。
-          // ツールカードデータが初期化されたので、保留中の内容を適用します。
-          let processedPendingContent = '';
-          if (pending.content) {
-            if (pending.content.type === 'markdown') {
-              processedPendingContent = marked.parse(pending.content.markdown); // ここでmarked.parseを適用
-            } else if (pending.content.type === 'diff') {
-              processedPendingContent = generateContextualDiffHtml(pending.content.oldText, pending.content.newText);
-            } else {
-              processedPendingContent = JSON.stringify(pending.content, null, 2);
-            }
+        let processedContent = '';
+        if (content) {
+          if (content.type === 'markdown') {
+            processedContent = marked.parse(content.markdown);
+          } else if (content.type === 'diff') {
+            processedContent = generateContextualDiffHtml(content.oldText, content.newText);
+          } else {
+            processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
           }
-          updateToolCardData(toolId, { status: pending.status, content: processedPendingContent });
-          setMessages(prevMessages => prevMessages.map(m =>
-            m.id === toolId ? { ...m, status: pending.status, content: processedPendingContent } : m
-          ));
-          pendingToolBodies.current.delete(toolId);
         }
-      } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
+
+        updateToolCardData(toolId, { status, content: processedContent });
+        // メインのメッセージ配列のメッセージも更新
+        setMessages(prevMessages => prevMessages.map(m =>
+          m.id === toolId ? { ...m, status, content: processedContent } : m
+        ));
+
+        // chat.js の resetActive() に相当
+        if (status === 'finished') {
+          setActiveMessage(null);
+        } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         let textContent = msg.params.chunk.text;
 
         // タイプが'diff'の場合のdiffカラーリングを処理
         if (msg.params.chunk.type === 'diff') {
-          // この部分は完全なdiffライブラリがないと難しいです。
-          // chat.jsはspanタグでinnerHTMLを直接操作しています。
-          // Reactでは、通常、生のdiffを渡し、コンポーネントがそれをレンダリングします。
-          // 今のところ、生のテキストを追加するだけです。
-          // 適切な解決策は、diffをパースし、Reactコンポーネントでレンダリングすることです。
           textContent = textContent.split('\n').map((line: string) => {
             if (line.startsWith('+')) {
               return `<span class="add">${line}</span>`;
@@ -292,6 +280,11 @@ export const useChat = () => {
           const newMessages = msg.result.messages.filter((m: any) => !historyState.current.loadedIds.has(m.id));
 
           if (newMessages.length > 0) {
+            // chat.js のスクロール位置保持ロジックを再現
+            // messagesContainerRef は useChat の外にあるため、ここでは直接操作できない。
+            // そのため、スクロール位置の調整は new-chat-panel.tsx 側で行う必要がある。
+            // ここでは、メッセージの追加と oldestTs の更新のみを行う。
+
             // 必要に応じてタイムスタンプでメッセージをソート（chat.jsは古い順を仮定）
             newMessages.sort((a: any, b: any) => a.ts - b.ts);
 
@@ -299,6 +292,23 @@ export const useChat = () => {
               const updatedMessages = [...newMessages.map((m: any) => {
                 // 履歴メッセージ形式をMessageインターフェースに変換
                 if (m.type === 'tool') {
+                  // chat.js の renderMessages 関数内のツールカード生成ロジックを再現
+                  let processedContent = '';
+                  if (m.params?.content) {
+                    const content = m.params.content;
+                    if (content.type === 'markdown' && content.markdown) {
+                      processedContent = marked.parse(content.markdown);
+                    } else if (content.type === 'diff') {
+                      processedContent = generateContextualDiffHtml(content.oldText, content.newText);
+                    } else if (typeof content === 'string') {
+                      processedContent = `<pre>${content}</pre>`;
+                    } else {
+                      processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                    }
+                  } else {
+                    processedContent = '<span style="color:gray">（内容なし）</span>';
+                  }
+
                   return {
                     id: m.id,
                     role: 'tool',
@@ -308,7 +318,7 @@ export const useChat = () => {
                     label: m.params.label,
                     command: m.params.confirmation?.command || m.params.locations?.[0]?.path || '',
                     status: m.params.status || 'finished', // 履歴からの場合は完了と仮定
-                    content: m.params.content ? (marked.parse(m.params.content.markdown || m.params.content.text) || JSON.stringify(m.params.content)) : '',
+                    content: processedContent, // marked.parse 済み
                   };
                 } else {
                   return {

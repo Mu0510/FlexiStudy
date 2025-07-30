@@ -70,6 +70,26 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
     scrollBottom();
   }, [messages, activeMessage, scrollBottom]);
 
+  // 履歴読み込み時のスクロール位置維持
+  const prevMessagesLength = useRef(messages.length);
+  useEffect(() => {
+    if (messages.length > prevMessagesLength.current) {
+      // メッセージが追加された場合（特に履歴読み込み時）
+      const container = messagesContainerRef.current;
+      if (container) {
+        const newScrollTop = container.scrollTop + (container.scrollHeight - container.clientHeight);
+        // requestAnimationFrame を2回ネストしてDOM更新後に実行
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            container.scrollTop = newScrollTop;
+          });
+        });
+      }
+    }
+    prevMessagesLength.current = messages.length;
+  }, [messages]);
+
+
   // Initial history load and scroll to bottom
   useEffect(() => {
     if (isOpen) {
@@ -123,8 +143,9 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
               <Card key={msg.id} className={cn(
                 "tool-card bg-gray-800 text-white rounded-lg p-3 shadow-md",
                 "w-11/12 mx-auto my-1 mb-3",
-                toolCard.status === "finished" && "border-l-4 border-green-500",
-                toolCard.status === "error" && "border-l-4 border-red-500"
+                toolCard.status === "running" && "tool-card--running", // running クラスを追加
+                toolCard.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
+                toolCard.status === "error" && "tool-card--error border-l-4 border-red-500" // error クラスとボーダー
               )}>
                 <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
                   <div className="flex items-center space-x-2">
@@ -135,6 +156,11 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
                       {toolCard.label || "Tool Call"}
                     </CardTitle>
                   </div>
+                  {/* chat.js の tool-card__line-break と tool-card__command に相当 */}
+                  <div className="tool-card__line-break"></div>
+                  <code className="tool-card__command text-xs text-gray-600">
+                    {getRelativePath(toolCard.command)}
+                  </code>
                   <div className="tool-card__status-indicator">
                     {toolCard.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
                     {toolCard.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
