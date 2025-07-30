@@ -8,6 +8,7 @@ import { Analytics } from "@/components/analytics"
 import { ExamAnalysis } from "@/components/exam-analysis"
 import { Settings } from "@/components/settings"
 import { ChatPanel } from "@/components/chat-panel"
+import { NewChatPanel } from "@/components/new-chat-panel"
 import { MobileHeader } from "@/components/mobile-header"
 
 export default function StudyApp() {
@@ -15,6 +16,7 @@ export default function StudyApp() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [isNewChatOpen, setIsNewChatOpen] = useState(false)
   const [chatMode, setChatMode] = useState<"floating" | "sidebar" | "fullscreen">("floating")
   const [logData, setLogData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -121,6 +123,7 @@ export default function StudyApp() {
             setChatOpen(true)
             setChatMode("sidebar")
           }}
+          onNewChatClick={() => setIsNewChatOpen(true)}
         />
 
         <main
@@ -132,6 +135,7 @@ export default function StudyApp() {
         </main>
 
         <ChatPanel isOpen={chatOpen} mode={chatMode} onClose={() => setChatOpen(false)} onModeChange={setChatMode} />
+        <NewChatPanel isOpen={isNewChatOpen} onClose={() => setIsNewChatOpen(false)} />
       </div>
     </div>
   )
