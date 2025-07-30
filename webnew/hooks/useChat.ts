@@ -1,29 +1,23 @@
-
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 export interface ChatMessage {
   id: string;
   type: 'user' | 'bot' | 'tool';
-  content: string;
+  content: string; // For user/bot messages, or initial content for tool messages
   timestamp: string;
-  isThinking?: boolean;
+  isThinking?: boolean; // For bot messages during generation
+  
   // For tool messages
-  toolName?: string;
   toolCallId?: string;
   icon?: string;
   label?: string;
   command?: string;
   status?: 'running' | 'finished' | 'error';
-  toolBody?: string; // For tool output
+  toolBody?: string; // For tool output (can be HTML string for diffs/preformatted text)
   toolCallConfirmationId?: string;
   toolCallConfirmationMessage?: string;
   toolCallConfirmationButtons?: { label: string; value: string }[];
-}
-
-interface ToolCardEntry {
-  cardElem: HTMLElement; // Not directly used in React, but conceptually represents the tool card
-  bodyElem: HTMLElement; // Conceptually represents the body of the tool card
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -50,11 +44,27 @@ function getToolIconText(iconName?: string) {
   }
 }
 
-// Simple diff HTML generation (simplified from chat.js)
-function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3) {
-  // This is a placeholder. A proper diff library would be needed for full functionality.
-  // For now, just show old and new text.
-  return `<pre class="diff-old">${oldText}</pre><pre class="diff-new">${newText}</pre>`;
+// Simplified generateContextualDiffHtml for now. A proper diff library would be needed.
+function generateContextualDiffHtml(oldText: string, newText: string) {
+  // This is a placeholder. In a real scenario, you'd use a library like `diff-match-patch`.
+  // For now, we'll just show a basic representation.
+  const linesOld = oldText.split('\n');
+  const linesNew = newText.split('\n');
+
+  let html = '';
+  // Simple line-by-line comparison for demonstration
+  for (let i = 0; i < Math.max(linesOld.length, linesNew.length); i++) {
+    const oldLine = linesOld[i] || '';
+    const newLine = linesNew[i] || '';
+
+    if (oldLine === newLine) {
+      html += `<span class="diff-context">${oldLine}</span>\n`;
+    } else {
+      if (oldLine) html += `<span class="diff-del">- ${oldLine}</span>\n`;
+      if (newLine) html += `<span class="diff-add">+ ${newLine}</span>\n`;
+    }
+  }
+  return `<pre>${html}</pre>`;
 }
 
 export const useChat = (isOpen: boolean) => {
@@ -62,10 +72,16 @@ export const useChat = (isOpen: boolean) => {
   const ws = useRef<WebSocket | null>(null);
   const requestId = useRef(1);
   const lastSentRequestId = useRef<number | null>(null);
-  const activeAssistantMessage = useRef<ChatMessage | null>(null);
   const isGeneratingResponse = useRef(false);
-  const toolCards = useRef<Map<string, ToolCardEntry>>(new Map());
-  const pendingBodies = useRef<Map<string, { status: string; content: any }>>(new Map());
+
+  // Mimic chat.js's active/typing bubble state
+  const activeAssistantMessageId = useRef<string | null>(null);
+
+  // Mimic chat.js's toolCards and pendingBodies for tool output streaming
+  const toolCardOutputs = useRef<Map<string, string>>(new Map()); // toolCallId -> accumulated output
+  const pendingToolCardUpdates = useRef<Map<string, any>>(new Map()); // toolCallId -> {status, content}
+
+  // History management
   const oldestTs = useRef<number | null>(null);
   const finishedHistory = useRef(false);
   const isFetchingHistory = useRef(false);
@@ -89,9 +105,13 @@ export const useChat = (isOpen: boolean) => {
   }, []);
 
   const resetActiveAssistantMessage = useCallback(() => {
-    activeAssistantMessage.current = null;
-    setMessages(prevMessages => prevMessages.filter(msg => msg.id !== 'thinking-bubble'));
-  }, []);
+    if (activeAssistantMessageId.current) {
+      updateMessage(activeAssistantMessageId.current, { isThinking: false }); // Ensure thinking state is off
+      activeAssistantMessageId.current = null;
+    }
+    // Remove the thinking bubble if it's still there and not a full message
+    setMessages(prevMessages => prevMessages.filter(msg => msg.id !== 'thinking-bubble' || !msg.isThinking));
+  }, [updateMessage]);
 
   const sendUserMessage = useCallback((text: string) => {
     if (isGeneratingResponse.current) return;
@@ -104,16 +124,17 @@ export const useChat = (isOpen: boolean) => {
     };
     appendMessage(userMessage);
 
-    // Create a thinking bubble immediately
+    // Create a thinking bubble immediately, similar to chat.js
+    const thinkingBubbleId = 'thinking-bubble';
     const thinkingBubble: ChatMessage = {
-      id: 'thinking-bubble',
+      id: thinkingBubbleId,
       type: 'bot',
       content: '…思考中…',
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       isThinking: true,
     };
     appendMessage(thinkingBubble);
-    activeAssistantMessage.current = thinkingBubble;
+    activeAssistantMessageId.current = thinkingBubbleId;
 
     isGeneratingResponse.current = true;
 
@@ -199,42 +220,53 @@ export const useChat = (isOpen: boolean) => {
 
         console.log('[DEBUG] Received WebSocket message:', msg);
 
+        // --- Message Handling Logic (mimicking chat.js) ---
+
         if (msg.method === 'streamAssistantThoughtChunk') {
           const thoughtContent = msg.params.thought.trim();
-          if (!activeAssistantMessage.current) {
-            activeAssistantMessage.current = {
-              id: 'thinking-bubble',
+          if (!activeAssistantMessageId.current) {
+            // If no active message, create a new thinking bubble
+            const newThinkingBubbleId = 'thinking-bubble';
+            appendMessage({
+              id: newThinkingBubbleId,
               type: 'bot',
               content: '',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
               isThinking: true,
-            };
-            appendMessage(activeAssistantMessage.current);
+            });
+            activeAssistantMessageId.current = newThinkingBubbleId;
           }
-          updateMessage(activeAssistantMessage.current.id, { content: thoughtContent, isThinking: true });
+          updateMessage(activeAssistantMessageId.current!, { content: thoughtContent, isThinking: true });
         } else if (msg.method === 'streamAssistantMessageChunk') {
           const chunk = msg.params.chunk;
-          if (!activeAssistantMessage.current) {
-            activeAssistantMessage.current = {
-              id: `bot-${Date.now()}`, // Assign a unique ID for the actual message
+          if (!activeAssistantMessageId.current) {
+            // If no active message, create a new bot message
+            const newBotMessageId = `bot-${Date.now()}`;
+            appendMessage({
+              id: newBotMessageId,
               type: 'bot',
               content: '',
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            };
-            appendMessage(activeAssistantMessage.current);
+            });
+            activeAssistantMessageId.current = newBotMessageId;
           }
-          // Ensure it's no longer a thinking bubble
-          updateMessage(activeAssistantMessage.current.id, {
-            isThinking: false,
-            content: (activeAssistantMessage.current.content || '') + chunk.text,
-          });
+          // Append chunk to the active message's content
+          setMessages(prevMessages =>
+            prevMessages.map(m => {
+              if (m.id === activeAssistantMessageId.current) {
+                return { ...m, content: (m.content || '') + chunk.text, isThinking: false };
+              }
+              return m;
+            })
+          );
 
           if (msg.id !== undefined) {
             ws.current?.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
           }
         } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-          if (activeAssistantMessage.current) {
-            updateMessage(activeAssistantMessage.current.id, { isThinking: false });
+          // Finalize the active assistant message
+          if (activeAssistantMessageId.current) {
+            updateMessage(activeAssistantMessageId.current, { isThinking: false });
           }
           isGeneratingResponse.current = false;
           resetActiveAssistantMessage();
@@ -246,7 +278,6 @@ export const useChat = (isOpen: boolean) => {
           const toolMessage: ChatMessage = {
             id: toolCallId,
             type: 'tool',
-            toolName: label,
             toolCallId: toolCallId,
             icon: icon,
             label: label,
@@ -257,9 +288,17 @@ export const useChat = (isOpen: boolean) => {
             toolCallConfirmationId: confirmation ? toolCallId : undefined,
             toolCallConfirmationMessage: confirmation ? confirmation.message : undefined,
             toolCallConfirmationButtons: confirmation ? confirmation.buttons : undefined,
+            toolBody: '', // Initialize toolBody
           };
           appendMessage(toolMessage);
           resetActiveAssistantMessage(); // Clear thinking bubble
+
+          // Check for pending body updates for this toolCallId
+          if (pendingToolCardUpdates.current.has(toolCallId)) {
+            const pending = pendingToolCardUpdates.current.get(toolCallId);
+            updateMessage(toolCallId, { status: pending.status, toolBody: pending.content });
+            pendingToolCardUpdates.current.delete(toolCallId);
+          }
 
           // Agent へ ACK を返す
           ws.current?.send(JSON.stringify({
@@ -284,18 +323,24 @@ export const useChat = (isOpen: boolean) => {
             }
           }
 
-          updateMessage(toolCallId, {
-            status: status,
-            toolBody: toolBodyContent,
-            // Handle header patch if it comes later
-            toolName: content?.__headerPatch?.label || undefined,
-            icon: content?.__headerPatch?.icon || undefined,
-            command: content?.__headerPatch?.command ? getRelativePath(content.__headerPatch.command) : undefined,
-          });
+          // If pushToolCall hasn't arrived yet, store as pending
+          if (!messages.some(m => m.id === toolCallId)) {
+            pendingToolCardUpdates.current.set(toolCallId, { status, content: toolBodyContent });
+          } else {
+            updateMessage(toolCallId, {
+              status: status,
+              toolBody: toolBodyContent,
+              // Handle header patch if it comes later (though this logic might need refinement)
+              label: content?.__headerPatch?.label || undefined,
+              icon: content?.__headerPatch?.icon || undefined,
+              command: content?.__headerPatch?.command ? getRelativePath(content.__headerPatch.command) : undefined,
+            });
+          }
         } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
           const toolCallId = msg.params.callId ?? msg.params.toolCallId;
           const textContent = msg.params.chunk.text;
 
+          // Append chunk to the toolBody of the corresponding tool message
           setMessages(prevMessages =>
             prevMessages.map(m => {
               if (m.id === toolCallId && m.type === 'tool') {
@@ -308,6 +353,7 @@ export const useChat = (isOpen: boolean) => {
             })
           );
         } else if (msg.method === 'pushMessage') {
+          // This is a final assistant message after tool execution
           const assistantMessage: ChatMessage = {
             id: `bot-${Date.now()}`,
             type: 'bot',
@@ -333,7 +379,6 @@ export const useChat = (isOpen: boolean) => {
                   chatMsg = {
                     id: m.id,
                     type: 'tool',
-                    toolName: m.params.label,
                     toolCallId: m.id,
                     icon: m.params.icon,
                     label: m.params.label,
@@ -342,6 +387,9 @@ export const useChat = (isOpen: boolean) => {
                     content: m.params.content?.markdown || m.params.content?.text || JSON.stringify(m.params.content) || '',
                     toolBody: m.params.content ? (m.params.content.type === 'markdown' ? m.params.content.markdown : (m.params.content.type === 'diff' ? generateContextualDiffHtml(m.params.content.oldText, m.params.content.newText) : JSON.stringify(m.params.content))) : '',
                     timestamp: new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    toolCallConfirmationId: m.params.confirmation ? m.id : undefined,
+                    toolCallConfirmationMessage: m.params.confirmation ? m.params.confirmation.message : undefined,
+                    toolCallConfirmationButtons: m.params.confirmation ? m.params.confirmation.buttons : undefined,
                   };
                 } else {
                   chatMsg = {
