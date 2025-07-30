@@ -200,7 +200,7 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
             </div>
           </div>
         )}
-        <div ref={messagesEndRef} />
+        {/* <div ref={messagesEndRef} /> を削除 */}
       </div>
 
       <div className="flex-shrink-0 p-4 border-t">

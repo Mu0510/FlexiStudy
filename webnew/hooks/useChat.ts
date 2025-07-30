@@ -1,5 +1,6 @@
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { marked } from 'marked'; // markedをインポート
 
 interface Message {
   id: string;
@@ -40,7 +41,10 @@ interface ToolCardData {
 function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): string {
   // プレースホルダーの実装 - これは実際のdiffロジックに置き換える必要があります
   // 今のところ、古いテキストと新しいテキストを表示するだけです
-  return `<pre>--- Old Text ---\n${oldText}\n--- New Text ---\n${newText}</pre>`;
+  return `<pre>--- Old Text ---
+${oldText}
+--- New Text ---
+${newText}</pre>`;
 }
 
 export const useChat = () => {
@@ -104,21 +108,26 @@ export const useChat = () => {
         setActiveMessage(prev => ({
           id: prev?.id || `thought-${Date.now()}`, // アクティブでない場合は新しいIDを生成
           type: 'thought',
-          content: thought,
+          content: marked.parse(thought.trim()), // ここでmarked.parseを適用
         }));
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
-        setActiveMessage(prev => {
-          const currentContent = prev?.content || '';
-          return {
-            id: prev?.id || `assistant-${Date.now()}`, // アクティブでない場合は新しいIDを生成
-            type: 'assistant',
-            content: currentContent + chunk.text.replace(/^\n+/, ''),
-          };
-        });
+        // chunk.textが存在するかどうかを確認
+        if (chunk?.text !== undefined) { // ここを修正
+          setActiveMessage(prev => {
+            const currentContent = prev?.content || '';
+            const newContent = currentContent + chunk.text.replace(/^\n+/, '');
+            return {
+              id: prev?.id || `assistant-${Date.now()}`, // アクティブでない場合は新しいIDを生成
+              type: 'assistant',
+              content: marked.parse(newContent.trimEnd()), // ここでmarked.parseを適用
+            };
+          });
+        }
         // msg.idが存在する場合はACK
         if (msg.id !== undefined && ws.current) {
           ws.current.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
+          console.log('[DEBUG] Sent ACK for streamAssistantMessageChunk'); // 追加
         }
       } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
         if (activeMessage) {
@@ -174,6 +183,7 @@ export const useChat = () => {
             id: msg.id,
             result: { id: toolId }
           }));
+          console.log('[DEBUG] Sent ACK for pushToolCall'); // 追加
         }
         setActiveMessage(null); // アクティブなメッセージがあればリセット
       } else if (msg.method === 'updateToolCall') {
@@ -188,7 +198,7 @@ export const useChat = () => {
           let processedContent = '';
           if (content) {
             if (content.type === 'markdown') {
-              processedContent = content.markdown; // Marked.parseはレンダリングコンポーネントで行われます
+              processedContent = marked.parse(content.markdown); // ここでmarked.parseを適用
             } else if (content.type === 'diff') {
               processedContent = generateContextualDiffHtml(content.oldText, content.newText);
             } else {
@@ -210,7 +220,7 @@ export const useChat = () => {
           let processedPendingContent = '';
           if (pending.content) {
             if (pending.content.type === 'markdown') {
-              processedPendingContent = pending.content.markdown;
+              processedPendingContent = marked.parse(pending.content.markdown); // ここでmarked.parseを適用
             } else if (pending.content.type === 'diff') {
               processedPendingContent = generateContextualDiffHtml(pending.content.oldText, pending.content.newText);
             } else {
@@ -280,13 +290,13 @@ export const useChat = () => {
                     label: m.params.label,
                     command: m.params.confirmation?.command || m.params.locations?.[0]?.path || '',
                     status: m.params.status || 'finished', // 履歴からの場合は完了と仮定
-                    content: m.params.content ? (m.params.content.markdown || m.params.content.text || JSON.stringify(m.params.content)) : '',
+                    content: m.params.content ? (marked.parse(m.params.content.markdown || m.params.content.text) || JSON.stringify(m.params.content)) : '',
                   };
                 } else {
                   return {
                     id: m.id,
                     role: m.role === 'user' ? 'user' : 'assistant',
-                    content: m.text,
+                    content: marked.parse(m.text), // ここでmarked.parseを適用
                   };
                 }
               }), ...prev];
@@ -316,7 +326,7 @@ export const useChat = () => {
     return () => {
       ws.current?.close();
     };
-  }, [activeMessage, updateToolCardData]); // 依存関係にactiveMessageとupdateToolCardDataを追加
+  }, [updateToolCardData]); // 依存関係からactiveMessageを削除
 
   // ユーザーメッセージを送信する関数
   const sendMessage = useCallback((text: string) => {
@@ -336,6 +346,7 @@ export const useChat = () => {
       params: { chunks: [{ text }] }
     };
     ws.current.send(JSON.stringify(req));
+    console.log('[DEBUG] Sent sendUserMessage'); // 追加
   }, [isGeneratingResponse]);
 
   // 履歴を要求する関数
@@ -356,6 +367,7 @@ export const useChat = () => {
         method: 'fetchHistory',
         params: { limit: limit, before: historyState.current.oldestTs }
       }));
+      console.log('[DEBUG] Sent fetchHistory request'); // 追加
     }
   }, []);
 
