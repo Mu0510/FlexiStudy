@@ -1,12 +1,15 @@
+// webnew/components/chat-panel.tsx
 "use client"
 
 import { useState, useEffect, useRef } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { CardHeader, CardTitle } from "@/components/ui/card"
-import { X, Maximize2, Minimize2, Send, Bot, User, Code, Database, BarChart3, Settings } from "lucide-react"
+import { CardHeader, CardTitle, Card, CardContent } from "@/components/ui/card"
+import { X, Maximize2, Minimize2, Send, Bot, User, Code, Database, BarChart3, Settings, CheckCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useChat, ChatMessage } from "@/hooks/useChat"; // Import useChat and ChatMessage
+import { Textarea } from "@/components/ui/textarea";
 
 interface ChatPanelProps {
   isOpen: boolean
@@ -15,197 +18,11 @@ interface ChatPanelProps {
   onModeChange: (mode: "floating" | "sidebar" | "fullscreen") => void
 }
 
-interface ChatMessage {
-  id: number | string;
-  type: "user" | "bot" | "tool";
-  content: string;
-  timestamp: string;
-  // tool-specific properties
-  icon?: string;
-  label?: string;
-  command?: string;
-  status?: "running" | "finished" | "error";
-  isThinking?: boolean; // 新しく追加
-}
-
 export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProps) {
-  const [message, setMessage] = useState("")
-  const [messages, setMessages] = useState<ChatMessage[]>([])
-  const [isThinkingMessageId, setIsThinkingMessageId] = useState<string | number | null>(null);
-  const ws = useRef<WebSocket | null>(null)
-  const requestId = useRef(1)
+  const [input, setInput] = useState("")
+  const { messages, sendUserMessage, sendToolCallConfirmation } = useChat(isOpen); // Use the custom hook
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      if (ws.current) {
-        ws.current.close()
-        ws.current = null
-      }
-      return
-    }
-
-    if (!ws.current) {
-      ws.current = new WebSocket(`ws://${location.host.split(':')[0]}:3001/ws`)
-
-      ws.current.onopen = () => {
-        console.log("WebSocket connected")
-        ws.current?.send(JSON.stringify({
-          jsonrpc: "2.0",
-          id: requestId.current++,
-          method: "fetchHistory",
-          params: { limit: 30 }
-        }))
-      }
-
-      ws.current.onmessage = (event) => {
-        const msg = JSON.parse(event.data)
-        console.log("Received:", msg)
-
-        if (msg.method === "streamAssistantThoughtChunk") {
-          setMessages((prevMessages) => {
-            if (isThinkingMessageId) {
-              // 既存の思考中メッセージを更新
-              return prevMessages.map((m) =>
-                m.id === isThinkingMessageId
-                  ? { ...m, content: msg.params.thought || "...思考中...", isThinking: true }
-                  : m
-              );
-            } else {
-              // 新しい思考中メッセージとして追加
-              const newId = Date.now();
-              setIsThinkingMessageId(newId);
-              return [
-                ...prevMessages,
-                {
-                  id: newId,
-                  type: "bot",
-                  content: msg.params.thought || "...思考中...",
-                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                  isThinking: true,
-                },
-              ];
-            }
-          });
-        } else if (msg.method === "streamAssistantMessageChunk") {
-          setMessages((prevMessages) => {
-            if (isThinkingMessageId) {
-              // 既存の思考中メッセージを更新し、思考中フラグを解除
-              return prevMessages.map((m) =>
-                m.id === isThinkingMessageId
-                  ? { ...m, content: m.content + (msg.params.chunk.text || ""), isThinking: false }
-                  : m
-              );
-            } else {
-              // 新しいメッセージとして追加 (思考中メッセージがなかった場合)
-              return [
-                ...prevMessages,
-                {
-                  id: Date.now(),
-                  type: "bot",
-                  content: msg.params.chunk.text || "",
-                  timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                  isThinking: false,
-                },
-              ];
-            }
-          });
-        } else if (msg.method === "addMessage") {
-          setMessages((prevMessages) => {
-            let updatedMessages = prevMessages;
-            if (isThinkingMessageId) {
-              // 思考中メッセージを削除
-              updatedMessages = prevMessages.filter((m) => m.id !== isThinkingMessageId);
-              setIsThinkingMessageId(null); // 思考中メッセージIDをリセット
-            }
-
-            // 新しいメッセージを追加
-            return [
-              ...updatedMessages,
-              {
-                id: msg.params.message.id,
-                type: msg.params.message.role === "user" ? "user" : "bot",
-                content: msg.params.message.text,
-                timestamp: new Date(msg.params.message.ts).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                status: "finished",
-                isThinking: false,
-              },
-            ];
-          });
-        } else if (msg.method === "pushToolCall") {
-          setMessages((prevMessages) => {
-            let updatedMessages = prevMessages;
-            if (isThinkingMessageId) {
-              // 思考中メッセージを削除
-              updatedMessages = prevMessages.filter((m) => m.id !== isThinkingMessageId);
-              setIsThinkingMessageId(null); // 思考中メッセージIDをリセット
-            }
-
-            return [
-              ...updatedMessages,
-              {
-                id: msg.params.toolCallId || msg.id,
-                type: "tool",
-                content: "",
-                timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-                icon: msg.params.icon,
-                label: msg.params.label,
-                command: msg.params.locations?.[0]?.path || "",
-                status: "running",
-              },
-            ];
-          });
-          ws.current?.send(JSON.stringify({
-            jsonrpc: "2.0",
-            id: msg.id,
-            result: { id: msg.params.toolCallId || msg.id }
-          }))
-        } else if (msg.method === "updateToolCall") {
-          setMessages((prevMessages) =>
-            prevMessages.map((m) =>
-              m.id === (msg.params.toolCallId || msg.params.callId)
-                ? {
-                    ...m,
-                    content: msg.params.content?.markdown || JSON.stringify(msg.params.content, null, 2),
-                    status: msg.params.status,
-                  }
-                : m
-            )
-          )
-        } else if (msg.method === "historyCleared") {
-          setMessages([]);
-        } else if (msg.result && msg.result.messages) {
-          const historyMessages = msg.result.messages.map((m: any) => ({
-            id: m.id,
-            type: m.role === "user" ? "user" : m.type === "tool" ? "tool" : "bot",
-            content: m.text || m.content?.markdown || JSON.stringify(m.content, null, 2),
-            timestamp: new Date(m.ts).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
-            icon: m.type === "tool" ? m.params.icon : undefined,
-            label: m.type === "tool" ? m.params.label : undefined,
-            command: m.type === "tool" ? m.params.locations?.[0]?.path || "" : undefined,
-            status: m.type === "tool" ? m.params.status : "finished",
-            isThinking: false,
-          }));
-          setMessages((prevMessages) => [...historyMessages, ...prevMessages]);
-        }
-      }
-
-      ws.current.onclose = () => {
-        console.log("WebSocket disconnected")
-      }
-
-      ws.current.onerror = (error) => {
-        console.error("WebSocket error:", error)
-      }
-    }
-
-    return () => {
-      if (ws.current) {
-        ws.current.close()
-        ws.current = null
-      }
-    }
-  }, [isOpen])
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -219,26 +36,20 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
   ]
 
   const handleSendMessage = () => {
-    if (!message.trim() || !ws.current) return
-
-    const userMessage: ChatMessage = {
-      id: Date.now(),
-      type: "user",
-      content: message,
-      timestamp: new Date().toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }),
+    if (!input.trim()) return
+    sendUserMessage(input); // Use sendUserMessage from the hook
+    setInput("")
+    if (chatInputRef.current) {
+      chatInputRef.current.focus();
     }
-    setMessages((prevMessages) => [...prevMessages, userMessage])
-
-    ws.current.send(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        id: requestId.current++,
-        method: "sendUserMessage",
-        params: { chunks: [{ text: message }] },
-      })
-    )
-    setMessage("")
   }
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   if (!isOpen) return null
 
@@ -330,25 +141,57 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
           {messages.map((msg) => (
             <div key={msg.id}>
               {msg.type === "tool" ? (
-                <div className={cn(
+                <Card className={cn(
                   "tool-card bg-gray-800 text-white rounded-lg p-3 shadow-md",
                   "w-11/12 mx-auto my-1 mb-3",
                   msg.status === "finished" && "border-l-4 border-green-500",
                   msg.status === "error" && "border-l-4 border-red-500"
                 )}>
-                  <div className="tool-card__header flex items-center gap-2 font-semibold text-sm mb-1">
-                    <span className="tool-card__icon-text text-xs border border-gray-500 rounded px-1 py-0.5">
-                      {getToolIconText(msg.icon)}
-                    </span>
-                    <span className="tool-card__title flex-grow">{msg.label}</span>
-                    <code className="tool-card__command text-gray-400 text-xs">
-                      {getRelativePath(msg.command)}
-                    </code>
-                  </div>
-                  <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-900 p-2 rounded">
-                    {msg.content}
-                  </pre>
-                </div>
+                  <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
+                    <div className="flex items-center space-x-2">
+                      <span className="tool-card__icon-text text-xs border border-gray-500 rounded px-1 py-0.5">
+                        {getToolIconText(msg.icon)}
+                      </span>
+                      <CardTitle className="tool-card__title text-sm font-medium text-gray-800">
+                        {msg.toolName || msg.label || "Tool Call"}
+                      </CardTitle>
+                    </div>
+                    <div className="tool-card__status-indicator">
+                      {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                      {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+                      {msg.status === "running" && (
+                        <span className="relative flex h-3 w-3">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                          <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+                        </span>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-0 text-sm text-gray-700">
+                    {msg.toolCallConfirmationId ? (
+                      <div className="space-y-2">
+                        <p>{msg.toolCallConfirmationMessage}</p>
+                        <div className="flex flex-wrap gap-2">
+                          {msg.toolCallConfirmationButtons?.map((button) => (
+                            <Button
+                              key={button.value}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => sendToolCallConfirmation(msg.toolCallConfirmationId!, button.value)}
+                              disabled={msg.status !== "running"} // Disable buttons if not running (i.e., already confirmed)
+                            >
+                              {button.label}
+                            </Button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-900 p-2 rounded">
+                        <div dangerouslySetInnerHTML={{ __html: msg.toolBody || msg.content }} />
+                      </pre>
+                    )}
+                  </CardContent>
+                </Card>
               ) : (
                 <div className={cn("flex space-x-3", msg.type === "user" ? "justify-end" : "justify-start")}>
                   {msg.type === "bot" && (
@@ -385,12 +228,14 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
         {/* Input */}
         <div className="flex-shrink-0 p-4 border-t bg-white">
           <div className="flex space-x-2">
-            <Input
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+            <Textarea
+              ref={chatInputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
               placeholder="メッセージを入力..."
-              className="flex-1"
-              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+              className="flex-1 resize-none"
+              rows={1}
             />
             <Button
               onClick={handleSendMessage}
