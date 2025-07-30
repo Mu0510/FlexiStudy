@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import React, { useState } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -82,10 +82,12 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
   };
 
-  const handleDateChange = (direction: 'prev' | 'next') => {
+  const handleDateChange = (direction: 'prev' | 'next', e: React.MouseEvent<HTMLButtonElement>) => {
+    const button = e.currentTarget;
     const currentDate = new Date(selectedDate);
     currentDate.setDate(currentDate.getDate() + (direction === 'prev' ? -1 : 1));
     onDateChange(currentDate.toISOString().split('T')[0]);
+    setTimeout(() => button.blur(), 0);
   };
 
   const handleDateSelect = (date: Date | undefined) => {
@@ -100,10 +102,20 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+    const options: Intl.DateTimeFormatOptions = {
+      year: isMobile ? undefined : 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long',
+    };
     const formattedDate = new Intl.DateTimeFormat('ja-JP', options).format(date);
-    // "2025年7月20日日曜日" -> "2025年 7月20日 日曜日"
-    return formattedDate.replace(/(\d+)年(\d+)月(\d+)日(.*)/, '$1年 $2月$3日 $4');
+    // "2025年7月20日日曜日" -> "2025年 7月20日 日曜日" or "7月20日 日曜日"
+    return formattedDate.replace(/(\d+年)?\s?(\d+)月(\d+)日(.*)/, (match, p1, p2, p3, p4) => {
+      if (p1) { // year is present
+        return `${p1} ${p2}月${p3}日 ${p4}`;
+      }
+      return `${p2}月${p3}日 ${p4}`;
+    });
   }
 
   const formatDuration = (minutes: number) => {
@@ -252,7 +264,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
       <Card className="border-0 shadow-lg">
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={() => handleDateChange('prev')} disabled={isLoading}>
+            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('prev', e)} disabled={isLoading}>
               <ChevronLeft className="w-4 h-4 mr-1" />
               前日
             </Button>
@@ -282,28 +294,28 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   <>
                     <div className="flex items-center space-x-2">
                       <Clock className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm text-slate-600">総学習時間: {formatDuration(logData.daily_summary.total_duration)}</span>
+                      <span className="text-sm text-slate-600">{!isMobile && '総学習時間: '}{formatDuration(logData.daily_summary.total_duration)}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <BookOpen className="w-4 h-4 text-green-600" />
-                      <span className="text-sm text-slate-600">セッション数: {logData.sessions.length}</span>
+                      <span className="text-sm text-slate-600">{!isMobile && 'セッション数: '}{logData.sessions.length}</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="flex items-center space-x-2">
                       <Clock className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-500">総学習時間: --</span>
+                      <span className="text-sm text-slate-500">{!isMobile && '総学習時間: '}--</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <BookOpen className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-500">セッション数: --</span>
+                      <span className="text-sm text-slate-500">{!isMobile && 'セッション数: '}--</span>
                     </div>
                   </>
                 )}
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={() => handleDateChange('next')} disabled={isLoading}>
+            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('next', e)} disabled={isLoading}>
               翌日
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
