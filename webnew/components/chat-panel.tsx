@@ -212,7 +212,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                   >
                     {console.log("msg.content:", msg.content)}
                     <ReactMarkdown
-  className="prose dark:prose-invert text-sm leading-relaxed px-4 py-3 prose-headings:font-bold prose-headings:text-current prose-headings:text-2xl"
+  className="prose dark:prose-invert text-sm leading-relaxed whitespace-pre-wrap px-4 py-3 prose-headings:font-bold prose-headings:text-current prose-headings:text-2xl"
   remarkPlugins={[remarkGfm]}
   rehypePlugins={[rehypeRaw]}
 >
