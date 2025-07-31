@@ -281,7 +281,7 @@ export const useChat = () => {
             let processedContent = '';
             if (content) {
                 if (content.type === 'markdown') {
-                    processedContent = marked.parse(content.markdown);
+                    processedContent = content.markdown; // marked.parse を削除
                 } else if (content.type === 'diff') {
                     processedContent = generateContextualDiffHtml(content.oldText, content.newText);
                 } else if (typeof content === 'string') {
@@ -363,7 +363,7 @@ export const useChat = () => {
                    return {
                     id: m.id,
                     role: m.role,
-                    content: marked.parse(m.text || ''),
+                    content: m.text || '',
                   };
                 } else if (m.role === 'tool') {
                     // マージ済みのツールオブジェクトをそのまま返す
