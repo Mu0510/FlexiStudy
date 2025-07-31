@@ -141,17 +141,16 @@ export const useChat = () => {
           let newThoughtMode = prev?.thoughtMode || false; // デフォルトはfalse
 
           if (chunk?.thought !== undefined) {
-            newContent = currentContent + chunk.thought.trim(); // 既存のコンテンツに追加
+            newContent = currentContent + chunk.thought.trim();
             newType = 'thought';
             newThoughtMode = true;
           }
 
           if (chunk?.text !== undefined) {
-            newContent = currentContent + chunk.text.replace(/^\n+/, ''); // 既存のコンテンツに追加
+            newContent = currentContent + chunk.text.replace(/^\n+/, '');
             newType = 'assistant';
             newThoughtMode = false;
           }
-          console.log(`[DEBUG] streamAssistantMessageChunk - currentContent: "${currentContent}", chunk.text: "${chunk.text}", newContent: "${newContent}"`); // 追加
           return {
             id: currentId, // IDは変更しない
             type: newType,
@@ -382,6 +381,7 @@ export const useChat = () => {
 
     return () => {
       ws.current?.close();
+      ws.current = null; // WebSocketインスタンスをクリア
     };
   }, []); // 依存関係を空配列に変更
 
