@@ -205,7 +205,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 
                   <div
                     className={cn(
-                      "prose dark:prose-invert text-sm leading-relaxed whitespace-pre-wrap px-4 py-3 rounded-2xl",
+                      "prose dark:prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap px-4 py-3 rounded-2xl",
                       msg.role === "user"
                         ? "bg-primary-800 text-neutral-100 max-w-[70%] my-2"
                         : "w-[90%] bg-transparent text-neutral-900 mb-5",
@@ -216,14 +216,6 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 					<ReactMarkdown
 					  remarkPlugins={[remarkGfm]}
 					  rehypePlugins={[rehypeRaw]}
-					  components={{
-					    div: ({ node, ...props }) => (
-					      <div
-					        className="prose dark:prose-invert prose-sm max-w-none"
-					        {...props}
-					      />
-					    ),
-					  }}
 					>
 					  {msg.content}
 					</ReactMarkdown>
