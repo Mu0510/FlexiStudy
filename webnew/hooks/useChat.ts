@@ -141,18 +141,18 @@ export const useChat = () => {
         let newType: 'thought' | 'assistant' = activeMessageRef.current?.type || 'thought';
         let newThoughtMode = activeMessageRef.current?.thoughtMode || false;
 
-        if (chunk?.text !== undefined) { // text が優先
+        // chunk.text が存在する場合は text を優先して処理
+        if (chunk?.text !== undefined) {
           newType = 'assistant';
           newThoughtMode = false;
-          // text が来た場合、thought の内容をクリアして text を追記
-          // ただし、既に assistant タイプの場合は追記
-          if (activeMessageRef.current?.type !== 'assistant') { // thought から assistant に切り替わる場合
-            newContent = chunk.text.replace(/^\n+/, ''); // text で初期化
+          // activeMessageRef.current の type が 'assistant' でない場合（thought から text への切り替わり）は content を初期化
+          if (activeMessageRef.current?.type !== 'assistant') {
+            newContent = chunk.text.replace(/^\n+/, '');
           } else {
-            newContent = newContent + chunk.text.replace(/^\n+/, ''); // 追記
+            newContent = newContent + chunk.text.replace(/^\n+/, '');
           }
         } else if (chunk?.thought !== undefined) { // text がない場合のみ thought を処理
-          newContent = chunk.thought.trim(); // thought が来た場合は上書き
+          newContent = chunk.thought.trim();
           newType = 'thought';
           newThoughtMode = true;
         }
