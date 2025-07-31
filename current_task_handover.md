@@ -17,52 +17,61 @@
 
 **【未解決の問題】**
 
-1.  **アシスタントのストリーミングメッセージが表示されない、または一瞬で消える:**
+1.  **ツールカードの更新が不完全、または表示されない:**
+    *   **現象:** `pushToolCall` でツールカードのプレースホルダーは表示されるが、その後の `updateToolCall` や `pushChunk` で内容が更新されない、または更新されてもすぐに消えてしまう。
+    *   **現在の推測される原因:** `useChat.ts` 内の `toolCardsData` の更新と `messages` 配列の同期に問題がある可能性がある。特に `Map` の更新が React の状態管理と適切に連携できていない可能性がある。
+
+**【解決済みの問題】**
+
+1.  **アシスタントのストリーミングメッセージ表示問題:**
     *   **現象:** ユーザーがメッセージを送信すると、アシスタントの「思考中」メッセージ（`streamAssistantThoughtChunk`）は一瞬表示されるが、その後のアシスタントの返答（`streamAssistantMessageChunk`の`chunk.text`）が表示されない、または一瞬表示されてすぐに消えてしまう。
-    *   **ログの観察:**
-        *   `streamAssistantThoughtChunk`と`streamAssistantMessageChunk`の両方がクライアントに正常に受信され、`useChat.ts`内で`activeMessage.content`が更新されていることはコンソールログで確認済み。
-        *   `activeMessage.content`のログは、`thought`の内容から`text`の内容へと正しく変化している。
-        *   `useChat.ts`からサーバーへのACKも送信されている。
-    *   **現在の推測される原因:**
-        *   `chat.js`の`active`オブジェクトはDOM要素への直接参照を持ち、`innerHTML`を直接操作することでリアルタイム更新を実現していた。Reactの`useState`で管理される`activeMessage`は、DOM要素への直接参照を持たないため、`chat.js`と同じようなリアルタイム更新の挙動を再現できていない可能性がある。
-        *   `streamAssistantMessageChunk`が`chunk.thought`と`chunk.text`の両方を持つ場合（または`thought`が先に、その後に`text`が来る場合）、`setActiveMessage`が同じイベントループ内で複数回呼び出され、状態が上書きされてしまうことで、UIの更新が追いついていない可能性がある。
-        *   `activeMessage`の`id`は固定するように修正済みだが、`activeMessage.type`が`thought`から`assistant`に切り替わる際に、Reactのレンダリングサイクルが適切に処理できていない可能性がある。
-
-2.  **WebSocketの二重接続（解消済みだが念のため記載）:**
+    *   **解決:** `useChat.ts` の `ActiveMessage` インターフェースに `thoughtMode` を追加し、`streamAssistantThoughtChunk` と `streamAssistantMessageChunk` のロジックを `chat.js` の `active` オブジェクトの挙動に近づけた。`sendMessage` 時に初期の `activeMessage` を設定するように修正し、`new-chat-panel.tsx` で `marked.parse` を適用するようにした。
+2.  **WebSocketの二重接続:**
     *   **現象:** 以前、WebSocket接続が複数回確立され、同じメッセージが二重に受信される問題があった。
-    *   **対応:** `webnew/hooks/useChat.ts`の`useEffect`の依存関係を空配列`[]`に変更することで、コンポーネントマウント時に一度だけ接続が確立されるように修正済み。この問題は解消されているはず。
+    *   **解決:** `webnew/hooks/useChat.ts` の `useEffect` の依存関係を空配列`[]`に変更することで、コンポーネントマウント時に一度だけ接続が確立されるように修正済み。`requestHistory(true)` の呼び出しを WebSocket の `onopen` イベントリスナーの中に移動させた。
+3.  **`result:null` で吹き出しが消える問題:**
+    *   **現象:** `sendUserMessage` の RPC 応答として `result:null` が返ってきたタイミングで、ストリーミング中のアシスタントの吹き出しが消えてしまう。
+    *   **解決:** `useChat.ts` の `result:null` 処理を修正し、`sendUserMessage` の `id` と一致する場合にのみ `setActiveMessage(null)` を呼び出すようにした。
+4.  **`marked is not defined` エラー:**
+    *   **現象:** `new-chat-panel.tsx` で `marked.parse` を使用しているにもかかわらず、`marked` が定義されていないというエラーが発生した。
+    *   **解決:** `new-chat-panel.tsx` に `marked` ライブラリをインポートした。
+5.  **`useChat.ts` の構文エラー:**
+    *   **現象:** `webnew/hooks/useChat.ts` の `useEffect` ブロック内で構文エラーが発生した。
+    *   **解決:** `ws.current.onopen`、`ws.current.onmessage`、`ws.current.onclose`、`ws.current.onerror` の各イベントハンドラの定義が `useEffect` のスコープ内に正しくネストされるように修正し、余分なセミコロンや閉じ括弧を削除した。
 
-### 3. これまでの主な変更点
+### 3. これまでの主な変更点 (詳細)
 
-*   `webnew/hooks/useChat.ts`:
-    *   `marked`ライブラリのインポートと、`streamAssistantThoughtChunk`, `streamAssistantMessageChunk`, `updateToolCall`, 履歴メッセージの処理における`marked.parse`の適用。
-    *   `useEffect`の依存関係を空配列`[]`に変更し、WebSocketの二重接続を防止。
-    *   `streamAssistantMessageChunk`の処理において、`chunk.thought`と`chunk.text`の両方を適切に処理し、`activeMessage`の`id`を固定し、`type`を適切に切り替えるように修正。
-    *   `sendMessage`時に`activeMessage`を`null`にリセットするように修正。
-*   `webnew/components/new-chat-panel.tsx`:
-    *   `useChat`フックの統合。
-    *   スクロールロジック（`isNearBottom`, `scrollBottom`）の実装。
-    *   `messagesEndRef`の削除と`messagesContainerRef`への統一。
-    *   `activeMessage.content`のデバッグログを追加。
-*   `webnew/server.js`:
-    *   WebSocketの`on('close')`, `on('error')`、およびGeminiプロセスの`on('close')`に詳細なログを追加。
-    *   `streamAssistantMessageChunk`の処理で`ongoingText`が空でない場合の`history.push`の前にデバッグログを追加。
+*   **`webnew/hooks/useChat.ts`:**
+    *   `ActiveMessage` インターフェースに `thoughtMode` を追加。
+    *   `streamAssistantThoughtChunk` と `streamAssistantMessageChunk` のロジックを `chat.js` の `active` オブジェクトの挙動に近づけ、`content` を生のテキストとして保持し、`thoughtMode` を適切に設定するように修正。
+    *   `sendMessage` 関数を修正し、メッセージ送信時に初期の `activeMessage` を設定するように変更。
+    *   `ToolCardData` インターフェースの `content` の型を `string` に変更。
+    *   `pendingToolBodies` と `toolCards` (ref) を追加。
+    *   `pushToolCall` のロジックを `chat.js` に合わせて修正し、`toolCardsData` にエントリを追加し、`messages` ステートに `role: 'tool'` のメッセージを追加するように変更。
+    *   `updateToolCall` のロジックを `chat.js` に合わせて修正し、`pendingBodies` の処理と `__headerPatch` の処理を再現。`toolCardsData` と `messages` 配列内のツールメッセージの `content` を同期して更新するように変更。
+    *   `pushChunk` (sender === 'tool') のロジックを修正し、`messages` 配列内のツールメッセージの `content` も更新するように変更。
+    *   `jsdiff` ライブラリをインポートし、`generateContextualDiffHtml` 関数を `chat.js` の実装に合わせて修正。
+    *   `ws.current.onopen` イベントリスナーの中に `requestHistory(true)` を移動。
+    *   `result:null` 処理を修正し、`sendUserMessage` の `id` と一致する場合にのみ `setActiveMessage(null)` を呼び出すように変更。
+    *   `ws.current.onmessage`、`ws.current.onclose`、`ws.current.onerror` の定義が `useEffect` のスコープ内に正しくネストされるように修正。
+*   **`webnew/components/new-chat-panel.tsx`:**
+    *   `marked` ライブラリをインポート。
+    *   `activeMessage` の `thoughtMode` プロパティに基づいて `animate-pulse` クラスを適用するように修正。
+    *   `marked.parse` の適用をレンダリング時に行うように修正。
+    *   ツールカードのレンダリングロジックを `chat.js` に合わせて修正し、`tool-card--running`, `tool-card--finished`, `tool-card--error` クラスの適用や、`command` の表示を追加。
+    *   履歴読み込み時のスクロール位置維持ロジックを追加。
+*   **`webnew/package.json` & `webnew/pnpm-lock.yaml`:**
+    *   `diff` (jsdiff) を `dependencies` に追加。
 
 ### 4. 次のGeminiエージェントへの引き継ぎ事項
 
-1.  **アシスタントのストリーミングメッセージ表示問題の解決:**
-    *   `webnew/hooks/useChat.ts`の`activeMessage`の状態更新ロジックを再検討し、`chat.js`の`active`オブジェクトの挙動（特に`thoughtMode`の切り替えとDOMの直接操作）をReactのState管理でどのように再現するかを深く分析してください。
-    *   `activeMessage`の`type`が`thought`から`assistant`に切り替わる際に、UIがスムーズに更新されるように、`new-chat-panel.tsx`のレンダリングロジックを調整する必要があるかもしれません。
-    *   Reactの`key`プロパティが正しく使用されているか、`activeMessage`の更新がReactのレンダリングサイクルに適切に組み込まれているかを確認してください。
-    *   `useReducer`など、より複雑な状態管理パターンを検討することも有効かもしれません。
-
-2.  **`chat.js`の`resetActive()`関数の完全な再現:**
-    *   `chat.js`の`resetActive()`が`active`変数を`null`にし、`#typingBubble`をDOMから削除する挙動を、Reactのstate管理でどのように実現するかを再確認してください。
-
-3.  **ツールカードの動的な更新の検証:**
-    *   `pushToolCall`と`updateToolCall`の連携が正しく機能し、ツールカードのヘッダー情報とボディコンテンツが非同期に届く場合でも正しく更新されることを確認してください。
-
-4.  **スクロール挙動の最終確認:**
-    *   `chat.js`の `isNearBottom()` と `scrollBottom()` 関数のロジックが、`new-chat-panel.tsx`で正確に再現されていることを確認してください。
+1.  **ツールカードの更新の最終確認:**
+    *   `pushToolCall`、`updateToolCall`、`pushChunk` の各メッセージがツールカードに正しく反映され、内容が動的に更新されることを確認してください。特に、`pendingBodies` の挙動が正しく再現されているか、`__headerPatch` が適用されているか、`diff` の表示が正しいかを確認してください。
+2.  **スクロール挙動の最終確認:**
+    *   メッセージの追加、ストリーミング、履歴読み込み時に、`chat.js` と同様の「繊細な」スクロール挙動（ユーザーが最下部に近い場合のみ自動スクロール、履歴読み込み時のスクロール位置維持）が再現されていることを確認してください。
+3.  **全体的な動作確認とデバッグ:**
+    *   上記以外の `chat.js` の機能（例: `cancelMessage`、`showToolConfirmationDialog` など）が正しく移植されているか、または代替手段が提供されているかを確認してください。
+    *   WebSocket 接続が安定しているか、エラーが発生していないか、コンソールログを詳細に確認してください。
+    *   UI の表示崩れや予期せぬ動作がないか、全体的に確認してください。
 
 このタスクは、元のJavaScriptコードの深い理解と、それをReactのベストプラクティスに適合させるための慎重な作業が求められます。頑張ってください！

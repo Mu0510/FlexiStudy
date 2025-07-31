@@ -161,7 +161,6 @@ export const useChat = () => {
         // msg.idが存在する場合はACK
         if (msg.id !== undefined && ws.current) {
           ws.current.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
-          console.log('[DEBUG] Sent ACK for streamAssistantMessageChunk');
         }
       } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
         if (activeMessage) {
@@ -173,7 +172,7 @@ export const useChat = () => {
           }]);
         }
         setActiveMessage(null);
-        setIsGeneratingResponse(false); // 完了は応答生成の終了を意味すると仮定
+        setIsGeneratingResponse(false); // 完了は応答生成の終了を仮定
       } else if (msg.method === 'pushMessage') {
         // ツール完了後のアシスタントメッセージ
         setMessages(prev => [...prev, {
@@ -182,7 +181,7 @@ export const useChat = () => {
           content: msg.params.content,
         }]);
         setActiveMessage(null); // アクティブなメッセージがあればリセット
-        setIsGeneratingResponse(false); // これも応答生成の終了を意味すると仮定
+        setIsGeneratingResponse(false); // これも応答生成の終了を仮定
       } else if (msg.method === 'pushToolCall') {
         const toolId = msg.params.toolCallId ?? msg.id;
         const { icon, label, locations } = msg.params;
@@ -218,7 +217,6 @@ export const useChat = () => {
             id: msg.id,
             result: { id: toolId }
           }));
-          console.log('[DEBUG] Sent ACK for pushToolCall');
         }
         setActiveMessage(null); // chat.js の resetActive() に相当
       } else if (msg.method === 'updateToolCall') {
@@ -410,7 +408,6 @@ export const useChat = () => {
       params: { chunks: [{ text }] }
     };
     ws.current.send(JSON.stringify(req));
-    console.log('[DEBUG] Sent sendUserMessage'); // 追加
   }, [isGeneratingResponse]);
 
   // 履歴を要求する関数
@@ -431,7 +428,6 @@ export const useChat = () => {
         method: 'fetchHistory',
         params: { limit: limit, before: historyState.current.oldestTs }
       }));
-      console.log('[DEBUG] Sent fetchHistory request'); // 追加
     }
   }, []);
 
