@@ -88,3 +88,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+.prose hr {
+  border-top-width: 1px;
+}
+
+.prose p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}

@@ -208,7 +208,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 <div
                     className={cn(
                       "prose prose-sm dark:prose-invert max-w-none",
-                      msg.role === "user" ? "bg-blue-600 text-white rounded-2xl px-4 py-3" : "bg-gray-200 text-gray-800 rounded-2xl px-4 py-3",
+                      msg.role === "user" ? "bg-blue-600 text-white rounded-2xl px-4 py-3" : "", // AI側はスタイルを削除
                     )}
                   >
                     <ReactMarkdown
@@ -236,8 +236,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             </div>
             <div
               className={cn(
-                "prose prose-sm dark:prose-invert max-w-none rounded-2xl px-4 py-3",
-                "bg-gray-200 text-gray-800",
+                "prose prose-sm dark:prose-invert max-w-none", // スタイルを削除
                 activeMessage.thoughtMode && "animate-pulse" // Apply pulse for thought mode
               )}
             >
