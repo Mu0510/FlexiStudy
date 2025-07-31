@@ -199,11 +199,11 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
           } else {
             // Render user/assistant messages
             return (
-              <div key={msg.id} className={cn("flex space-x-3", msg.role === "user" ? "justify-end" : "mx-auto w-[95%]")}>
+              <div key={msg.id} className={cn("flex justify-end", msg.role === "user" ? "" : "mx-auto w-[95%]")}>
                 <div
                     className={cn(
-                      "prose prose-sm dark:prose-invert max-w-none",
-                      msg.role === "user" ? "bg-gray-100 text-gray-900 rounded-2xl px-4 py-1" : "", // AI側はスタイルを削除
+                      "prose prose-sm dark:prose-invert",
+                      msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 rounded-2xl px-4 py-1 max-w-[65%]" : "mx-auto w-[95%]",
                     )}
                   >
                     <ReactMarkdown
@@ -220,10 +220,10 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
         {/* Render activeMessage (thinking bubble or streaming assistant message) */}
         {activeMessage && (
-          <div className={cn("flex space-x-3", "mx-auto w-[95%]")}>
+          <div className={cn("flex space-x-3", "justify-start")}>
             <div
               className={cn(
-                "prose prose-sm dark:prose-invert max-w-none", // スタイルを削除
+                "prose prose-sm dark:prose-invert mx-auto w-[95%]",
                 activeMessage.thoughtMode && "animate-pulse" // Apply pulse for thought mode
               )}
             >
