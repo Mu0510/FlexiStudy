@@ -205,7 +205,10 @@ export const useChat = () => {
           label,
           command,
           status: 'running',
-          content: '',
+          content: 'ツールを実行中...',
+          toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId, // Assuming backend sends this
+          toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage, // Assuming backend sends this
+          toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons, // Assuming backend sends this
         }]);
 
         if (ws.current) {
@@ -258,7 +261,10 @@ export const useChat = () => {
           label,
           command,
           status: 'running',
-          content: confirmation?.details ?? '',
+          content: confirmation?.details ?? 'ツールの確認を待っています...',
+          toolCallConfirmationId: confirmation?.toolCallConfirmationId,
+          toolCallConfirmationMessage: confirmation?.toolCallConfirmationMessage,
+          toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
         }]);
         setActiveMessage(null); // ツールカード表示後は activeMessage をクリア // ツールカード表示後は activeMessage をクリア
       } else if (msg.method === 'updateToolCall') {
@@ -300,18 +306,11 @@ export const useChat = () => {
                     processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
                 }
             }
-            
-            card.status = status;
-                  card.content = content;
-              }
-              return newCards;
-          });
-          setMessages(prevMessages => prevMessages.map(msg => {
-              if (msg.type === 'tool' && msg.id === callId) {
-                  return { ...msg, status: status, content: content };
-              }
-              return msg;
-          }));
+            toolMessage.status = status;
+            toolMessage.content = processedContent;
+            newMessages[toolMessageIndex] = toolMessage;
+            return newMessages;
+        });
 
         if (status === 'finished') {
           setActiveMessage(null);
@@ -471,15 +470,15 @@ export const useChat = () => {
   const sendMessage = useCallback((text: string) => {
     if (!ws.current || isGeneratingResponse) return;
 
-    const messageId = `user-${Date.now()}`;
-    setMessages(prev => [...prev, { id: messageId, role: 'user', content: text }]);
-    setIsGeneratingResponse(true);
-    setActiveMessage({
-      id: `thought-${Date.now()}`,
-      type: 'thought',
-      content: '…思考中…',
-      thoughtMode: true,
-    });
+    const newMessage: Message = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
+        role: "user",
+        content: text,
+        type: "text",
+        timestamp: new Date().toISOString(),
+      };
+
+    setMessages(prev => [...prev, newMessage]);
 
     const reqId = requestIdCounter.current++;
     lastSentRequestId.current = reqId;
@@ -504,8 +503,13 @@ export const useChat = () => {
     };
     ws.current.send(JSON.stringify(req));
 
-    // 確認後はカードをメッセージから削除
-    setMessages(prev => prev.filter(m => m.id !== toolCallId));
+    // 確認後はツールメッセージのステータスを更新
+    setMessages(prev => prev.map(m => {
+      if (m.id === toolCallId) {
+        return { ...m, status: 'finished' }; // または 'confirmed' など、適切なステータスに更新
+      }
+      return m;
+    }));
 
   }, []);
 
