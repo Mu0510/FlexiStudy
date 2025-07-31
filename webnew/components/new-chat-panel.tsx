@@ -148,7 +148,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         </div>
       </div>
 
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 max-w-[1024px] mx-auto"> {/* Added ref here */}
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto"> {/* Added ref here */}
+        <div className="p-4 space-y-8 max-w-prose mx-auto">
         {messages.map((msg) => {
           // Render tool messages
           if (msg.type === "tool") {
@@ -237,7 +238,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             </div>
           </div>
         )}
-        {/* <div ref={messagesEndRef} /> を削除 */}
+        </div>
       </div>
 
       <div className="flex-shrink-0 p-4 border-t">
