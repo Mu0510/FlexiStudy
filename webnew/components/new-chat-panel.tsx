@@ -148,7 +148,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         </div>
       </div>
 
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4"> {/* Added ref here */}
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4 max-w-[1024px] mx-auto"> {/* Added ref here */}
         {messages.map((msg) => {
           // Render tool messages
           if (msg.type === "tool") {
@@ -199,16 +199,11 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
           } else {
             // Render user/assistant messages
             return (
-              <div key={msg.id} className={cn("flex space-x-3", msg.role === "user" ? "justify-end" : "justify-start")}>
-                {msg.role === "assistant" && (
-                  <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <Bot className="w-5 h-5 text-white" />
-                  </div>
-                )}
+              <div key={msg.id} className={cn("flex space-x-3", msg.role === "user" ? "justify-end" : "mx-auto w-[95%]")}>
                 <div
                     className={cn(
                       "prose prose-sm dark:prose-invert max-w-none",
-                      msg.role === "user" ? "bg-blue-600 text-white rounded-2xl px-4 py-3" : "", // AI側はスタイルを削除
+                      msg.role === "user" ? "bg-gray-100 text-gray-900 rounded-2xl px-4 py-1" : "", // AI側はスタイルを削除
                     )}
                   >
                     <ReactMarkdown
@@ -218,11 +213,6 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                       {msg.content}
                     </ReactMarkdown>
                   </div>
-                {msg.role === "user" && (
-                  <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
-                    <User className="w-4 h-4 text-white" />
-                  </div>
-                )}
               </div>
             );
           }
@@ -230,10 +220,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
         {/* Render activeMessage (thinking bubble or streaming assistant message) */}
         {activeMessage && (
-          <div className={cn("flex space-x-3", "justify-start")}>
-            <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center flex-shrink-0">
-              <Bot className="w-5 h-5 text-white" />
-            </div>
+          <div className={cn("flex space-x-3", "mx-auto w-[95%]")}>
             <div
               className={cn(
                 "prose prose-sm dark:prose-invert max-w-none", // スタイルを削除
