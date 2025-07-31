@@ -205,9 +205,9 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 
                   <div
                     className={cn(
-                      "prose dark:prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap px-4 py-3 rounded-2xl",
+                      "prose prose-sm dark:prose-invert max-w-none",
                       msg.role === "user"
-                        ? "bg-primary-800 text-neutral-100 max-w-[70%] my-2"
+                        ? "bg-primary-800 text-neutral-100 rounded-2xl px-4 py-3 max-w-[70%] my-2"
                         : "w-[90%] bg-transparent text-neutral-900 mb-5",
                       msg.role === "assistant" && "animate-pulse"
                     )}
