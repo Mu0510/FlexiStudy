@@ -205,7 +205,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 
                   <div
                     className={cn(
-                      "prose rounded-2xl",
+                      "prose rounded-2xl bg-red-500",
                       msg.role === "user" ? "bg-primary-800 text-neutral-100 max-w-[70%] px-4 py-3 my-2" : "w-[90%] bg-transparent text-neutral-900 my-1 mb-5",
                       msg.role === "assistant" && "animate-pulse"
                     )}
