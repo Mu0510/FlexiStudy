@@ -185,6 +185,7 @@ export const useChat = () => {
             role: 'assistant',
             content: activeMessageRef.current.content,
           }]);
+          setActiveMessage(null); // activeMessage をクリア
         }
 
         setMessages(prev => [...prev, {
@@ -197,9 +198,9 @@ export const useChat = () => {
           command,
           status: 'running',
           content: 'ツールを実行中...',
-          toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId, // Assuming backend sends this
-          toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage, // Assuming backend sends this
-          toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons, // Assuming backend sends this
+          toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId,
+          toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage,
+          toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
         }]);
 
         if (ws.current) {
@@ -233,6 +234,7 @@ export const useChat = () => {
             role: 'assistant',
             content: activeMessageRef.current.content,
           }]);
+          setActiveMessage(null); // activeMessage をクリア
         }
 
         setMessages(prev => [...prev, {
