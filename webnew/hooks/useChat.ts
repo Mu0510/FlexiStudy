@@ -141,16 +141,15 @@ export const useChat = () => {
           let newThoughtMode = prev?.thoughtMode || false; // デフォルトはfalse
 
           if (chunk?.thought !== undefined) {
-            newContent = chunk.thought.trim();
-            newType = 'thought'; // thoughtが来たらthoughtタイプ
-            newThoughtMode = true; // thoughtModeをtrueに
+            newContent = currentContent + chunk.thought.trim(); // 既存のコンテンツに追加
+            newType = 'thought';
+            newThoughtMode = true;
           }
 
           if (chunk?.text !== undefined) {
-            // textが来たらassistantタイプに切り替え、既存のコンテンツに追加
-            newContent = (newType === 'thought' ? '' : currentContent) + chunk.text.replace(/^\n+/, '');
+            newContent = currentContent + chunk.text.replace(/^\n+/, ''); // 既存のコンテンツに追加
             newType = 'assistant';
-            newThoughtMode = false; // textが来たらthoughtModeはfalse
+            newThoughtMode = false;
           }
           return {
             id: currentId, // IDは変更しない
@@ -292,6 +291,7 @@ export const useChat = () => {
         // sendUserMessage の応答が result:null の場合のみ setActiveMessage(null) を呼び出す
         if (msg.result === null && msg.id === lastSentRequestId.current) { // lastSentRequestId.current と比較
           setIsGeneratingResponse(false);
+          setActiveMessage(null);
         }
         // fetchHistory応答を処理
         if (historyState.current.pendingHistory.has(msg.id) && msg.result?.messages) {
