@@ -142,7 +142,10 @@ export default function StudyApp() {
         <ChatPanel isOpen={chatOpen} mode={chatMode} onClose={() => setChatOpen(false)} onModeChange={setChatMode} />
         <NewChatPanel 
           isOpen={isNewChatOpen} 
-          onClose={() => setIsNewChatOpen(false)} 
+          onClose={() => {
+            setIsNewChatOpen(false);
+            setIsFullScreen(false); // 全画面表示もリセット
+          }} 
           isFullScreen={isFullScreen}
           setIsFullScreen={setIsFullScreen}
         />
