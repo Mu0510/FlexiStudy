@@ -301,12 +301,17 @@ export const useChat = () => {
                 }
             }
             
-            toolMessage.status = status ?? toolMessage.status;
-            toolMessage.content = processedContent;
-            newMessages[toolMessageIndex] = toolMessage;
-
-            return newMessages;
-        });
+            card.status = status;
+                  card.content = content;
+              }
+              return newCards;
+          });
+          setMessages(prevMessages => prevMessages.map(msg => {
+              if (msg.type === 'tool' && msg.id === callId) {
+                  return { ...msg, status: status, content: content };
+              }
+              return msg;
+          }));
 
         if (status === 'finished') {
           setActiveMessage(null);
@@ -526,7 +531,6 @@ export const useChat = () => {
     messages,
     activeMessage,
     isGeneratingResponse,
-    // toolCardsData は削除
     sendMessage,
     requestHistory,
     sendToolConfirmation,

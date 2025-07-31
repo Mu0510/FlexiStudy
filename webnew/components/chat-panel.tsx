@@ -1,13 +1,6 @@
 // webnew/components/chat-panel.tsx
 "use client"
 
-import { useState, useEffect, useRef } from "react"
-
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { CardHeader, CardTitle, Card, CardContent } from "@/components/ui/card"
-import { X, Maximize2, Minimize2, Send, Bot, User, Code, Database, BarChart3, Settings, CheckCircle, XCircle } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { useChat, ChatMessage } from "@/hooks/useChat"; // Import useChat and ChatMessage
 import { Textarea } from "@/components/ui/textarea";
 
@@ -20,7 +13,7 @@ interface ChatPanelProps {
 
 export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProps) {
   const [input, setInput] = useState("")
-  const { messages, sendUserMessage, sendToolCallConfirmation } = useChat(isOpen); // Use the custom hook
+  const { messages, sendMessage, sendToolConfirmation } = useChat(); // Use the custom hook
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -37,7 +30,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 
   const handleSendMessage = () => {
     if (!input.trim()) return
-    sendUserMessage(input); // Use sendUserMessage from the hook
+    sendMessage(input); // Use sendMessage from the hook
     setInput("")
     if (chatInputRef.current) {
       chatInputRef.current.focus();
@@ -138,7 +131,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 
         {/* Messages */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.map((msg) => (
+          {messages.map((msg: ChatMessage) => (
             <div key={msg.id}>
               {msg.type === "tool" ? (
                 <Card className={cn(
@@ -153,7 +146,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                         {getToolIconText(msg.icon)}
                       </span>
                       <CardTitle className="tool-card__title text-sm font-medium text-gray-800">
-                        {msg.toolName || msg.label || "Tool Call"}
+                        {msg.label || "Tool Call"}
                       </CardTitle>
                     </div>
                     <div className="tool-card__status-indicator">
@@ -177,7 +170,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                               key={button.value}
                               variant="outline"
                               size="sm"
-                              onClick={() => sendToolCallConfirmation(msg.toolCallConfirmationId!, button.value)}
+                              onClick={() => sendToolConfirmation(msg.toolCallId!, button.value === "true")} // sendToolConfirmation を使用
                               disabled={msg.status !== "running"} // Disable buttons if not running (i.e., already confirmed)
                             >
                               {button.label}
@@ -187,14 +180,14 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                       </div>
                     ) : (
                       <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-900 p-2 rounded">
-                        <div dangerouslySetInnerHTML={{ __html: msg.toolBody || msg.content }} />
+                        <div dangerouslySetInnerHTML={{ __html: msg.content }} />
                       </pre>
                     )}
                   </CardContent>
                 </Card>
               ) : (
-                <div className={cn("flex space-x-3", msg.type === "user" ? "justify-end" : "justify-start")}>
-                  {msg.type === "bot" && (
+                <div className={cn("flex space-x-3", msg.role === "user" ? "justify-end" : "justify-start")}>
+                  {msg.role === "assistant" && (
                     <div className="w-8 h-8 bg-gradient-to-br from-accent-500 to-accent-600 rounded-lg flex items-center justify-center flex-shrink-0">
                       <Bot className="w-5 h-5 text-white" />
                     </div>
@@ -203,17 +196,17 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                   <div
                     className={cn(
                       "rounded-2xl",
-                      msg.type === "user" ? "bg-primary-800 text-neutral-100 max-w-[70%] px-4 py-3 my-2" : "w-[90%] bg-transparent text-neutral-900 p-0 my-1 mb-5",
-                      msg.type === "bot" && msg.isThinking && "animate-pulse"
+                      msg.role === "user" ? "bg-primary-800 text-neutral-100 max-w-[70%] px-4 py-3 my-2" : "w-[90%] bg-transparent text-neutral-900 p-0 my-1 mb-5",
+                      msg.role === "assistant" && "animate-pulse"
                     )}
                   >
                     <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
-                    <div className={cn("text-xs mt-2", msg.type === "user" ? "text-neutral-100" : "text-neutral-500")}>
-                      {msg.timestamp}
+                    <div className={cn("text-xs mt-2", msg.role === "user" ? "text-neutral-100" : "text-neutral-500")}>
+                      {/* msg.timestamp は存在しないため削除 */}
                     </div>
                   </div>
 
-                  {msg.type === "user" && (
+                  {msg.role === "user" && (
                     <div className="w-8 h-8 bg-primary-800 rounded-lg flex items-center justify-center flex-shrink-0">
                       <User className="w-4 h-4 text-white" />
                     </div>
