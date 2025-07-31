@@ -151,6 +151,7 @@ export const useChat = () => {
             newType = 'assistant';
             newThoughtMode = false;
           }
+          console.log(`[DEBUG] streamAssistantMessageChunk - currentContent: "${currentContent}", chunk.text: "${chunk.text}", newContent: "${newContent}"`); // 追加
           return {
             id: currentId, // IDは変更しない
             type: newType,
@@ -293,6 +294,7 @@ export const useChat = () => {
           setIsGeneratingResponse(false);
           // activeMessage が存在する場合、messages に追加してからクリアする
           if (activeMessage) {
+            console.log(`[DEBUG] result:null received. activeMessage content: "${activeMessage.content}"`); // 追加
             setMessages(prev => [...prev, {
               id: activeMessage.id,
               role: activeMessage.type === 'thought' ? 'assistant' : 'assistant', // 思考もアシスタントから
