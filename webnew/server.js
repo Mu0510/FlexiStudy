@@ -191,8 +191,8 @@ app.prepare().then(() => {
     console.log('Client connected');
 
     ws.on('message', async data => {
-        const text = data.toString().trim();
-        if (!text) return;
+        const text = data.toString();
+        if (!text.trim()) return;
 
         let msg;
         try {
