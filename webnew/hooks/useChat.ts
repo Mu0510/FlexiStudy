@@ -291,6 +291,14 @@ export const useChat = () => {
         // sendUserMessage の応答が result:null の場合のみ setActiveMessage(null) を呼び出す
         if (msg.result === null && msg.id === lastSentRequestId.current) { // lastSentRequestId.current と比較
           setIsGeneratingResponse(false);
+          // activeMessage が存在する場合、messages に追加してからクリアする
+          if (activeMessage) {
+            setMessages(prev => [...prev, {
+              id: activeMessage.id,
+              role: activeMessage.type === 'thought' ? 'assistant' : 'assistant', // 思考もアシスタントから
+              content: activeMessage.content,
+            }]);
+          }
           setActiveMessage(null);
         }
         // fetchHistory応答を処理
