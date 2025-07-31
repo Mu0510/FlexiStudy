@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { X, Send, Bot, User, CheckCircle, XCircle } from "lucide-react"
 import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
-import { useChat, Message, ActiveMessage, ToolCardData } from "@/hooks/useChat";
+import { useChat } from "@/hooks/useChat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { marked } from 'marked';
 
@@ -137,35 +137,35 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
         {messages.map((msg) => {
           // Render tool messages
           if (msg.type === "tool") {
-            const toolCard = toolCardsData.get(msg.toolCallId || ''); // Get data from toolCardsData
-            if (!toolCard) return null; // Should not happen if data is consistent
-
+            // const toolCard = toolCardsData.get(msg.toolCallId || ''); // Get data from toolCardsData
+            // if (!toolCard) return null; // Should not happen if data is consistent
+            // データソースを msg オブジェクトに一本化
             return (
               <Card key={msg.id} className={cn(
                 "tool-card bg-gray-800 text-white rounded-lg p-3 shadow-md",
                 "w-11/12 mx-auto my-1 mb-3",
-                toolCard.status === "running" && "tool-card--running", // running クラスを追加
-                toolCard.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
-                toolCard.status === "error" && "tool-card--error border-l-4 border-red-500" // error クラスとボーダー
+                msg.status === "running" && "tool-card--running", // running クラスを追加
+                msg.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
+                msg.status === "error" && "tool-card--error border-l-4 border-red-500" // error クラスとボーダー
               )}>
                 <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
                   <div className="flex items-center space-x-2">
                     <span className="tool-card__icon-text text-xs border border-gray-500 rounded px-1 py-0.5">
-                      {getToolIconText(toolCard.icon)}
+                      {getToolIconText(msg.icon)}
                     </span>
                     <CardTitle className="tool-card__title text-sm font-medium text-gray-800">
-                      {toolCard.label || "Tool Call"}
+                      {msg.label || "Tool Call"}
                     </CardTitle>
                   </div>
                   {/* chat.js の tool-card__line-break と tool-card__command に相当 */}
                   <div className="tool-card__line-break"></div>
                   <code className="tool-card__command text-xs text-gray-600">
-                    {getRelativePath(toolCard.command)}
+                    {getRelativePath(msg.command)}
                   </code>
                   <div className="tool-card__status-indicator">
-                    {toolCard.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                    {toolCard.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
-                    {toolCard.status === "running" && (
+                    {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                    {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+                    {msg.status === "running" && (
                       <span className="relative flex h-3 w-3">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
@@ -176,7 +176,7 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
                 <CardContent className="p-0 text-sm text-gray-700">
                   {/* Removed toolCallConfirmation logic for now, focusing on content */}
                   <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-900 p-2 rounded">
-                    <div dangerouslySetInnerHTML={{ __html: toolCard.content }} /> {/* Use toolCard.content */}
+                    <div dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
                   </pre>
                 </CardContent>
               </Card>
