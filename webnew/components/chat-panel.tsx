@@ -1,6 +1,13 @@
 // webnew/components/chat-panel.tsx
 "use client"
 
+import { useState, useEffect, useRef } from "react"
+
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { CardHeader, CardTitle, Card, CardContent } from "@/components/ui/card"
+import { X, Maximize2, Minimize2, Send, Bot, User, Code, Database, BarChart3, Settings, CheckCircle, XCircle } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { useChat, ChatMessage } from "@/hooks/useChat"; // Import useChat and ChatMessage
 import { Textarea } from "@/components/ui/textarea";
 
