@@ -178,6 +178,24 @@ export const useChat = () => {
         const { icon, label, locations } = msg.params;
         const command = locations?.[0]?.path ?? '';
 
+        // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
+        if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+          setMessages(prev => [...prev, {
+            id: activeMessageRef.current.id,
+            role: 'assistant',
+            content: activeMessageRef.current.content,
+          }]);
+        }
+
+        // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
+        if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+          setMessages(prev => [...prev, {
+            id: activeMessageRef.current.id,
+            role: 'assistant',
+            content: activeMessageRef.current.content,
+          }]);
+        }
+
         setMessages(prev => [...prev, {
           id: toolId,
           role: 'tool',
@@ -197,7 +215,7 @@ export const useChat = () => {
             result: { id: toolId }
           }));
         }
-        setActiveMessage(null);
+        setActiveMessage(null); // ツールカード表示後は activeMessage をクリア // ツールカード表示後は activeMessage をクリア
       } else if (msg.method === 'requestToolCallConfirmation') {
         const toolId = msg.params.toolCallId ?? msg.id;
         const { icon, label, confirmation } = msg.params;
@@ -213,6 +231,24 @@ export const useChat = () => {
         }
 
         // UIには通常のツール呼び出しとして表示
+        // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
+        if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+          setMessages(prev => [...prev, {
+            id: activeMessageRef.current.id,
+            role: 'assistant',
+            content: activeMessageRef.current.content,
+          }]);
+        }
+
+        // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
+        if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+          setMessages(prev => [...prev, {
+            id: activeMessageRef.current.id,
+            role: 'assistant',
+            content: activeMessageRef.current.content,
+          }]);
+        }
+
         setMessages(prev => [...prev, {
           id: toolId,
           role: 'tool',
@@ -221,10 +257,10 @@ export const useChat = () => {
           icon,
           label,
           command,
-          status: 'running', // すぐに実行中として表示
+          status: 'running',
           content: confirmation?.details ?? '',
         }]);
-        setActiveMessage(null);
+        setActiveMessage(null); // ツールカード表示後は activeMessage をクリア // ツールカード表示後は activeMessage をクリア
       } else if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         const { status, content } = msg.params;
