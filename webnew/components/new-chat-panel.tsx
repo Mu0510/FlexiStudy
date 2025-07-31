@@ -157,7 +157,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             // データソースを msg オブジェクトに一本化
             return (
               <Card key={msg.id} className={cn(
-                "tool-card bg-gray-800 text-white rounded-lg p-3 shadow-md",
+                "tool-card bg-gray-100 text-gray-900 rounded-lg p-3 shadow-md", // 薄いグレーのパネルに変更
                 "w-11/12 mx-auto my-1 mb-3",
                 msg.status === "running" && "tool-card--running", // running クラスを追加
                 msg.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
@@ -190,7 +190,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 </CardHeader>
                 <CardContent className="p-0 text-sm text-gray-700">
                   {/* Removed toolCallConfirmation logic for now, focusing on content */}
-                  <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-900 p-2 rounded">
+                  <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 p-2 rounded">
                     <div dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
                   </pre>
                 </CardContent>
