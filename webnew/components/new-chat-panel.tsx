@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
+import remarkBreaks from "remark-breaks";
 
 interface NewChatPanelProps {
   isOpen: boolean
@@ -206,12 +207,12 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 )}
                 <div
                     className={cn(
-                      "prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap", // whitespace-pre-wrap を追加
+                      "prose prose-sm dark:prose-invert max-w-none",
                       msg.role === "user" ? "bg-blue-600 text-white rounded-2xl px-4 py-3" : "bg-gray-200 text-gray-800 rounded-2xl px-4 py-3",
                     )}
                   >
                     <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
+                      remarkPlugins={[remarkGfm, remarkBreaks]}
                       rehypePlugins={[rehypeRaw]}
                     >
                       {msg.content}
@@ -241,7 +242,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
               )}
             >
               <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
+                remarkPlugins={[remarkGfm, remarkBreaks]}
                 rehypePlugins={[rehypeRaw]}
               >
                 {activeMessage.content}
