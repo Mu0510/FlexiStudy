@@ -213,13 +213,21 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                     )}
                   >
                     {console.log("msg.content:", msg.content)}
-                    <ReactMarkdown
-  className=""
-  remarkPlugins={[remarkGfm]}
-  rehypePlugins={[rehypeRaw]}
->
-  {msg.content}
-</ReactMarkdown>
+					<ReactMarkdown
+					  remarkPlugins={[remarkGfm]}
+					  rehypePlugins={[rehypeRaw]}
+					  components={{
+					    div: ({ node, ...props }) => (
+					      <div
+					        className="prose dark:prose-invert prose-sm max-w-none"
+					        {...props}
+					      />
+					    ),
+					  }}
+					>
+					  {msg.content}
+					</ReactMarkdown>
+
                     <div className={cn("text-xs mt-2", msg.role === "user" ? "text-neutral-100" : "text-neutral-500")}>
                       {/* msg.timestamp は存在しないため削除 */}
                     </div>
