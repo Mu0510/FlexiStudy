@@ -251,57 +251,86 @@ export const useChat = () => {
       } else if (msg.id !== undefined && msg.result?.messages) {
         if (historyState.current.pendingHistory.has(msg.id)) {
           historyState.current.pendingHistory.delete(msg.id);
-          const newMessages = msg.result.messages.filter((m: any) => !historyState.current.loadedIds.has(m.id));
+          const rawMessages = msg.result.messages.filter((m: any) => !historyState.current.loadedIds.has(m.id));
 
-          if (newMessages.length > 0) {
-            newMessages.sort((a: any, b: any) => a.ts - b.ts);
+          if (rawMessages.length > 0) {
+            rawMessages.sort((a: any, b: any) => a.ts - b.ts);
+
+            // ツール呼び出しをマージする処理
+            const mergedMessages: any[] = [];
+            const toolCalls = new Map<string, any>();
+
+            for (const m of rawMessages) {
+              if (m.type === 'tool' && m.method === 'pushToolCall') {
+                const toolCallId = m.params.toolCallId ?? m.id;
+                toolCalls.set(toolCallId, {
+                  id: toolCallId,
+                  ts: m.ts,
+                  role: 'tool',
+                  type: 'tool',
+                  toolCallId: toolCallId,
+                  icon: m.params.icon,
+                  label: m.params.label,
+                  command: m.params.confirmation?.command || m.params.locations?.[0]?.path || '',
+                  status: 'running', // 初期状態
+                  content: '', // 初期状態
+                });
+              } else if (m.type === 'tool' && m.method === 'updateToolCall') {
+                const toolCallId = m.params.toolCallId ?? m.params.callId;
+                if (toolCalls.has(toolCallId)) {
+                  const existingTool = toolCalls.get(toolCallId);
+                  existingTool.status = m.params.status || existingTool.status;
+                  if (m.params.content) {
+                    const content = m.params.content;
+                     if (content.type === 'markdown' && content.markdown) {
+                      existingTool.content = marked.parse(content.markdown);
+                    } else if (content.type === 'diff') {
+                      existingTool.content = generateContextualDiffHtml(content.oldText, content.newText);
+                    } else if (typeof content === 'string') {
+                      existingTool.content = `<pre>${content}</pre>`;
+                    } else {
+                      existingTool.content = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                    }
+                  }
+                }
+              } else {
+                // ツール呼び出し以外のメッセージ
+                mergedMessages.push(m);
+              }
+            }
+
+            // マージされたツール呼び出しをメッセージリストに追加
+            mergedMessages.push(...Array.from(toolCalls.values()));
+
+            // タイムスタンプで最終ソート
+            mergedMessages.sort((a: any, b: any) => a.ts - b.ts);
 
             setMessages(prev => {
-              const updatedMessages = [...newMessages.map((m: any) => {
-                if (m.type === 'tool') {
-                  let processedContent = '';
-                  if (m.params?.content) {
-                    const content = m.params.content;
-                    if (content.type === 'markdown' && content.markdown) {
-                      processedContent = marked.parse(content.markdown);
-                    } else if (content.type === 'diff') {
-                      processedContent = generateContextualDiffHtml(content.oldText, content.newText);
-                    } else if (typeof content === 'string') {
-                      processedContent = `<pre>${content}</pre>`;
-                    } else {
-                      processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
-                    }
-                  } else {
-                    processedContent = '<span style="color:gray">（内容なし）</span>';
-                  }
-
-                  return {
+              const updatedMessages = [...mergedMessages.map((m: any) => {
+                // 既にツール呼び出しは処理済みなので、ここでは通常のメッセージを処理
+                if (m.role === 'user' || m.role === 'assistant') {
+                   return {
                     id: m.id,
-                    role: 'tool',
-                    type: 'tool',
-                    toolCallId: m.params.toolCallId ?? m.id,
-                    icon: m.params.icon,
-                    label: m.params.label,
-                    command: m.params.confirmation?.command || m.params.locations?.[0]?.path || '',
-                    status: m.params.status || 'finished',
-                    content: processedContent,
+                    role: m.role,
+                    content: marked.parse(m.text || ''),
                   };
-                } else {
-                  return {
-                    id: m.id,
-                    role: m.role === 'user' ? 'user' : 'assistant',
-                    content: marked.parse(m.text),
-                  };
+                } else if (m.role === 'tool') {
+                    // マージ済みのツールオブジェクトをそのまま返す
+                    return m;
                 }
-              }), ...prev];
-              newMessages.forEach((m: any) => historyState.current.loadedIds.add(m.id));
-              historyState.current.oldestTs = newMessages[0].ts;
+                return null; // 万が一のためのnullチェック
+              }).filter(Boolean), ...prev]; // nullを除外
+              
+              rawMessages.forEach((m: any) => historyState.current.loadedIds.add(m.id));
+              if (rawMessages.length > 0) {
+                historyState.current.oldestTs = rawMessages[0].ts;
+              }
               return updatedMessages;
             });
           }
 
           const limit = 20;
-          if (newMessages.length < limit) {
+          if (rawMessages.length < limit) {
             historyState.current.finished = true;
           }
           historyState.current.isFetchingHistory = false;
