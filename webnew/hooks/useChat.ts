@@ -66,8 +66,13 @@ function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): 
 export const useChat = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeMessage, setActiveMessage] = useState<ActiveMessage | null>(null);
+  const activeMessageRef = useRef<ActiveMessage | null>(null); // ここに移動
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
   const [toolCardsData, setToolCardsData] = useState<Map<string, ToolCardData>>(new Map());
+
+  useEffect(() => { // ここに移動
+    activeMessageRef.current = activeMessage;
+  }, [activeMessage]);
 
   const ws = useRef<WebSocket | null>(null);
   const requestIdCounter = useRef<number>(1);
@@ -125,38 +130,38 @@ export const useChat = () => {
         setActiveMessage(prev => ({
           id: prev?.id || msg.id || `thought-${Date.now()}`,
           type: 'thought',
-          content: thought.trim(),
+          content: thought.trim(), // thought は常に上書き
           thoughtMode: true,
         }));
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
-        // 既存のactiveMessageのIDを保持
-        const currentId = activeMessage?.id || msg.id || `assistant-${Date.now()}`;
+        const currentId = activeMessageRef.current?.id || msg.id || `assistant-${Date.now()}`;
 
-        // chunk.thought または chunk.text が存在する場合にactiveMessageを更新
-        setActiveMessage(prev => {
-          const currentContent = prev?.content || '';
-          let newContent = currentContent;
-          let newType: 'thought' | 'assistant' = prev?.type || 'thought'; // デフォルトはthought
-          let newThoughtMode = prev?.thoughtMode || false; // デフォルトはfalse
+        let newContent = activeMessageRef.current?.content || '';
+        let newType: 'thought' | 'assistant' = activeMessageRef.current?.type || 'thought';
+        let newThoughtMode = activeMessageRef.current?.thoughtMode || false;
 
-          if (chunk?.thought !== undefined) {
-            newContent = currentContent + chunk.thought.trim();
-            newType = 'thought';
-            newThoughtMode = true;
+        if (chunk?.text !== undefined) { // text が優先
+          newType = 'assistant';
+          newThoughtMode = false;
+          // text が来た場合、thought の内容をクリアして text を追記
+          // ただし、既に assistant タイプの場合は追記
+          if (activeMessageRef.current?.type !== 'assistant') { // thought から assistant に切り替わる場合
+            newContent = chunk.text.replace(/^\n+/, ''); // text で初期化
+          } else {
+            newContent = newContent + chunk.text.replace(/^\n+/, ''); // 追記
           }
+        } else if (chunk?.thought !== undefined) { // text がない場合のみ thought を処理
+          newContent = chunk.thought.trim(); // thought が来た場合は上書き
+          newType = 'thought';
+          newThoughtMode = true;
+        }
 
-          if (chunk?.text !== undefined) {
-            newContent = currentContent + chunk.text.replace(/^\n+/, '');
-            newType = 'assistant';
-            newThoughtMode = false;
-          }
-          return {
-            id: currentId, // IDは変更しない
-            type: newType,
-            content: newContent.trimEnd(),
-            thoughtMode: newThoughtMode,
-          };
+        setActiveMessage({
+          id: currentId,
+          type: newType,
+          content: newContent.trimEnd(),
+          thoughtMode: newThoughtMode,
         });
         // msg.idが存在する場合はACK
         if (msg.id !== undefined && ws.current) {
@@ -165,13 +170,18 @@ export const useChat = () => {
       } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
         if (activeMessage) {
           // アクティブなメッセージを確定し、メッセージに追加
-          setMessages(prev => [...prev, {
-            id: activeMessage.id,
-            role: activeMessage.type === 'thought' ? 'assistant' : 'assistant', // 思考もアシスタントから
-            content: activeMessage.content,
-          }]);
+          console.log("[DEBUG] agentMessageFinished/messageCompleted: activeMessage content before adding to messages:", activeMessage.content); // 追加
+          setMessages(prev => {
+            const newMessages = [...prev, {
+              id: activeMessage.id,
+              role: activeMessage.type === 'thought' ? 'assistant' : 'assistant', // 思考もアシスタントから
+              content: activeMessage.content,
+            }];
+            console.log("[DEBUG] agentMessageFinished/messageCompleted: messages after adding activeMessage:", newMessages); // 追加
+            return newMessages;
+          });
+          setActiveMessage(null); // メッセージが確定してからクリア
         }
-        setActiveMessage(null);
         setIsGeneratingResponse(false); // 完了は応答生成の終了を仮定
       } else if (msg.method === 'pushMessage') {
         // ツール完了後のアシスタントメッセージ
@@ -180,8 +190,9 @@ export const useChat = () => {
           role: 'assistant',
           content: msg.params.content,
         }]);
-        setActiveMessage(null); // アクティブなメッセージがあればリセット
-        setIsGeneratingResponse(false); // これも応答生成の終了を仮定
+        // pushMessageは通常、ツール実行後の最終メッセージなので、activeMessageはクリアして問題ない
+        setActiveMessage(null);
+        setIsGeneratingResponse(false);
       } else if (msg.method === 'pushToolCall') {
         const toolId = msg.params.toolCallId ?? msg.id;
         const { icon, label, locations } = msg.params;
@@ -288,15 +299,26 @@ export const useChat = () => {
         // RPC応答ハンドリング（sendUserMessage、fetchHistoryなど）
         // sendUserMessage の応答が result:null の場合のみ setActiveMessage(null) を呼び出す
         if (msg.result === null && msg.id === lastSentRequestId.current) { // lastSentRequestId.current と比較
+          console.log(`[DEBUG] result:null received for request ID: ${msg.id}. lastSentRequestId.current: ${lastSentRequestId.current}`); // 追加
           setIsGeneratingResponse(false);
           // activeMessage が存在する場合、messages に追加してからクリアする
-          if (activeMessage) {
-            console.log(`[DEBUG] result:null received. activeMessage content: "${activeMessage.content}"`); // 追加
-            setMessages(prev => [...prev, {
-              id: activeMessage.id,
-              role: activeMessage.type === 'thought' ? 'assistant' : 'assistant', // 思考もアシスタントから
-              content: activeMessage.content,
-            }]);
+          if (activeMessageRef.current) {
+            // activeMessage のタイプが 'assistant' の場合のみ確定
+            if (activeMessageRef.current.type === 'assistant') {
+              console.log(`[DEBUG] result:null received. activeMessage content: "${activeMessageRef.current.content}"`); // 追加
+              setMessages(prev => {
+                const newMessages = [...prev, {
+                  id: activeMessageRef.current.id,
+                  role: 'assistant', // 確定時は常に assistant
+                  content: activeMessageRef.current.content,
+                }];
+                console.log("[DEBUG] result:null received. messages after adding activeMessage:", newMessages); // 追加
+                return newMessages;
+              });
+            } else {
+              // thought の場合は確定しない（破棄）
+              console.log(`[DEBUG] result:null received. activeMessage type is thought, not adding to messages. Content: "${activeMessageRef.current.content}"`);
+            }
           }
           setActiveMessage(null);
         }
