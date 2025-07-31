@@ -115,32 +115,43 @@ export const useChat = () => {
         }));
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
-        const currentId = activeMessageRef.current?.id || msg.id || `assistant-${Date.now()}`;
 
-        let newContent = activeMessageRef.current?.content || '';
-        let newType: 'thought' | 'assistant' = activeMessageRef.current?.type || 'thought';
-        let newThoughtMode = activeMessageRef.current?.thoughtMode || false;
+        // 関数型アップデートを使い、常に最新の state に基づいて更新する
+        setActiveMessage(prevActiveMessage => {
+            const currentId = prevActiveMessage?.id || msg.id || `assistant-${Date.now()}`;
 
-        if (chunk?.text !== undefined) {
-          newType = 'assistant';
-          newThoughtMode = false;
-          if (activeMessageRef.current?.type !== 'assistant') {
-            newContent = chunk.text.replace(/^\n+/, '');
-          } else {
-            newContent = newContent + chunk.text.replace(/^\n+/, '');
-          }
-        } else if (chunk?.thought !== undefined) {
-          newContent = chunk.thought.trim();
-          newType = 'thought';
-          newThoughtMode = true;
-        }
+            // text チャンクの処理
+            if (chunk?.text !== undefined) {
+                let newContent = '';
+                // 前の状態が assistant なら追記、そうでなければ（thoughtなら）初期化
+                if (prevActiveMessage?.type === 'assistant') {
+                    newContent = (prevActiveMessage.content || '') + chunk.text.replace(/^\n+/, '');
+                } else {
+                    newContent = chunk.text.replace(/^\n+/, '');
+                }
 
-        setActiveMessage({
-          id: currentId,
-          type: newType,
-          content: newContent.trimEnd(),
-          thoughtMode: newThoughtMode,
+                return {
+                    id: currentId,
+                    type: 'assistant',
+                    content: newContent.trimEnd(),
+                    thoughtMode: false,
+                };
+            }
+
+            // thought チャンクの処理
+            if (chunk?.thought !== undefined) {
+                 return {
+                    id: currentId,
+                    type: 'thought',
+                    content: chunk.thought.trim(),
+                    thoughtMode: true,
+                };
+            }
+
+            // チャンクが空など、何も該当しない場合は前の状態を維持
+            return prevActiveMessage;
         });
+
         if (msg.id !== undefined && ws.current) {
           ws.current.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
         }
@@ -237,41 +248,8 @@ export const useChat = () => {
         if (status === 'finished') {
           setActiveMessage(null);
         }
-      } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
-        const toolId = msg.params.callId ?? msg.params.toolCallId;
-        let textContent = msg.params.chunk.text;
-
-        setMessages(prevMessages => prevMessages.map(m => {
-          if (m.id === toolId) {
-            let newContent = m.content || '';
-            // タイプが'diff'の場合のdiffカラーリングを処理
-            if (msg.params.chunk.type === 'diff') {
-              newContent += textContent.split('\n').map((line: string) => {
-                if (line.startsWith('+')) return `<span class="add">${line}</span>`;
-                if (line.startsWith('-')) return `<span class="del">${line}</span>`;
-                return line;
-              }).join('\n');
-            } else {
-              newContent += textContent;
-            }
-            return { ...m, content: newContent };
-          }
-          return m;
-        }));
-
-      } else if (msg.id !== undefined) {
-        if (msg.result === null && msg.id === lastSentRequestId.current) {
-          setIsGeneratingResponse(false);
-          if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
-            setMessages(prev => [...prev, {
-              id: activeMessageRef.current!.id,
-              role: 'assistant',
-              content: activeMessageRef.current!.content,
-            }]);
-          }
-          setActiveMessage(null);
-        }
-        if (historyState.current.pendingHistory.has(msg.id) && msg.result?.messages) {
+      } else if (msg.id !== undefined && msg.result?.messages) {
+        if (historyState.current.pendingHistory.has(msg.id)) {
           historyState.current.pendingHistory.delete(msg.id);
           const newMessages = msg.result.messages.filter((m: any) => !historyState.current.loadedIds.has(m.id));
 
@@ -327,6 +305,54 @@ export const useChat = () => {
             historyState.current.finished = true;
           }
           historyState.current.isFetchingHistory = false;
+        }
+      } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
+        const toolId = msg.params.callId ?? msg.params.toolCallId;
+        let textContent = msg.params.chunk.text;
+
+        setMessages(prevMessages => prevMessages.map(m => {
+          if (m.id === toolId) {
+            let newContent = m.content || '';
+            // タイプが'diff'の場合のdiffカラーリングを処理
+            if (msg.params.chunk.type === 'diff') {
+              newContent += textContent.split('\n').map((line: string) => {
+                if (line.startsWith('+')) return `<span class="add">${line}</span>`;
+                if (line.startsWith('-')) return `<span class="del">${line}</span>`;
+                return line;
+              }).join('\n');
+            } else {
+              newContent += textContent;
+            }
+            return { ...m, content: newContent };
+          }
+          return m;
+        }));
+
+      } else if (msg.id !== undefined && msg.result === null) {
+        // ACPモードでは、sendUserMessage への応答 (result:null) がストリーム全体の完了を示す
+        if (msg.id === lastSentRequestId.current) {
+          console.log(`[DEBUG] Completion signal received (id: ${msg.id}). Finalizing active message.`);
+
+          // 関数型アップデートを使い、ref のタイミング問題を起こさずに activeMessage を確定させる
+          setActiveMessage(prevActiveMessage => {
+            if (prevActiveMessage && prevActiveMessage.type === 'assistant') {
+              setMessages(prevMessages => {
+                // 重複キーエラーを防ぐため、同じIDのメッセージが既に存在しないか確認
+                if (prevMessages.some(m => m.id === prevActiveMessage.id)) {
+                  return prevMessages;
+                }
+                return [...prevMessages, {
+                  id: prevActiveMessage.id,
+                  role: 'assistant',
+                  content: prevActiveMessage.content,
+                }];
+              });
+            }
+            // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
+            return null; // activeMessage をクリア
+          });
+
+          setIsGeneratingResponse(false);
         }
       }
     };
