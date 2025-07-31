@@ -144,11 +144,9 @@ export const useChat = () => {
             newContent = chunk.thought.trim();
             newType = 'thought'; // thoughtが来たらthoughtタイプ
             newThoughtMode = true; // thoughtModeをtrueに
-          }
-
-          if (chunk?.text !== undefined) {
+          } else if (chunk?.text !== undefined) { // else if を追加
             // textが来たらassistantタイプに切り替え、既存のコンテンツに追加
-            newContent = (newType === 'thought' ? '' : currentContent) + chunk.text.replace(/^\n+/, '');
+            newContent = currentContent + chunk.text.replace(/^\n+/, ''); // thoughtの内容を保持
             newType = 'assistant';
             newThoughtMode = false; // textが来たらthoughtModeはfalse
           }
