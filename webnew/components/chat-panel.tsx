@@ -10,6 +10,8 @@ import { X, Maximize2, Minimize2, Send, Bot, User, Code, Database, BarChart3, Se
 import { cn } from "@/lib/utils"
 import { useChat, ChatMessage } from "@/hooks/useChat"; // Import useChat and ChatMessage
 import { Textarea } from "@/components/ui/textarea";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 interface ChatPanelProps {
   isOpen: boolean
@@ -207,7 +209,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                       msg.role === "assistant" && "animate-pulse"
                     )}
                   >
-                    <div className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</div>
+                    <ReactMarkdown className="prose dark:prose-invert text-sm leading-relaxed whitespace-pre-wrap" remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     <div className={cn("text-xs mt-2", msg.role === "user" ? "text-neutral-100" : "text-neutral-500")}>
                       {/* msg.timestamp は存在しないため削除 */}
                     </div>
