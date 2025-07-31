@@ -144,9 +144,11 @@ export const useChat = () => {
             newContent = chunk.thought.trim();
             newType = 'thought'; // thoughtが来たらthoughtタイプ
             newThoughtMode = true; // thoughtModeをtrueに
-          } else if (chunk?.text !== undefined) { // else if を追加
+          }
+
+          if (chunk?.text !== undefined) {
             // textが来たらassistantタイプに切り替え、既存のコンテンツに追加
-            newContent = currentContent + chunk.text.replace(/^\n+/, ''); // thoughtの内容を保持
+            newContent = (newType === 'thought' ? '' : currentContent) + chunk.text.replace(/^\n+/, '');
             newType = 'assistant';
             newThoughtMode = false; // textが来たらthoughtModeはfalse
           }
@@ -290,7 +292,6 @@ export const useChat = () => {
         // sendUserMessage の応答が result:null の場合のみ setActiveMessage(null) を呼び出す
         if (msg.result === null && msg.id === lastSentRequestId.current) { // lastSentRequestId.current と比較
           setIsGeneratingResponse(false);
-          setActiveMessage(null);
         }
         // fetchHistory応答を処理
         if (historyState.current.pendingHistory.has(msg.id) && msg.result?.messages) {
