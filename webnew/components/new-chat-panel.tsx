@@ -45,7 +45,7 @@ function getToolIconText(iconName?: string) {
 export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }: NewChatPanelProps) {
   const [input, setInput] = useState("")
   // Destructure activeMessage and toolCardsData
-  const { messages, activeMessage, isGeneratingResponse, toolCardsData, sendMessage, requestHistory } = useChat(); // Removed isOpen from useChat arguments
+  const { messages, activeMessage, isGeneratingResponse, sendMessage, requestHistory } = useChat(); // Removed isOpen from useChat arguments
 
   const messagesContainerRef = useRef<HTMLDivElement>(null); // Reference to the scrollable messages container
   const chatInputRef = useRef<HTMLTextAreaElement>(null);

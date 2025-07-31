@@ -198,6 +198,33 @@ export const useChat = () => {
           }));
         }
         setActiveMessage(null);
+      } else if (msg.method === 'requestToolCallConfirmation') {
+        const toolId = msg.params.toolCallId ?? msg.id;
+        const { icon, label, confirmation } = msg.params;
+        const command = confirmation?.command ?? '';
+
+        // 常に許可するため、すぐに許可の応答を返す
+        if (ws.current) {
+          ws.current.send(JSON.stringify({
+            jsonrpc: '2.0',
+            id: msg.id, // 受け取ったメッセージのIDをそのまま使う
+            result: { id: toolId, outcome: 'allow' }
+          }));
+        }
+
+        // UIには通常のツール呼び出しとして表示
+        setMessages(prev => [...prev, {
+          id: toolId,
+          role: 'tool',
+          type: 'tool',
+          toolCallId: toolId,
+          icon,
+          label,
+          command,
+          status: 'running', // すぐに実行中として表示
+          content: confirmation?.details ?? '',
+        }]);
+        setActiveMessage(null);
       } else if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         const { status, content } = msg.params;
@@ -261,7 +288,7 @@ export const useChat = () => {
             const toolCalls = new Map<string, any>();
 
             for (const m of rawMessages) {
-              if (m.type === 'tool' && m.method === 'pushToolCall') {
+              if (m.type === 'tool' && (m.method === 'pushToolCall' || m.method === 'requestToolCallConfirmation')) {
                 const toolCallId = m.params.toolCallId ?? m.id;
                 toolCalls.set(toolCallId, {
                   id: toolCallId,
@@ -425,6 +452,22 @@ export const useChat = () => {
     ws.current.send(JSON.stringify(req));
   }, [isGeneratingResponse]);
 
+  const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
+    if (!ws.current) return;
+
+    const req = {
+      jsonrpc: '2.0',
+      id: requestIdCounter.current++,
+      method: 'confirmToolCall',
+      params: { toolCallId, result }
+    };
+    ws.current.send(JSON.stringify(req));
+
+    // 確認後はカードをメッセージから削除
+    setMessages(prev => prev.filter(m => m.id !== toolCallId));
+
+  }, []);
+
   const requestHistory = useCallback((isInitialLoad = false) => {
     if (historyState.current.isFetchingHistory || historyState.current.finished) return;
 
@@ -450,5 +493,6 @@ export const useChat = () => {
     // toolCardsData は削除
     sendMessage,
     requestHistory,
+    sendToolConfirmation,
   };
 };
