@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
 import { useChat, Message, ActiveMessage, ToolCardData } from "@/hooks/useChat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { marked } from 'marked';
 
 interface NewChatPanelProps {
   isOpen: boolean
@@ -93,7 +94,7 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
   // Initial history load and scroll to bottom
   useEffect(() => {
     if (isOpen) {
-      requestHistory(true); // Request initial history when panel opens
+      // requestHistory(true); // Request initial history when panel opens
       scrollBottom(true); // Force scroll to bottom on initial open
     }
   }, [isOpen, requestHistory, scrollBottom]);

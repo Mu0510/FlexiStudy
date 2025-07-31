@@ -1,6 +1,7 @@
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { marked } from 'marked';
+import { Diff } from 'diff'; // jsdiff ライブラリをインポート
 
 interface Message {
   id: string;
@@ -30,21 +31,36 @@ interface ToolCardData {
   content: string; // HTMLコンテンツを保持するように変更
 }
 
-// diffレンダリングのためのヘルパー関数（chat.jsから移植）
-// これにはDiffライブラリ（例: diff-match-patchなど）が必要です。
-// 今のところ、簡略化されたプレースホルダーを使用するか、Diffライブラリが利用可能であると仮定します。
-// Diffライブラリが利用できない場合、これはゼロから実装するか、依存関係を追加する必要があります。
-// （chat.jsのように）'Diff'オブジェクトがグローバルに利用可能であるか、インポートされていると仮定します。
-// 実際のReactアプリでは、通常、'diff'や'react-diff-viewer'のようなライブラリを使用します。
-// 今のところ、基本的な表現を返します。
-// 完全に正確にするには、chat.jsで使用されている'diff'ライブラリ（おそらくhttps://github.com/kpdecker/jsdiff）を統合する必要があります。
 function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): string {
-  // プレースホルダーの実装 - これは実際のdiffロジックに置き換える必要があります
-  // 今のところ、古いテキストと新しいテキストを表示するだけです
-  return `<pre>--- Old Text ---
-${oldText}
---- New Text ---
-${newText}</pre>`;
+  const patch = Diff.structuredPatch('old','new',oldText,newText,'','',{context:ctx});
+  let html = '<pre>';
+  patch.hunks.forEach((h: any, hi: number) => {
+    let oldNum = h.oldStart;
+    let newNum = h.newStart;
+    h.lines.forEach((line: string) => {
+      if (line.includes('\ No newline at end of file')) return;
+      let oldNumHtml = '', newNumHtml = '', lineClass = '';
+      if (line.startsWith('+')) {
+        lineClass = 'add';
+        oldNumHtml = `<span class="line-num"></span>`;
+        newNumHtml = `<span class="line-num new">${newNum++}</span>`;
+      } else if (line.startsWith('-')) {
+        lineClass = 'del';
+        oldNumHtml = `<span class="line-num old">${oldNum++}</span>`;
+        newNumHtml = `<span class="line-num"></span>`;
+      } else {
+        lineClass = 'context';
+        oldNumHtml = `<span class="line-num old">${oldNum}</span>`;
+        newNumHtml = `<span class="line-num new">${newNum}</span>`;
+        oldNum++; newNum++;
+      }
+      const esc = line.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      html += `<span class="${lineClass}">${oldNumHtml}${newNumHtml}${esc}</span>\n`;
+    });
+    if (hi !== patch.hunks.length - 1) html += '<hr class="diff-separator">\n';
+  });
+  html += '</pre>';
+  return html;
 }
 
 export const useChat = () => {
@@ -89,7 +105,7 @@ export const useChat = () => {
     ws.current.onopen = () => {
       console.log('WebSocket connected');
       // 初期の履歴フェッチとUI状態の設定
-      // requestHistory(true); // requestHistoryを実装する必要があります
+      requestHistory(true); // requestHistoryを実装する必要があります
       setIsGeneratingResponse(false);
     }
 
@@ -244,7 +260,9 @@ export const useChat = () => {
         // chat.js の resetActive() に相当
         if (status === 'finished') {
           setActiveMessage(null);
-        } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
+        }
+      }
+      if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         let textContent = msg.params.chunk.text;
 
@@ -265,12 +283,14 @@ export const useChat = () => {
           ...prev,
           content: (prev?.content || '') + textContent, // 内容を追加
         }));
+        // messages 配列内のツールメッセージの content も更新
         setMessages(prevMessages => prevMessages.map(m =>
           m.id === toolId ? { ...m, content: (m.content || '') + textContent } : m
         ));
       } else if (msg.id !== undefined) {
         // RPC応答ハンドリング（sendUserMessage、fetchHistoryなど）
-        if (msg.result === null) {
+        // sendUserMessage の応答が result:null の場合のみ setActiveMessage(null) を呼び出す
+        if (msg.result === null && msg.id === lastSentRequestId.current) { // lastSentRequestId.current と比較
           setIsGeneratingResponse(false);
           setActiveMessage(null);
         }
@@ -341,7 +361,7 @@ export const useChat = () => {
           historyState.current.isFetchingHistory = false;
         }
       }
-    };
+    }
 
     ws.current.onclose = () => {
       console.log('WebSocket disconnected');
