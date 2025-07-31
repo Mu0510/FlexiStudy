@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { X, Send, Bot, User, CheckCircle, XCircle } from "lucide-react"
+import { X, Send, Bot, User, CheckCircle, XCircle, Maximize, Minimize } from "lucide-react"
 import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
 import { useChat } from "@/hooks/useChat";
@@ -14,6 +14,8 @@ import { marked } from 'marked';
 interface NewChatPanelProps {
   isOpen: boolean
   onClose: () => void
+  isFullScreen: boolean
+  setIsFullScreen: (isFullScreen: boolean) => void
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -40,7 +42,7 @@ function getToolIconText(iconName?: string) {
   }
 }
 
-export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
+export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }: NewChatPanelProps) {
   const [input, setInput] = useState("")
   // Destructure activeMessage and toolCardsData
   const { messages, activeMessage, isGeneratingResponse, toolCardsData, sendMessage, requestHistory } = useChat(); // Removed isOpen from useChat arguments
@@ -125,12 +127,22 @@ export function NewChatPanel({ isOpen, onClose }: NewChatPanelProps) {
   if (!isOpen) return null
 
   return (
-    <div className="fixed bottom-4 right-4 w-96 h-[600px] bg-white border border-slate-200 shadow-2xl rounded-2xl flex flex-col z-50">
+    <div className={cn(
+      "bg-white border border-slate-200 shadow-2xl rounded-2xl flex flex-col z-50",
+      isFullScreen 
+        ? "fixed inset-0"
+        : "fixed bottom-4 right-4 w-96 h-[600px]"
+    )}>
       <div className="flex-shrink-0 border-b p-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Gemini Chat</h2>
-        <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center space-x-2">
+          <Button variant="ghost" size="sm" onClick={() => setIsFullScreen(!isFullScreen)} className="p-2">
+            {isFullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-4"> {/* Added ref here */}

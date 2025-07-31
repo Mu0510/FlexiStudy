@@ -17,6 +17,7 @@ export default function StudyApp() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [isNewChatOpen, setIsNewChatOpen] = useState(false)
+  const [isFullScreen, setIsFullScreen] = useState(false); // 全画面表示用の state
   const [chatMode, setChatMode] = useState<"floating" | "sidebar" | "fullscreen">("floating")
   const [logData, setLogData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -105,37 +106,46 @@ export default function StudyApp() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-neutral-100 to-neutral-300">
-      <MobileHeader
-        onMenuClick={() => setIsMobileMenuOpen(true)}
-        onChatClick={() => setChatOpen(!chatOpen)}
-      />
+    <div className={`min-h-screen bg-gradient-to-br from-neutral-100 to-neutral-300 ${isFullScreen ? 'overflow-hidden' : ''}`}>
+      <div className={isFullScreen ? 'hidden' : ''}>
+        <MobileHeader
+          onMenuClick={() => setIsMobileMenuOpen(true)}
+          onChatClick={() => setChatOpen(!chatOpen)}
+        />
+      </div>
 
       <div className="flex">
-        <Sidebar
-          activeView={activeView}
-          onViewChange={setActiveView}
-          collapsed={sidebarCollapsed}
-          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
-          isMobileMenuOpen={isMobileMenuOpen}
-          setIsMobileMenuOpen={setIsMobileMenuOpen}
-          onChatClick={() => {
-            setChatOpen(true)
-            setChatMode("sidebar")
-          }}
-          onNewChatClick={() => setIsNewChatOpen(true)}
-        />
+        <div className={isFullScreen ? 'hidden' : ''}>
+          <Sidebar
+            activeView={activeView}
+            onViewChange={setActiveView}
+            collapsed={sidebarCollapsed}
+            onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+            isMobileMenuOpen={isMobileMenuOpen}
+            setIsMobileMenuOpen={setIsMobileMenuOpen}
+            onChatClick={() => {
+              setChatOpen(true)
+              setChatMode("sidebar")
+            }}
+            onNewChatClick={() => setIsNewChatOpen(true)}
+          />
+        </div>
 
         <main
           className={`flex-1 transition-all duration-300 p-6 pt-20 lg:pt-6 ${
             sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
-          }`}
+          } ${isFullScreen ? 'hidden' : ''}`}
         >
           <div className="max-w-7xl mx-auto">{renderActiveView()}</div>
         </main>
 
         <ChatPanel isOpen={chatOpen} mode={chatMode} onClose={() => setChatOpen(false)} onModeChange={setChatMode} />
-        <NewChatPanel isOpen={isNewChatOpen} onClose={() => setIsNewChatOpen(false)} />
+        <NewChatPanel 
+          isOpen={isNewChatOpen} 
+          onClose={() => setIsNewChatOpen(false)} 
+          isFullScreen={isFullScreen}
+          setIsFullScreen={setIsFullScreen}
+        />
       </div>
     </div>
   )
