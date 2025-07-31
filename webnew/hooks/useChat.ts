@@ -281,13 +281,13 @@ export const useChat = () => {
             let processedContent = '';
             if (content) {
                 if (content.type === 'markdown') {
-                    processedContent = marked.parse(content.markdown);
+                    processedContent = content.markdown;
                 } else if (content.type === 'diff') {
                     processedContent = generateContextualDiffHtml(content.oldText, content.newText);
                 } else if (typeof content === 'string') {
-                    processedContent = `<pre>${content}</pre>`;
+                    processedContent = content;
                 } else {
-                    processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+                    processedContent = JSON.stringify(content, null, 2);
                 }
             }
             toolMessage.status = status;
@@ -363,7 +363,7 @@ export const useChat = () => {
                    return {
                     id: m.id,
                     role: m.role,
-                    content: marked.parse(m.text || ''),
+                    content: m.text || '',
                   };
                 } else if (m.role === 'tool') {
                     // マージ済みのツールオブジェクトをそのまま返す
