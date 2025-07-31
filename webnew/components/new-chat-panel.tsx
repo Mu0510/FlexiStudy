@@ -9,7 +9,9 @@ import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
 import { useChat } from "@/hooks/useChat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { marked } from 'marked';
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 
 interface NewChatPanelProps {
   isOpen: boolean
@@ -203,14 +205,18 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                   </div>
                 )}
                 <div
-                  className={cn(
-                    "rounded-2xl px-4 py-3",
-                    msg.role === "user" ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-800",
-                  )}
-                >
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: marked.parse(msg.content) }} />
-                  {/* Removed timestamp for now, not in Message interface */}
-                </div>
+                    className={cn(
+                      "prose prose-sm dark:prose-invert max-w-none",
+                      msg.role === "user" ? "bg-blue-600 text-white rounded-2xl px-4 py-3" : "bg-gray-200 text-gray-800 rounded-2xl px-4 py-3",
+                    )}
+                  >
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      rehypePlugins={[rehypeRaw]}
+                    >
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
                 {msg.role === "user" && (
                   <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center flex-shrink-0">
                     <User className="w-4 h-4 text-white" />
@@ -229,12 +235,17 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             </div>
             <div
               className={cn(
-                "rounded-2xl px-4 py-3",
+                "prose prose-sm dark:prose-invert max-w-none rounded-2xl px-4 py-3",
                 "bg-gray-200 text-gray-800",
                 activeMessage.thoughtMode && "animate-pulse" // Apply pulse for thought mode
               )}
             >
-              <div className="text-sm leading-relaxed whitespace-pre-wrap" dangerouslySetInnerHTML={{ __html: marked.parse(activeMessage.content) }} />
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+              >
+                {activeMessage.content}
+              </ReactMarkdown>
               {console.log("Active Message Content:", activeMessage.content)} {/* ここにログを追加 */}
             </div>
           </div>
