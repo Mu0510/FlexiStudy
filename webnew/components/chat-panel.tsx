@@ -209,7 +209,7 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
                       msg.role === "assistant" && "animate-pulse"
                     )}
                   >
-                    <ReactMarkdown className="prose dark:prose-invert text-sm leading-relaxed whitespace-pre-wrap" remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                    <ReactMarkdown className="prose dark:prose-invert text-sm leading-relaxed" remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
                     <div className={cn("text-xs mt-2", msg.role === "user" ? "text-neutral-100" : "text-neutral-500")}>
                       {/* msg.timestamp は存在しないため削除 */}
                     </div>
