@@ -1,7 +1,7 @@
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { marked } from 'marked';
-import { Diff } from 'diff'; // jsdiff ライブラリをインポート
+import * as Diff from 'diff'; // jsdiff ライブラリをインポート
 
 interface Message {
   id: string;
@@ -33,22 +33,32 @@ function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): 
     h.lines.forEach((line: string) => {
       if (line.includes('\ No newline at end of file')) return;
       let oldNumHtml = '', newNumHtml = '', lineClass = '';
+      let prefix = ' '; // Default prefix for context lines
+      let content = line; // Content without prefix
+
       if (line.startsWith('+')) {
         lineClass = 'add';
+        prefix = '+';
+        content = line.substring(1); // Remove '+'
         oldNumHtml = `<span class="line-num"></span>`;
         newNumHtml = `<span class="line-num new">${newNum++}</span>`;
       } else if (line.startsWith('-')) {
         lineClass = 'del';
+        prefix = '-';
+        content = line.substring(1); // Remove '-'
         oldNumHtml = `<span class="line-num old">${oldNum++}</span>`;
         newNumHtml = `<span class="line-num"></span>`;
       } else {
         lineClass = 'context';
+        prefix = ' '; // Keep the space for the prefix
+        content = line.substring(1); // Remove the leading space from content
         oldNumHtml = `<span class="line-num old">${oldNum}</span>`;
         newNumHtml = `<span class="line-num new">${newNum}</span>`;
         oldNum++; newNum++;
       }
-      const esc = line.replace(/&/g,'&amp;').replace(/</g,'&lt;');
-      html += `<span class="${lineClass}">${oldNumHtml}${newNumHtml}${esc}</span>\n`;
+
+      const escContent = content.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+      html += `<span class="${lineClass}">${oldNumHtml}${newNumHtml}<span class="diff-prefix">${prefix}</span>${escContent}</span>\n`;
     });
     if (hi !== patch.hunks.length - 1) html += '<hr class="diff-separator">\n';
   });

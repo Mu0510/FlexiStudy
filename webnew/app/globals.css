@@ -103,3 +103,59 @@
 .tool-card__body p {
   color: white;
 }
+
+.tool-card__body span {
+  color: white;
+}
+
+/* Diff 表示用スタイル */
+.tool-card__body pre {
+  background-color: #2d2d2d; /* 暗めの背景色 */
+  color: #f8f8f2; /* デフォルトの文字色 */
+  padding: 1em;
+  overflow-x: auto;
+  border-radius: 0.3em;
+}
+
+.tool-card__body pre span.add {
+  color: #a6e22e; /* 緑色 */
+}
+
+.tool-card__body pre span.del {
+  color: #f92672; /* 赤色 */
+}
+
+.tool-card__body pre span.context {
+  color: #f8f8f2; /* デフォルトの文字色 */
+}
+
+.tool-card__body pre span.line-num {
+  display: inline-block;
+  width: 1em;
+  text-align: right;
+  margin-right: 1em;
+  color: #75715e; /* 行番号の色 */
+}
+
+.tool-card__body pre span.add .diff-prefix {
+  color: #a6e22e; /* 緑色 */
+}
+
+.tool-card__body pre span.del .diff-prefix {
+  color: #f92672; /* 赤色 */
+}
+
+.tool-card__body pre span.diff-prefix {
+  display: inline-block;
+  width: 1em; /* + や - のための幅 */
+  text-align: center;
+  margin-right: 0.5em;
+}
+
+.tool-card__body pre span.add .diff-prefix {
+  color: #a6e22e; /* 緑色 */
+}
+
+.tool-card__body pre span.del .diff-prefix {
+  color: #f92672; /* 赤色 */
+}
