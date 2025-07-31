@@ -205,14 +205,14 @@ export function ChatPanel({ isOpen, mode, onClose, onModeChange }: ChatPanelProp
 
                   <div
                     className={cn(
-                      "rounded-2xl",
+                      "prose rounded-2xl",
                       msg.role === "user" ? "bg-primary-800 text-neutral-100 max-w-[70%] px-4 py-3 my-2" : "w-[90%] bg-transparent text-neutral-900 my-1 mb-5",
                       msg.role === "assistant" && "animate-pulse"
                     )}
                   >
                     {console.log("msg.content:", msg.content)}
                     <ReactMarkdown
-  className="prose dark:prose-invert text-sm leading-relaxed whitespace-pre-wrap px-4 py-3 prose-headings:font-bold prose-headings:text-current prose-headings:text-2xl"
+  className="dark:prose-invert text-sm leading-relaxed whitespace-pre-wrap px-4 py-3 prose-headings:font-bold prose-headings:text-current prose-headings:text-2xl"
   remarkPlugins={[remarkGfm]}
   rehypePlugins={[rehypeRaw]}
 >
