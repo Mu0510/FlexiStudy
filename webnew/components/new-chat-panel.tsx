@@ -191,7 +191,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 <CardContent className="p-0 text-sm text-gray-700">
                   {/* Removed toolCallConfirmation logic for now, focusing on content */}
                   <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 p-2 rounded not-prose max-h-48 overflow-auto">
-                    <div dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
+                    <div className="text-white" dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
                   </pre>
                 </CardContent>
               </Card>
