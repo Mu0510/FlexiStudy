@@ -206,7 +206,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 )}
                 <div
                     className={cn(
-                      "prose prose-sm dark:prose-invert max-w-none",
+                      "prose prose-sm dark:prose-invert max-w-none whitespace-pre-wrap", // whitespace-pre-wrap を追加
                       msg.role === "user" ? "bg-blue-600 text-white rounded-2xl px-4 py-3" : "bg-gray-200 text-gray-800 rounded-2xl px-4 py-3",
                     )}
                   >
