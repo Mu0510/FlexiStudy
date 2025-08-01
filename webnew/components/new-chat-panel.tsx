@@ -79,7 +79,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   };
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && e.altKey && !isGeneratingResponse) {
+    if (e.key === "Enter" && e.altKey) {
       e.preventDefault();
       handleSendMessage();
     }

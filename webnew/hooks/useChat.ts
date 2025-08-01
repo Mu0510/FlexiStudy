@@ -464,12 +464,14 @@ export const useChat = () => {
   const sendMessage = useCallback((text: string) => {
     if (!ws.current || isGeneratingResponse) return;
 
+    setIsGeneratingResponse(true);
+
     const newMessage: Message = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
         role: "user",
         content: text,
         type: "text",
-        timestamp: new Date().toISOString(),
+        // timestamp: new Date().toISOString(), // timestamp is not in the interface
       };
 
     setMessages(prev => [...prev, newMessage]);
