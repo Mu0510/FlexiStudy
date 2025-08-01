@@ -143,15 +143,23 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
   // --- File Handling ---
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("handleFileSelect triggered.");
     const files = event.target.files;
-    if (files) {
-      setSelectedFiles(prevFiles => [...prevFiles, ...Array.from(files)]);
+    if (files && files.length > 0) {
+      console.log(`Files selected: ${files.length}`, Array.from(files).map(f => f.name));
+      // Now directly use selectedFiles from the closure, which is guaranteed to be up-to-date
+      // because selectedFiles is in the dependency array.
+      const newFiles = [...selectedFiles, ...Array.from(files)];
+      console.log(`Updating selectedFiles state. New count: ${newFiles.length}`);
+      setSelectedFiles(newFiles);
+    } else {
+      console.log("No files selected or event.target.files is null.");
     }
     // Reset the input value to allow selecting the same file again
     if(fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  }, []); // Empty dependency array means this function is created only once
+  }, [selectedFiles]); // KEY CHANGE: Add selectedFiles to the dependency array
 
   const handleRemoveFile = useCallback((fileToRemove: File) => {
     setSelectedFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
