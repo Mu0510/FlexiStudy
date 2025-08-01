@@ -124,7 +124,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   }
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && e.altKey) {
       e.preventDefault();
       if (!isGeneratingResponse) {
         handleSendMessage();
@@ -247,14 +247,14 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div className="flex-shrink-0 p-4 border-t">
-        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-2">
+        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-2 focus-within:border-gray-400 transition-colors">
           <Textarea
             ref={chatInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力... (Shift+Enterで改行)"}
-            className="w-full resize-none border-none focus:ring-0 bg-transparent overflow-hidden"
+            placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力... (Alt+Enterで送信)"}
+            className="w-full resize-none border-none bg-transparent outline-none focus:outline-none focus:ring-0 focus:border-transparent overflow-hidden"
             rows={1}
             disabled={isGeneratingResponse}
           />
