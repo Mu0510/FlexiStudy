@@ -278,15 +278,17 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const wasNearBottom = isNearBottom();
-    const isNewMessage = messages.length > prevMessagesLength.current;
-
-    if (isNewMessage && wasNearBottom) {
-      scrollBottom(true);
+    // メッセージが追加された、またはactiveMessageが更新された場合
+    // ただし、履歴読み込みによるメッセージ追加の場合はスクロールしない
+    if (!isFetchingHistory && (messages.length > prevMessagesLength.current || activeMessage)) {
+      // ユーザーが最下部にいた場合のみ自動スクロール
+      if (isNearBottom()) {
+        container.scrollTop = container.scrollHeight;
+      }
     }
 
     prevMessagesLength.current = messages.length;
-  }, [messages, activeMessage, isNearBottom, scrollBottom]);
+  }, [messages, activeMessage, isFetchingHistory, isNearBottom]);
 
 
   if (!isOpen) return null
