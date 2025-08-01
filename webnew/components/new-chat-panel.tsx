@@ -115,15 +115,11 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   }
 
   const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Alt+Enter for send, Enter for newline (as per chat.js)
-    if (e.key === "Enter" && e.altKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (!isGeneratingResponse) {
         handleSendMessage();
       }
-    } else if (e.key === "Enter") {
-      // Allow default Enter behavior for newline if Alt is not pressed
-      // No need to preventDefault here unless we want to suppress default newline
     }
   };
 
@@ -242,37 +238,37 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div className="flex-shrink-0 p-4 border-t">
-        <div className="relative">
+        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-2">
           <Textarea
             ref={chatInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力..."}
-            className="w-full resize-none pr-16"
+            placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力... (Shift+Enterで改行)"}
+            className="w-full resize-none border-none focus:ring-0 bg-transparent"
             rows={1}
             disabled={isGeneratingResponse}
           />
-          <Button
-            onClick={handleSendMessage}
-            disabled={isGeneratingResponse || !input.trim()}
-            className="absolute right-2 bottom-2 bg-black hover:bg-gray-800 text-white rounded-full p-2"
-          >
-            <ArrowUp className="w-4 h-4" strokeWidth={2} />
-          </Button>
-        </div>
-        <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-1 text-gray-500">
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-2 text-gray-500">
+              <Button variant="ghost" size="icon" className="rounded-full">
                 <Plus className="w-5 h-5" strokeWidth={2} />
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full">
                 <SlidersHorizontal className="w-5 h-5" strokeWidth={2} />
-                <span className="text-sm">ツール</span>
-            </div>
-            <button
-                type="button"
-                className="text-gray-500 hover:text-gray-700"
-            >
+              </Button>
+              <Button variant="ghost" size="icon" className="rounded-full">
                 <Mic className="w-5 h-5" strokeWidth={2} />
-            </button>
+              </Button>
+            </div>
+            <Button
+              onClick={handleSendMessage}
+              disabled={isGeneratingResponse || !input.trim()}
+              className="bg-black hover:bg-gray-800 text-white rounded-full p-2"
+            >
+              <ArrowUp className="w-4 h-4" strokeWidth={2} />
+            </Button>
+          </div>
         </div>
       </div>
     </div>
