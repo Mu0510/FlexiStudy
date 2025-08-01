@@ -105,6 +105,15 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   }, [isOpen, requestHistory, scrollBottom]);
 
 
+  // Auto-resize textarea
+  useEffect(() => {
+    const textarea = chatInputRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [input]);
+
   const handleSendMessage = () => {
     if (!input.trim() || isGeneratingResponse) return;
     sendMessage(input); // Use sendMessage from useChat
@@ -245,7 +254,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力... (Shift+Enterで改行)"}
-            className="w-full resize-none border-none focus:ring-0 bg-transparent"
+            className="w-full resize-none border-none focus:ring-0 bg-transparent overflow-hidden"
             rows={1}
             disabled={isGeneratingResponse}
           />
