@@ -11,7 +11,7 @@ const StudyRecords = dynamic(() => import("@/components/study-records").then(mod
 import { Analytics } from "@/components/analytics"
 import { ExamAnalysis } from "@/components/exam-analysis"
 import { Settings } from "@/components/settings"
-import { ChatPanel } from "@/components/chat-panel"
+
 import { NewChatPanel } from "@/components/new-chat-panel"
 import { MobileHeader } from "@/components/mobile-header"
 
@@ -19,10 +19,10 @@ export default function StudyApp() {
   const [activeView, setActiveView] = useState("records")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
-  const [chatOpen, setChatOpen] = useState(false)
+  
   const [isNewChatOpen, setIsNewChatOpen] = useState(false)
   const [isFullScreen, setIsFullScreen] = useState(false); // 全画面表示用の state
-  const [chatMode, setChatMode] = useState<"floating" | "sidebar" | "fullscreen">("floating")
+  
   const [logData, setLogData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export default function StudyApp() {
       <div className={isFullScreen ? 'hidden' : ''}>
         <MobileHeader
           onMenuClick={() => setIsMobileMenuOpen(true)}
-          onChatClick={() => setChatOpen(!chatOpen)}
+          
         />
       </div>
 
@@ -127,10 +127,7 @@ export default function StudyApp() {
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             isMobileMenuOpen={isMobileMenuOpen}
             setIsMobileMenuOpen={setIsMobileMenuOpen}
-            onChatClick={() => {
-              setChatOpen(true)
-              setChatMode("sidebar")
-            }}
+            
             onNewChatClick={() => setIsNewChatOpen(true)}
           />
         </div>
@@ -143,7 +140,7 @@ export default function StudyApp() {
           <div className="max-w-7xl mx-auto">{renderActiveView()}</div>
         </main>
 
-        <ChatPanel isOpen={chatOpen} mode={chatMode} onClose={() => setChatOpen(false)} onModeChange={setChatMode} />
+        
         <NewChatPanel 
           isOpen={isNewChatOpen} 
           onClose={() => {
