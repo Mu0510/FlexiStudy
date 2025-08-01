@@ -105,11 +105,9 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                     const { chunk: c } = msg.params || {};
                     if (c?.text) {
                         ongoingText += c.text;
-                        broadcast(wss, msg);
                     }
-                    if (c?.thought) {
-                        broadcast(wss, { jsonrpc: '2.0', method: 'streamAssistantThoughtChunk', params: { thought: c.thought } });
-                    }
+                    // streamAssistantMessageChunk はそのままブロードキャスト
+                    broadcast(wss, msg);
                     continue;
                 }
 

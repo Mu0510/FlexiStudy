@@ -133,40 +133,38 @@ export const useChat = () => {
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
 
-        // 関数型アップデートを使い、常に最新の state に基づいて更新する
         setActiveMessage(prevActiveMessage => {
             const currentId = prevActiveMessage?.id || msg.id || `assistant-${Date.now()}`;
+            let newContent = prevActiveMessage?.content || '';
+            let newType = prevActiveMessage?.type || 'thought';
+            let newThoughtMode = prevActiveMessage?.thoughtMode || false;
 
-            // text チャンクの処理
-            if (chunk?.text !== undefined) {
-                let newContent = '';
-                // 前の状態が assistant なら追記、そうでなければ（thoughtなら）初期化
-                if (prevActiveMessage?.type === 'assistant') {
-                    newContent = (prevActiveMessage.content || '') + chunk.text.replace(/^\n+/, '');
-                } else {
-                    newContent = chunk.text.replace(/^\n+/, '');
-                }
-
-                return {
-                    id: currentId,
-                    type: 'assistant',
-                    content: newContent.trimEnd(),
-                    thoughtMode: false,
-                };
-            }
-
-            // thought チャンクの処理
+            // If a thought arrives, update the thought content and set mode to thought.
             if (chunk?.thought !== undefined) {
-                 return {
-                    id: currentId,
-                    type: 'thought',
-                    content: chunk.thought.trim(),
-                    thoughtMode: true,
-                };
+                newContent = chunk.thought.trim();
+                newType = 'thought';
+                newThoughtMode = true;
             }
 
-            // チャンクが空など、何も該当しない場合は前の状態を維持
-            return prevActiveMessage;
+            // If text arrives, it might override the thought or append to existing text.
+            if (chunk?.text !== undefined) {
+                // If we were in thought mode, the new text replaces the thought content.
+                // Otherwise, it appends to the existing assistant message.
+                if (newType === 'thought') {
+                    newContent = chunk.text.replace(/^\n+/, '');
+                } else {
+                    newContent = (prevActiveMessage?.content || '') + chunk.text.replace(/^\n+/, '');
+                }
+                newType = 'assistant';
+                newThoughtMode = false;
+            }
+
+            return {
+                id: currentId,
+                type: newType as 'thought' | 'assistant',
+                content: newContent,
+                thoughtMode: newThoughtMode,
+            };
         });
 
         if (msg.id !== undefined && ws.current) {
