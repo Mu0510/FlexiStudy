@@ -554,6 +554,8 @@ export const useChat = () => {
     messages,
     activeMessage,
     isGeneratingResponse,
+    isFetchingHistory: historyState.current.isFetchingHistory,
+    historyFinished: historyState.current.finished,
     sendMessage,
     cancelSendMessage, // エクスポートに追加
     requestHistory,

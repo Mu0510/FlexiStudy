@@ -62,12 +62,13 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory } = useChat();
+  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished } = useChat();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
+  const scrollAnchorRef = useRef<HTMLDivElement>(null); // Ref for the scroll anchor
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -236,6 +237,20 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
 
   // --- Scrolling Logic ---
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container || isFetchingHistory || historyFinished) return;
+
+    // Threshold: 1.5 times the container's client height from the top
+    const threshold = container.clientHeight * 0.5;
+
+    if (container.scrollTop < threshold) {
+      console.log("--- Reached scroll threshold, fetching history ---");
+      requestHistory();
+    }
+  }, [isFetchingHistory, historyFinished, requestHistory]);
+
+
   const isNearBottom = useCallback(() => {
     const container = messagesContainerRef.current;
     if (!container) return false;
@@ -255,26 +270,33 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
   // Scroll to bottom when messages or activeMessage change
   useEffect(() => {
-    scrollBottom();
-  }, [messages, activeMessage, scrollBottom]);
+    // Don't auto-scroll if the user has scrolled up to view history
+    if (isNearBottom()) {
+      scrollBottom();
+    }
+  }, [messages, activeMessage, scrollBottom, isNearBottom]);
 
   // 履歴読み込み時のスクロール位置維持
-  const prevMessagesLength = useRef(messages.length);
   useEffect(() => {
-    if (messages.length > prevMessagesLength.current) {
-      // メッセージが追加された場合（特に履歴読み込み時）
-      const container = messagesContainerRef.current;
-      if (container) {
-        const newScrollTop = container.scrollTop + (container.scrollHeight - container.clientHeight);
-        // requestAnimationFrame を2回ネストしてDOM更新後に実行
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            container.scrollTop = newScrollTop;
-          });
-        });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    let prevScrollHeight = container.scrollHeight;
+    let prevScrollTop = container.scrollTop;
+
+    const observer = new MutationObserver(() => {
+      const newScrollHeight = container.scrollHeight;
+      if (newScrollHeight !== prevScrollHeight && prevScrollTop === 0) {
+         // This logic triggers when new history is loaded at the top
+        container.scrollTop = newScrollHeight - prevScrollHeight;
       }
-    }
-    prevMessagesLength.current = messages.length;
+      prevScrollHeight = newScrollHeight;
+      prevScrollTop = container.scrollTop;
+    });
+
+    observer.observe(container, { childList: true, subtree: true });
+
+    return () => observer.disconnect();
   }, [messages]);
 
 
@@ -314,8 +336,13 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         </div>
       </div>
 
-      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto"> {/* Added ref here */}
+      <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto"> {/* Added ref and onScroll here */}
         <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
+        {isFetchingHistory && (
+          <div className="flex justify-center items-center py-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+          </div>
+        )}
         {messages.map((msg) => {
           // Render tool messages
           if (msg.type === "tool") {
