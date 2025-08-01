@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square } from "lucide-react"
+import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
 import { useChat } from "@/hooks/useChat";
@@ -45,12 +45,24 @@ function getToolIconText(iconName?: string) {
   }
 }
 
+// Helper function to format file size
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+
 export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }: NewChatPanelProps) {
   const [input, setInput] = useState("")
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory } = useChat();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -69,10 +81,53 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     }
   }, [input]);
 
-  const handleSendMessage = () => {
-    if (!input.trim()) return;
-    sendMessage(input);
+  const handleSendMessage = async () => {
+    if (!input.trim() && selectedFiles.length === 0) return;
+
+    let fileUploadMessage = "";
+
+    // --- Phase 4: File Upload Logic ---
+    if (selectedFiles.length > 0) {
+      const formData = new FormData();
+      selectedFiles.forEach(file => {
+        formData.append("files", file);
+      });
+
+      try {
+        // We will integrate AbortController later
+        const response = await fetch('/api/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          // TODO: Show a toast or an error message to the user
+          console.error("File upload failed:", errorData.details || "Unknown error");
+          return; // Stop the process if upload fails
+        }
+
+        const result = await response.json();
+        if (result.success) {
+          fileUploadMessage = `[System]ユーザーは「${result.uploadPath}」にファイルをアップロードしました`;
+        }
+      } catch (error) {
+        // TODO: Show a toast or an error message to the user
+        console.error("An error occurred during file upload:", error);
+        return; // Stop the process on network error etc.
+      }
+    }
+
+    // Combine messages and send
+    const finalMessage = [fileUploadMessage, input].filter(Boolean).join("\n\n");
+    
+    if (finalMessage) {
+      sendMessage(finalMessage);
+    }
+
+    // Reset inputs
     setInput("");
+    setSelectedFiles([]);
     if (chatInputRef.current) {
       chatInputRef.current.focus();
     }
@@ -84,6 +139,27 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       handleSendMessage();
     }
   };
+
+  // --- File Handling ---
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (files) {
+      setSelectedFiles(prevFiles => [...prevFiles, ...Array.from(files)]);
+    }
+    // Reset the input value to allow selecting the same file again
+    if(fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const handleRemoveFile = (fileToRemove: File) => {
+    setSelectedFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
+  };
+
+  const triggerFileSelect = () => {
+    fileInputRef.current?.click();
+  };
+
 
   // --- Scrolling Logic ---
   const isNearBottom = useCallback(() => {
@@ -145,6 +221,13 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         ? "fixed inset-0"
         : "fixed bottom-4 right-4 w-96 h-[600px]"
     )}>
+      <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        className="hidden"
+      />
       <div className="flex-shrink-0 border-b p-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold">Gemini Chat</h2>
         <div className="flex items-center space-x-2">
@@ -253,19 +336,41 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       <div className="flex-shrink-0 px-4 pt-2 pb-4 flex justify-center">
         <div className="w-full max-w-prose">
             <div className="relative w-[95%] mx-auto flex flex-col rounded-2xl border border-gray-300 bg-white p-2 transition-colors shadow-lg -mt-10">
+              {/* File Preview Section */}
+              {selectedFiles.length > 0 && (
+                <div className="mb-2 p-2 border-b border-gray-200">
+                  <div className="flex space-x-2 overflow-x-auto">
+                    {selectedFiles.map((file, index) => (
+                      <div key={index} className="flex-shrink-0 bg-gray-100 rounded-lg p-2 flex items-center space-x-2 text-sm">
+                        <FileIcon className="h-5 w-5 text-gray-500" />
+                        <span className="font-medium text-gray-700 truncate max-w-[100px]">{file.name}</span>
+                        <span className="text-gray-500 text-xs">{formatFileSize(file.size)}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 rounded-full"
+                          onClick={() => handleRemoveFile(file)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <Textarea
                 ref={chatInputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="システムと対話... (Alt+Enterで送信)"
+                onKeyDown={handleKeyDown}
+                placeholder="システムと対話... (Alt+Enterで送信)"
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
                 rows={1}
                 disabled={isGeneratingResponse}
               />
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-0 text-gray-500">
-                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100" onClick={triggerFileSelect}>
                         <Plus className="w-5 h-5" />
                     </Button>
                     <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2">
@@ -279,7 +384,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                   </Button>
                   <Button
                     onClick={isGeneratingResponse ? cancelSendMessage : handleSendMessage}
-                    disabled={!isGeneratingResponse && !input.trim()}
+                    disabled={!isGeneratingResponse && (!input.trim() && selectedFiles.length === 0)}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
                     {isGeneratingResponse ? <Square className="w-2.5 h-2.5" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
