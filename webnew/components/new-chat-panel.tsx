@@ -173,6 +173,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     // Send message with text and file info
     if (input.trim() || uploadedFiles.length > 0) {
       sendMessage({ text: input, files: uploadedFiles });
+      scrollBottom(true); // Force scroll to bottom on send
     }
 
     // Reset inputs
