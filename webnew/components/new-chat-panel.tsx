@@ -256,40 +256,42 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div className="flex-shrink-0 px-4 pt-2 pb-4 flex justify-center">
-        <div className="relative w-full max-w-prose flex flex-col rounded-2xl border border-gray-300 bg-white p-2 transition-colors shadow-lg -mt-10">
-          <Textarea
-            ref={chatInputRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="システムと対話... (Alt+Enterで送信)"
-            className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
-            rows={1}
-            disabled={isGeneratingResponse}
-          />
-          <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-0.5 text-gray-500">
-                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
-                    <Plus className="w-4 h-4" />
-                </Button>
-                <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2">
-                    <SlidersHorizontal className="w-4 h-4" />
-                    <span className="text-sm font-light">ツール</span>
-                </Button>
+        <div className="w-full max-w-prose">
+            <div className="relative w-[95%] mx-auto flex flex-col rounded-2xl border border-gray-300 bg-white p-2 transition-colors shadow-lg -mt-10">
+              <Textarea
+                ref={chatInputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyPress={handleKeyPress}
+                placeholder="システムと対話... (Alt+Enterで送信)"
+                className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
+                rows={1}
+                disabled={isGeneratingResponse}
+              />
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-0 text-gray-500">
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
+                        <Plus className="w-4 h-4" />
+                    </Button>
+                    <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2">
+                        <SlidersHorizontal className="w-4 h-4" />
+                        <span className="text-sm font-light">ツール</span>
+                    </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
+                    <Mic className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    onClick={handleSendMessage}
+                    disabled={isGeneratingResponse || !input.trim()}
+                    className="w-7 h-7 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
+                  >
+                    <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
+                  </Button>
+                </div>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
-                <Mic className="w-5 h-5" />
-              </Button>
-              <Button
-                onClick={handleSendMessage}
-                disabled={isGeneratingResponse || !input.trim()}
-                className="w-7 h-7 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
-              >
-                <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
-              </Button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
