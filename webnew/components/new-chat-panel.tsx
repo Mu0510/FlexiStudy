@@ -69,8 +69,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null); // Ref for the scroll anchor
-  const prevMessagesLength = useRef(messages.length); // Keep this
-  const wasNearBottomOnPreviousRender = useRef(true); // To track if user was at bottom before this render cycle
+  const shouldScrollToBottomRef = useRef(true); // 初回ロード時はスクロールしたいのでtrueに初期化
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -275,34 +274,20 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     }
   }, [isNearBottom]);
 
-  const prevMessagesLength = useRef(messages.length);
-
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const wasNearBottom = wasNearBottomOnPreviousRender.current; // 前回のレンダリング時に最下部にいたか
-    const isNewMessageAdded = messages.length > prevMessagesLength.current; // 新しいメッセージが追加されたか
+    // DOM更新前のスクロール状態を記憶
+    shouldScrollToBottomRef.current = isNearBottom();
 
-    console.log(`useLayoutEffect triggered. isNewMessageAdded: ${isNewMessageAdded}, activeMessage: ${!!activeMessage}, isFetchingHistory: ${isFetchingHistory}, wasNearBottom (prev render): ${wasNearBottom}`);
-
-    // 新しいメッセージが追加された場合（履歴読み込みは除く）
-    if (isNewMessageAdded && !isFetchingHistory) {
-      if (wasNearBottom) {
-        console.log("--- Auto-scrolling to bottom (new message added) ---");
-        scrollBottom(true);
-      }
-    } else if (activeMessage) { // activeMessageが更新された場合（thoughtやストリーミングテキスト）
-      // 現在最下部にいる場合のみスクロール
-      if (isNearBottom()) {
-        console.log("--- Auto-scrolling to bottom (activeMessage update) ---");
+    // メッセージが追加された、またはactiveMessageが更新された場合
+    // ただし、履歴読み込みによるメッセージ追加の場合はスクロールしない
+    if (!isFetchingHistory && (messages.length > 0 || activeMessage)) { // messages.length > 0 は初回ロード時を考慮
+      if (shouldScrollToBottomRef.current) {
         scrollBottom(true);
       }
     }
-
-    // 現在のスクロール位置が最下部に近いかどうかを記憶し、次回のレンダリングに備える
-    wasNearBottomOnPreviousRender.current = isNearBottom();
-    prevMessagesLength.current = messages.length;
   }, [messages, activeMessage, isFetchingHistory, isNearBottom, scrollBottom]);
 
   // Initial history load and scroll to bottom
