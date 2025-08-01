@@ -224,16 +224,41 @@ app.prepare().then(() => {
                 history.push(rec);
                 ongoingText = '';
             }
+
             if (inputText.trim() === '/clear') {
                 history.length = 0;
-                broadcast(wss, { jsonrpc:'2.0', method:'historyCleared', params:{ reason: 'command' } });
+                broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'command' } });
                 startGemini(wss);
-                return ws.send(JSON.stringify({ jsonrpc:'2.0', id:msg.id, result:null }));
+                return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
             }
-            const rec = { id: String(Date.now()), ts: Date.now(), role:'user', text: inputText, files: files || [] };
+
+            // Save the original message with files to history for the UI
+            const rec = { id: String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
             history.push(rec);
+
+            // Create the message for the AI
+            let messageForAI = inputText;
+            if (files && files.length > 0) {
+                const fileNames = files.map(file => `- ${file.name} (${file.path})`).join('\n');
+                const systemMessage = `[System]ユーザーは以下のファイルをアップロードしました：\n${fileNames}`;
+                messageForAI = `${systemMessage}\n\n${inputText}`;
+            }
+
+            // Send the potentially modified message to the Gemini process
+            if (geminiProcess) {
+                const aiMsg = {
+                    ...msg,
+                    params: {
+                        ...msg.params,
+                        chunks: [{ text: messageForAI }]
+                    }
+                };
+                geminiProcess.stdin.write(JSON.stringify(aiMsg) + '\n');
+            }
+            return; // Exit after handling sendUserMessage
         }
 
+        // For other messages, pass them directly to Gemini
         if (geminiProcess) {
             geminiProcess.stdin.write(JSON.stringify(msg) + '\n');
         }
