@@ -288,12 +288,21 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   }, [messages, activeMessage, isNearBottom, scrollBottom]);
 
 
-  // Initial history load and scroll to bottom
-  useEffect(() => {
-    if (isOpen) {
-      scrollBottom(true); // Force scroll to bottom on initial open
+  const prevMessagesLength = useRef(messages.length);
+
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    const wasNearBottom = isNearBottom();
+    const isNewMessage = messages.length > prevMessagesLength.current;
+
+    if (isNewMessage && wasNearBottom) {
+      scrollBottom(true);
     }
-  }, [isOpen, scrollBottom]);
+
+    prevMessagesLength.current = messages.length;
+  }, [messages, activeMessage, isNearBottom, scrollBottom]);
 
   if (!isOpen) return null
 
