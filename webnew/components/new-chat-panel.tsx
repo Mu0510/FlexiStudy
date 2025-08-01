@@ -366,20 +366,38 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
           } else {
             // Render user/assistant messages
             return (
-              <div key={msg.id} className={cn("flex justify-end", msg.role === "user" ? "" : "mx-auto w-[95%]")}>
-                <div
-                    className={cn(
-                      "prose prose-sm dark:prose-invert",
-                      msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 rounded-2xl px-4 py-1 max-w-[65%]" : "mx-auto w-[95%]",
-                    )}
-                  >
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkBreaks]}
-                      rehypePlugins={[rehypeRaw]}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
+              <div key={msg.id} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
+                {/* File Cards for User Messages */}
+                {msg.role === 'user' && msg.files && msg.files.length > 0 && (
+                  <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
+                    <div className="w-full flex flex-col gap-2 items-end">
+                      {msg.files.map((file, index) => (
+                        <div key={index} className="bg-gray-100 rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
+                          <FileIcon className="h-5 w-5 text-gray-500 flex-shrink-0" />
+                          <span className="font-medium text-gray-700 truncate">{file.name}</span>
+                          <span className="text-gray-500 text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+                )}
+
+                {/* Message Bubble */}
+                {msg.content && (
+                  <div
+                      className={cn(
+                        "prose prose-sm dark:prose-invert",
+                        msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
+                      )}
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        rehypePlugins={[rehypeRaw]}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                )}
               </div>
             );
           }
