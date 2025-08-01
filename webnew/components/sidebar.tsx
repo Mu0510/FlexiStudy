@@ -22,7 +22,6 @@ interface SidebarProps {
   onToggleCollapse: () => void
   isMobileMenuOpen: boolean
   setIsMobileMenuOpen: (isOpen: boolean) => void
-  onChatClick: () => void
   onNewChatClick: () => void
 }
 
@@ -35,16 +34,13 @@ const menuItems = [
 ]
 
 // Component for the navigation links and chat button, used by both desktop and mobile sidebars
-function SidebarNavContent({ activeView, onViewChange, onChatClick, onNewChatClick, onLinkClick, collapsed = false }: any) {
+function SidebarNavContent({ activeView, onViewChange, onNewChatClick, onLinkClick, collapsed = false }: any) {
   const handleViewChange = (view: string) => {
     onViewChange(view)
     onLinkClick?.() // Close mobile sheet on navigation
   }
 
-  const handleChatClick = () => {
-    onChatClick()
-    onLinkClick?.() // Close mobile sheet on chat click
-  }
+  
 
   const handleNewChatClick = () => {
     onNewChatClick()
@@ -77,19 +73,8 @@ function SidebarNavContent({ activeView, onViewChange, onChatClick, onNewChatCli
         })}
       </nav>
 
-      <div className="p-2 border-t border-neutral-200">
-        <Button
-          variant="outline"
-          className={cn(
-            "w-full justify-start h-12 border-2 border-accent-200 hover:border-accent-300 hover:bg-accent-50 text-accent-600 transition-all duration-200",
-            collapsed ? "px-3 justify-center" : "px-4",
-          )}
-          onClick={handleChatClick}
-          title="Gemini Chat" // Tooltip for collapsed view
-        >
-          <MessageSquare className={cn("w-5 h-5", !collapsed && "mr-3")} />
-          {!collapsed && <span className="font-medium">Gemini Chat</span>}
-        </Button>
+      
+        <div className="p-2 border-t border-neutral-200">
         <Button
           variant="outline"
           className={cn(
@@ -114,7 +99,6 @@ export function Sidebar({
   onToggleCollapse, 
   isMobileMenuOpen, 
   setIsMobileMenuOpen, 
-  onChatClick, 
   onNewChatClick 
 }: SidebarProps) {
   return (
@@ -145,7 +129,6 @@ export function Sidebar({
         <SidebarNavContent 
             activeView={activeView} 
             onViewChange={onViewChange} 
-            onChatClick={onChatClick} 
             onNewChatClick={onNewChatClick}
             collapsed={collapsed}
         />
@@ -165,7 +148,6 @@ export function Sidebar({
             <SidebarNavContent 
               activeView={activeView} 
               onViewChange={onViewChange} 
-              onChatClick={onChatClick} 
               onNewChatClick={onNewChatClick}
               onLinkClick={() => setIsMobileMenuOpen(false)}
             />
