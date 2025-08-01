@@ -71,6 +71,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const scrollAnchorRef = useRef<HTMLDivElement>(null); // Ref for the scroll anchor
   const prevScrollHeightRef = useRef(0);
   const prevScrollTopRef = useRef(0);
+  const wasNearBottomRef = useRef(true); // Initialize to true for initial load
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -281,38 +282,28 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const currentScrollHeight = container.scrollHeight;
-    const currentScrollTop = container.scrollTop;
-    const prevScrollHeight = prevScrollHeightRef.current;
-    const prevScrollTop = prevScrollTopRef.current;
+    const isNewMessageAdded = messages.length > prevMessagesLength.current;
 
-    console.log(`useLayoutEffect triggered. currentScrollHeight: ${currentScrollHeight}, prevScrollHeight: ${prevScrollHeight}, activeMessage: ${!!activeMessage}, isFetchingHistory: ${isFetchingHistory}`);
+    console.log(`useLayoutEffect triggered. isNewMessageAdded: ${isNewMessageAdded}, activeMessage: ${!!activeMessage}, isFetchingHistory: ${isFetchingHistory}, wasNearBottomRef.current: ${wasNearBottomRef.current}`);
 
-    // コンテンツの高さが増加した場合
-    if (currentScrollHeight > prevScrollHeight) {
-      // 履歴読み込み中でない、かつ、コンテンツ増加前にユーザーが最下部にいた場合
-      const wasNearBottomBeforeContentAdded = (prevScrollHeight - prevScrollTop <= container.clientHeight + 5);
-      if (!isFetchingHistory && wasNearBottomBeforeContentAdded) {
-        console.log("--- Auto-scrolling to bottom (content added) ---");
+    // 新しいメッセージが追加された場合（履歴読み込みは除く）
+    if (isNewMessageAdded && !isFetchingHistory) {
+      // 前回のレンダリング時に最下部にいた場合のみスクロール
+      if (wasNearBottomRef.current) {
+        console.log("--- Auto-scrolling to bottom (new message added) ---");
         scrollBottom(true);
-      } else if (activeMessage) { // activeMessageの更新によるスクロール
-        // activeMessageの更新時も、ユーザーが最下部にいる場合のみスクロール
-        if (isNearBottom()) {
-          console.log("--- Auto-scrolling to bottom (activeMessage update) ---");
-          scrollBottom(true);
-        }
-      } else {
-        console.log("--- Auto-scroll condition not met ---");
       }
-    } else if (activeMessage) { // コンテンツの高さは変わらないがactiveMessageが更新された場合
+    } else if (activeMessage) { // activeMessageが更新された場合（thoughtやストリーミングテキスト）
+      // 現在最下部にいる場合のみスクロール
       if (isNearBottom()) {
-        console.log("--- Auto-scrolling to bottom (activeMessage update, no height change) ---");
+        console.log("--- Auto-scrolling to bottom (activeMessage update) ---");
         scrollBottom(true);
       }
     }
 
-    prevScrollHeightRef.current = currentScrollHeight;
-    prevScrollTopRef.current = currentScrollTop;
+    // 現在のスクロール位置が最下部に近いかどうかを記憶
+    wasNearBottomRef.current = isNearBottom();
+    prevMessagesLength.current = messages.length;
   }, [messages, activeMessage, isFetchingHistory, isNearBottom, scrollBottom]);
 
   // Initial history load and scroll to bottom
