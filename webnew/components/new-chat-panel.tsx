@@ -62,7 +62,18 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished } = useChat();
+  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished } = useChat({
+    onMessageReceived: () => {
+      const container = messagesContainerRef.current;
+      if (container) {
+        const { scrollHeight, scrollTop, clientHeight } = container;
+        const isAtBottom = scrollHeight - scrollTop <= clientHeight + 5; // 5pxの許容範囲
+        if (isAtBottom) {
+          shouldScrollToBottomRef.current = true;
+        }
+      }
+    },
+  });
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -173,8 +184,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
     // Send message with text and file info
     if (input.trim() || uploadedFiles.length > 0) {
+      shouldScrollToBottomRef.current = true; // Force scroll to bottom on send
       sendMessage({ text: input, files: uploadedFiles });
-      scrollBottom(true); // Force scroll to bottom on send
     }
 
     // Reset inputs
@@ -241,61 +252,47 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   // --- Scrolling Logic ---
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
-    if (!container || isFetchingHistory || historyFinished) return;
-
-    // Threshold: 1.5 times the container's client height from the top
-    const threshold = container.clientHeight * 0.5;
-
-    if (container.scrollTop < threshold) {
-      console.log("--- Reached scroll threshold, fetching history ---");
-      requestHistory();
-    }
-  }, [isFetchingHistory, historyFinished, requestHistory]);
-
-
-  const scrollBottom = useCallback((force = false) => {
-    const container = messagesContainerRef.current;
     if (!container) return;
 
-    // isNearBottomのロジックをuseLayoutEffectから切り離し、必要に応じてここで再評価
-    const { scrollHeight, scrollTop, clientHeight } = container;
-    const nearBottom = scrollHeight - scrollTop <= clientHeight + 5;
-
-    if (force || nearBottom) { // force または現在最下部に近い場合のみスクロール
-      requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-      });
-    }
-  }, []); // isNearBottomへの依存を削除
-
-  useLayoutEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    // DOM更新前のスクロール状態を記憶
-    // ここで直接 isNearBottom のロジックを記述し、DOM更新前の値をキャプチャ
-    const prevScrollHeight = container.scrollHeight;
-    const prevScrollTop = container.scrollTop;
-    const prevClientHeight = container.clientHeight;
-    const wasNearBottom = (prevScrollHeight - prevScrollTop) <= (prevClientHeight + 5);
-
-    shouldScrollToBottomRef.current = wasNearBottom;
-
-    // メッセージが追加された、またはactiveMessageが更新された場合
-    // ただし、履歴読み込みによるメッセージ追加の場合はスクロールしない
-    if (!isFetchingHistory && (messages.length > 0 || activeMessage)) {
-      if (shouldScrollToBottomRef.current) {
-        scrollBottom(true); // 強制的にスクロール
+    // Handle history fetching on scroll to top
+    if (!isFetchingHistory && !historyFinished) {
+      const threshold = container.clientHeight * 0.5;
+      if (container.scrollTop < threshold) {
+        console.log("--- Reached scroll threshold, fetching history ---");
+        requestHistory();
       }
     }
-  }, [messages, activeMessage, isFetchingHistory, scrollBottom]); // isNearBottomへの依存を削除
 
-  // Initial history load and scroll to bottom
+    // Update shouldScrollToBottomRef based on user scroll
+    const { scrollHeight, scrollTop, clientHeight } = container;
+    const isAtBottom = scrollHeight - scrollTop <= clientHeight + 5; // 5px tolerance
+    shouldScrollToBottomRef.current = isAtBottom;
+
+  }, [isFetchingHistory, historyFinished, requestHistory]);
+
+  // Effect to scroll to bottom when messages change
+  useLayoutEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container && shouldScrollToBottomRef.current) {
+        requestAnimationFrame(() => {
+            container.scrollTop = container.scrollHeight;
+        });
+    }
+  }, [messages, activeMessage]); // Dependency on messages and activeMessage
+
+  // Effect to scroll to bottom on initial open
   useEffect(() => {
     if (isOpen) {
-      scrollBottom(true); // Force scroll to bottom on initial open
+      const container = messagesContainerRef.current;
+      if (container) {
+          // Force scroll to bottom on initial open
+          shouldScrollToBottomRef.current = true;
+          requestAnimationFrame(() => {
+              container.scrollTop = container.scrollHeight;
+          });
+      }
     }
-  }, [isOpen, scrollBottom]);
+  }, [isOpen]);
 
 
   if (!isOpen) return null
@@ -439,6 +436,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             </div>
           </div>
         )}
+        <div ref={scrollAnchorRef} />
         </div>
       </div>
 

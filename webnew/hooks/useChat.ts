@@ -73,7 +73,7 @@ function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): 
   return html;
 }
 
-export const useChat = () => {
+export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void } = {}) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeMessage, setActiveMessage] = useState<ActiveMessage | null>(null);
   const activeMessageRef = useRef<ActiveMessage | null>(null);
@@ -130,6 +130,7 @@ export const useChat = () => {
           content: thought.trim(),
           thoughtMode: true,
         }));
+        onMessageReceived?.();
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
 
@@ -170,6 +171,7 @@ export const useChat = () => {
         if (msg.id !== undefined && ws.current) {
           ws.current.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
         }
+        onMessageReceived?.();
       } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
         if (activeMessage) {
           setMessages(prev => [...prev, {
@@ -180,6 +182,7 @@ export const useChat = () => {
           setActiveMessage(null);
         }
         setIsGeneratingResponse(false);
+        onMessageReceived?.();
       } else if (msg.method === 'pushMessage') {
         setMessages(prev => [...prev, {
           id: `msg-${Date.now()}`,
@@ -188,6 +191,7 @@ export const useChat = () => {
         }]);
         setActiveMessage(null);
         setIsGeneratingResponse(false);
+        onMessageReceived?.();
       } else if (msg.method === 'pushToolCall') {
         const toolId = msg.params.toolCallId ?? msg.id;
         const { icon, label, locations } = msg.params;
@@ -225,6 +229,7 @@ export const useChat = () => {
             result: { id: toolId }
           }));
         }
+        onMessageReceived?.();
       } else if (msg.method === 'requestToolCallConfirmation') {
         const toolId = msg.params.toolCallId ?? msg.id;
         const { icon, label, confirmation } = msg.params;
@@ -266,6 +271,7 @@ export const useChat = () => {
           toolCallConfirmationMessage: confirmation?.toolCallConfirmationMessage,
           toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
         }]);
+        onMessageReceived?.();
       } else if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         const { status, content } = msg.params;
@@ -314,6 +320,7 @@ export const useChat = () => {
         if (status === 'finished') {
           setActiveMessage(null);
         }
+        onMessageReceived?.();
       } else if (msg.id !== undefined && msg.result?.messages) {
         if (historyState.current.pendingHistory.has(msg.id)) {
           historyState.current.pendingHistory.delete(msg.id);
