@@ -47,11 +47,18 @@ export async function POST(req: NextRequest) {
     await fs.mkdir(uploadDir, { recursive: true });
     console.log(`Successfully created directory: ${uploadDir}`);
 
+    const uploadedFilesInfo = [];
+
     // Write each file to the unique directory
     for (const file of files) {
       const buffer = Buffer.from(await file.arrayBuffer());
       const filePath = path.join(uploadDir, file.name);
       await fs.writeFile(filePath, buffer);
+      uploadedFilesInfo.push({
+        name: file.name,
+        path: filePath, // Or a relative path if you prefer
+        size: file.size,
+      });
     }
 
     // If we reach here, the upload was successful, so we don't want to delete the directory.
@@ -59,8 +66,7 @@ export async function POST(req: NextRequest) {
     req.signal.removeEventListener('abort', abortHandler);
 
     // Return the path to the created directory, relative to the project root
-    const relativeUploadDir = path.join('webnew', 'mnt', 'userFiles', String(timestamp));
-    return NextResponse.json({ success: true, uploadPath: relativeUploadDir });
+    return NextResponse.json({ success: true, files: uploadedFilesInfo });
 
   } catch (error) {
     // Also remove the listener in case of other errors
