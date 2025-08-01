@@ -102,20 +102,21 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
-    const options: Intl.DateTimeFormatOptions = {
-      year: isMobile ? undefined : 'numeric',
-      month: 'long',
-      day: 'numeric',
-      weekday: 'long',
-    };
-    const formattedDate = new Intl.DateTimeFormat('ja-JP', options).format(date);
-    // "2025年7月20日日曜日" -> "2025年 7月20日 日曜日" or "7月20日 日曜日"
-    return formattedDate.replace(/(\d+年)?\s?(\d+)月(\d+)日(.*)/, (match, p1, p2, p3, p4) => {
-      if (p1) { // year is present
-        return `${p1} ${p2}月${p3}日 ${p4}`;
-      }
-      return `${p2}月${p3}日 ${p4}`;
-    });
+
+    const yearOptions: Intl.DateTimeFormatOptions = { year: 'numeric' };
+    const monthDayOptions: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' };
+    const weekdayOptions: Intl.DateTimeFormatOptions = { weekday: 'long' };
+
+    const year = new Intl.DateTimeFormat('ja-JP', yearOptions).format(date);
+    const monthDay = new Intl.DateTimeFormat('ja-JP', monthDayOptions).format(date);
+    const weekday = new Intl.DateTimeFormat('ja-JP', weekdayOptions).format(date);
+
+    return (
+      <>
+        <span className="hidden sm:inline">{year} </span>
+        {monthDay} {weekday}
+      </>
+    );
   }
 
   const formatDuration = (minutes: number) => {
