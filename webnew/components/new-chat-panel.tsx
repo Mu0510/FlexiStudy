@@ -58,6 +58,7 @@ const formatFileSize = (bytes: number): string => {
 export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }: NewChatPanelProps) {
   const [input, setInput] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory } = useChat();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -96,6 +97,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
       const controller = new AbortController();
       uploadAbortControllerRef.current = controller;
+      setIsUploading(true);
 
       try {
         const response = await fetch('/api/upload', {
@@ -123,8 +125,9 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         }
         return;
       } finally {
-        // Clear the abort controller ref once the upload is complete or aborted
+        // Clear the abort controller ref and uploading state
         uploadAbortControllerRef.current = null;
+        setIsUploading(false);
       }
     }
 
@@ -393,28 +396,28 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 placeholder="システムと対話... (Alt+Enterで送信)"
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
                 rows={1}
-                disabled={isGeneratingResponse}
+                disabled={isGeneratingResponse || isUploading}
               />
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-0 text-gray-500">
-                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100" onClick={triggerFileSelect}>
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100" onClick={triggerFileSelect} disabled={isGeneratingResponse || isUploading}>
                         <Plus className="w-5 h-5" />
                     </Button>
-                    <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2">
+                    <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2" disabled={isGeneratingResponse || isUploading}>
                         <SlidersHorizontal className="w-4 h-4" />
                         <span className="text-sm font-light">ツール</span>
                     </Button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500">
+                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500" disabled={isGeneratingResponse || isUploading}>
                     <Mic className="w-5 h-5" />
                   </Button>
                   <Button
-                    onClick={isGeneratingResponse ? handleCancel : handleSendMessage}
-                    disabled={!isGeneratingResponse && (!input.trim() && selectedFiles.length === 0)}
+                    onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
+                    disabled={!(isGeneratingResponse || isUploading) && !input.trim() && selectedFiles.length === 0}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
-                    {isGeneratingResponse ? <Square className="w-2.5 h-2.5" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
+                    {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
                   </Button>
                 </div>
               </div>
