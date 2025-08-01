@@ -78,7 +78,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && e.altKey) {
       e.preventDefault();
       handleSendMessage();
@@ -257,8 +257,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 ref={chatInputRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="システムと対話... (Alt+Enterで送信)"
+            onKeyDown={handleKeyDown}
+            placeholder="システムと対話... (Alt+Enterで送信)"
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
                 rows={1}
                 disabled={isGeneratingResponse}
@@ -282,7 +282,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                     disabled={!isGeneratingResponse && !input.trim()}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
-                    {isGeneratingResponse ? <Square className="w-3 h-3" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
+                    {isGeneratingResponse ? <Square className="w-2.5 h-2.5" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
                   </Button>
                 </div>
               </div>
