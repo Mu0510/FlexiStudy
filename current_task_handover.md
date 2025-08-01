@@ -1,77 +1,73 @@
-## 作業引き継ぎ資料: 新規チャットパネル実装 (2025年7月31日更新)
+# Gemini CLI - タスク引き継ぎ資料
 
-### 1. 最終目標
+## 1. 現在のタスク状況
 
-既存のWebアプリケーション (`web/public/js/chat.js`) のチャット機能を、新しいNext.jsアプリケーション (`webnew` ディレクトリ以下) のコンポーネント (`webnew/components/new-chat-panel.tsx`) として完全に再現すること。特に、`chat.js`の「繊細な」挙動（思考中表示、ツールカードの動的な更新、スクロール挙動など）の再現が求められています。
+### 1.1. 概要
+`webnew`ディレクトリ下のWebアプリケーションにおいて、チャット入力欄のUI/UX改善と、メッセージ送信機能の基盤実装を行いました。
 
-### 2. 現在の作業状況と問題点
+### 1.2. 実装済み機能
+*   **チャット入力欄UI (`webnew/components/new-chat-panel.tsx`)**:
+    *   ChatGPT風の洗練されたデザインを適用。
+    *   `textarea`ベースの自動リサイズ機能（最大6行）。
+    *   フォーカス時のブラウザデフォルト枠線（フォーカスリング）を完全に削除し、親要素の枠線色変更でフォーカスを表現。
+    *   ツールボタン（`+`、`SlidersHorizontal`アイコンと「ツール」テキストを統合）、マイクボタン、送信ボタンの配置とスタイリング。
+    *   送信ボタンの正円化と矢印アイコンの線の太さ調整。
+    *   入力欄全体の最大幅を`max-w-prose`の95%に設定し、中央揃え。
+    *   メッセージリストの下部余白を調整し、入力欄が浮いているような視覚効果を実現。
+    *   プレースホルダーテキストのフォントを細く調整。
+*   **メッセージ送信機能 (`webnew/hooks/useChat.ts`, `webnew/components/new-chat-panel.tsx`)**:
+    *   `Alt+Enter`でのメッセージ送信機能。
+    *   メッセージ送信中（AI応答生成中）は、送信ボタンが停止ボタン（四角いアイコン）に切り替わる動的なUI。
+    *   停止ボタンクリックによるメッセージ送信のキャンセル機能（WebSocket経由でAIにキャンセル通知）。
 
-*   **新規コンポーネントの作成:**
-    *   `webnew/components/new-chat-panel.tsx` が作成され、基本的なチャットUI（メッセージ表示エリア、入力欄、送信ボタン）が実装されています。
-    *   `webnew/hooks/useChat.ts` が作成され、WebSocket接続の管理、メッセージの状態管理、メッセージ送受信の基本的なロジックが組み込まれています。
-*   **UI統合:**
-    *   `webnew/app/page.tsx` に `NewChatPanel` が組み込まれ、`webnew/components/sidebar.tsx` に新しいチャットパネルを開くためのボタンが追加されています。
-*   **WebSocket接続の調整:**
-    *   `webnew/server.js` がWebSocketサーバーをポート `3001` で起動しています。
-    *   `webnew/hooks/useChat.ts` のWebSocket接続URLは `ws://${window.location.hostname}:3001/ws` に設定済みです。
+### 1.3. 既知の課題/保留事項
+*   現在のところ、実装済みの機能において既知のバグや保留事項はありません。
 
-**【未解決の問題】**
+## 2. 次のタスク: ファイルアップロード機能の実装
 
-1.  **ツールカードの更新が不完全、または表示されない:**
-    *   **現象:** `pushToolCall` でツールカードのプレースホルダーは表示されるが、その後の `updateToolCall` や `pushChunk` で内容が更新されない、または更新されてもすぐに消えてしまう。
-    *   **現在の推測される原因:** `useChat.ts` 内の `toolCardsData` の更新と `messages` 配列の同期に問題がある可能性がある。特に `Map` の更新が React の状態管理と適切に連携できていない可能性がある。
+### 2.1. 概要
+チャット入力欄にファイルアップロード機能を追加します。ユーザーがファイルを添付してメッセージを送信できるようにします。
 
-**【解決済みの問題】**
+### 2.2. 実装計画 (改訂版)
 
-1.  **アシスタントのストリーミングメッセージ表示問題:**
-    *   **現象:** ユーザーがメッセージを送信すると、アシスタントの「思考中」メッセージ（`streamAssistantThoughtChunk`）は一瞬表示されるが、その後のアシスタントの返答（`streamAssistantMessageChunk`の`chunk.text`）が表示されない、または一瞬表示されてすぐに消えてしまう。
-    *   **解決:** `useChat.ts` の `ActiveMessage` インターフェースに `thoughtMode` を追加し、`streamAssistantThoughtChunk` と `streamAssistantMessageChunk` のロジックを `chat.js` の `active` オブジェクトの挙動に近づけた。`sendMessage` 時に初期の `activeMessage` を設定するように修正し、`new-chat-panel.tsx` で `marked.parse` を適用するようにした。
-2.  **WebSocketの二重接続:**
-    *   **現象:** 以前、WebSocket接続が複数回確立され、同じメッセージが二重に受信される問題があった。
-    *   **解決:** `webnew/hooks/useChat.ts` の `useEffect` の依存関係を空配列`[]`に変更することで、コンポーネントマウント時に一度だけ接続が確立されるように修正済み。`requestHistory(true)` の呼び出しを WebSocket の `onopen` イベントリスナーの中に移動させた。
-3.  **`result:null` で吹き出しが消える問題:**
-    *   **現象:** `sendUserMessage` の RPC 応答として `result:null` が返ってきたタイミングで、ストリーミング中のアシスタントの吹き出しが消えてしまう。
-    *   **解決:** `useChat.ts` の `result:null` 処理を修正し、`sendUserMessage` の `id` と一致する場合にのみ `setActiveMessage(null)` を呼び出すようにした。
-4.  **`marked is not defined` エラー:**
-    *   **現象:** `new-chat-panel.tsx` で `marked.parse` を使用しているにもかかわらず、`marked` が定義されていないというエラーが発生した。
-    *   **解決:** `new-chat-panel.tsx` に `marked` ライブラリをインポートした。
-5.  **`useChat.ts` の構文エラー:**
-    *   **現象:** `webnew/hooks/useChat.ts` の `useEffect` ブロック内で構文エラーが発生した。
-    *   **解決:** `ws.current.onopen`、`ws.current.onmessage`、`ws.current.onclose`、`ws.current.onerror` の各イベントハンドラの定義が `useEffect` のスコープ内に正しくネストされるように修正し、余分なセミコロンや閉じ括弧を削除した。
+#### フェーズ2: ファイル選択UIの実装 (フロントエンド)
+*   **ファイル入力のトリガー**:
+    *   非表示の`<input type="file" multiple />`を設置。
+    *   `+`ボタンがクリックされたら、この非表示の`input`要素の`click()`メソッドをプログラムで呼び出し、ファイル選択ダイアログを開く。
+*   **状態管理**:
+    *   `useState<File[]>`を用いて、選択されたファイルのリストをコンポーネントの状態で管理。
+*   **プレビューカードの表示**:
+    *   状態にファイルが追加されたら、`Textarea`の上部にプレビューカードを表示するエリアを動的に生成（横スクロール可能）。
+    *   選択されたファイルごとに、以下の要素を持つカードをレンダリング:
+        *   ファイルアイコン (`File` from lucide-react)
+        *   ファイル名（CSSで長すぎる場合は末尾を`...`で省略）
+        *   ファイルサイズ（KBまたはMBに変換）
+        *   削除ボタン (`X` from lucide-react）
+*   **ファイル選択のキャンセル**:
+    *   各プレビューカードの`X`ボタンがクリックされたら、対応するファイルを状態リストから削除し、UIを再レンダリング。
 
-### 3. これまでの主な変更点 (詳細)
+#### フェーズ3: ファイルアップロードAPIの実装 (バックエンド)
+*   **保存先の動的生成**:
+    *   APIエンドポイント(`webnew/app/api/upload/route.ts`)は、リクエストを受け取るたびに、`webnew/mnt/userFiles/`以下に**タイムスタンプに基づいたユニークなディレクトリ**（例: `/1678886400000`）を新規作成。
+    *   リクエストに含まれるすべてのファイルは、このユニークなディレクトリ内に保存。
+*   **レスポンス形式**:
+    *   すべてのファイルの保存が完了したら、APIは成功ステータスと共に、**作成したディレクトリの相対パス**（例: `webnew/mnt/userFiles/1678886400000`）をJSON形式でクライアントに返す。
 
-*   **`webnew/hooks/useChat.ts`:**
-    *   `ActiveMessage` インターフェースに `thoughtMode` を追加。
-    *   `streamAssistantThoughtChunk` と `streamAssistantMessageChunk` のロジックを `chat.js` の `active` オブジェクトの挙動に近づけ、`content` を生のテキストとして保持し、`thoughtMode` を適切に設定するように修正。
-    *   `sendMessage` 関数を修正し、メッセージ送信時に初期の `activeMessage` を設定するように変更。
-    *   `ToolCardData` インターフェースの `content` の型を `string` に変更。
-    *   `pendingToolBodies` と `toolCards` (ref) を追加。
-    *   `pushToolCall` のロジックを `chat.js` に合わせて修正し、`toolCardsData` にエントリを追加し、`messages` ステートに `role: 'tool'` のメッセージを追加するように変更。
-    *   `updateToolCall` のロジックを `chat.js` に合わせて修正し、`pendingBodies` の処理と `__headerPatch` の処理を再現。`toolCardsData` と `messages` 配列内のツールメッセージの `content` を同期して更新するように変更。
-    *   `pushChunk` (sender === 'tool') のロジックを修正し、`messages` 配列内のツールメッセージの `content` も更新するように変更。
-    *   `jsdiff` ライブラリをインポートし、`generateContextualDiffHtml` 関数を `chat.js` の実装に合わせて修正。
-    *   `ws.current.onopen` イベントリスナーの中に `requestHistory(true)` を移動。
-    *   `result:null` 処理を修正し、`sendUserMessage` の `id` と一致する場合にのみ `setActiveMessage(null)` を呼び出すように変更。
-    *   `ws.current.onmessage`、`ws.current.onclose`、`ws.current.onerror` の定義が `useEffect` のスコープ内に正しくネストされるように修正。
-*   **`webnew/components/new-chat-panel.tsx`:**
-    *   `marked` ライブラリをインポート。
-    *   `activeMessage` の `thoughtMode` プロパティに基づいて `animate-pulse` クラスを適用するように修正。
-    *   `marked.parse` の適用をレンダリング時に行うように修正。
-    *   ツールカードのレンダリングロジックを `chat.js` に合わせて修正し、`tool-card--running`, `tool-card--finished`, `tool-card--error` クラスの適用や、`command` の表示を追加。
-    *   履歴読み込み時のスクロール位置維持ロジックを追加。
-*   **`webnew/package.json` & `webnew/pnpm-lock.yaml`:**
-    *   `diff` (jsdiff) を `dependencies` に追加。
+#### フェーズ4: 送信ロジックの統合 (フロントエンド)
+*   **アップロードキャンセル機能**:
+    *   ファイルアップロードを開始する際、`fetch`リクエストに紐づく`AbortController`を生成。
+    *   ユーザーが「停止ボタン」を押した場合、`useChat`フックの`cancelSendMessage`関数が呼び出される。この関数は、従来のAIへのキャンセル通知に加え、この`AbortController`の`abort()`メソッドも呼び出し、**進行中のファイルアップロード処理そのものを中断させる。**
+*   **`handleSendMessage`の拡張**:
+    *   ファイルアップロードが成功すると、APIから返された**ユニークなディレクトリパス**を受け取る。
+    *   このパスを使い、`[System]ユーザーは「${ディレクトリパス}」にファイルをアップロードしました`という形式のシステムメッセージを生成。
+    *   このシステムメッセージとユーザーの入力テキストを結合し、`useChat`フックの`sendMessage`関数に渡してWebSocketで送信。
+    *   ファイル選択の状態をクリアし、プレビューカードを非表示にする。
 
-### 4. 次のGeminiエージェントへの引き継ぎ事項
+## 3. 重要な注意点 / 補足事項
 
-1.  **ツールカードの更新の最終確認:**
-    *   `pushToolCall`、`updateToolCall`、`pushChunk` の各メッセージがツールカードに正しく反映され、内容が動的に更新されることを確認してください。特に、`pendingBodies` の挙動が正しく再現されているか、`__headerPatch` が適用されているか、`diff` の表示が正しいかを確認してください。
-2.  **スクロール挙動の最終確認:**
-    *   メッセージの追加、ストリーミング、履歴読み込み時に、`chat.js` と同様の「繊細な」スクロール挙動（ユーザーが最下部に近い場合のみ自動スクロール、履歴読み込み時のスクロール位置維持）が再現されていることを確認してください。
-3.  **全体的な動作確認とデバッグ:**
-    *   上記以外の `chat.js` の機能（例: `cancelMessage`、`showToolConfirmationDialog` など）が正しく移植されているか、または代替手段が提供されているかを確認してください。
-    *   WebSocket 接続が安定しているか、エラーが発生していないか、コンソールログを詳細に確認してください。
-    *   UI の表示崩れや予期せぬ動作がないか、全体的に確認してください。
-
-このタスクは、元のJavaScriptコードの深い理解と、それをReactのベストプラクティスに適合させるための慎重な作業が求められます。頑張ってください！
+*   **開発環境**: `webnew`はNext.jsプロジェクトであり、Node.js環境が必要です。モジュールのインストールやサーバーの起動はユーザーが行います。
+*   **ファイルパス**: `webnew/mnt/userFiles`はプロジェクトルートからの相対パスです。バックエンドAPIでファイルを保存する際は、このパスを基準にしてください。
+*   **WebSocket**: フロントエンドとバックエンドはWebSocket (`ws://${window.location.hostname}:3001/ws`) で通信しています。バックエンドAPIの実装後、WebSocketサーバーが正しく動作しているか確認してください。
+*   **エラーハンドリング**: ファイルアップロード時のエラー（ネットワークエラー、サーバーエラー、ファイルサイズ制限など）に対する適切なエラーハンドリングを実装してください。
+*   **セキュリティ**: ファイルアップロード機能はセキュリティリスクを伴います。アップロードされるファイルのタイプ、サイズ、内容の検証をサーバーサイドで厳格に行う必要があります。
+*   **UI/UX**: アップロード中のプログレス表示や、アップロード完了のフィードバックなど、ユーザー体験を考慮したUI/UXの設計をお願いします。
