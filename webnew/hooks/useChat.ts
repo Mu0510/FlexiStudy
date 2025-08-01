@@ -525,11 +525,25 @@ export const useChat = () => {
     }
   }, []);
 
+  const cancelSendMessage = useCallback(() => {
+    if (!ws.current || !lastSentRequestId.current) return;
+
+    const req = {
+      jsonrpc: '2.0',
+      id: lastSentRequestId.current,
+      method: 'cancelSendMessage',
+      params: {}
+    };
+    ws.current.send(JSON.stringify(req));
+    setIsGeneratingResponse(false); // UIを即座にリセット
+  }, []);
+
   return {
     messages,
     activeMessage,
     isGeneratingResponse,
     sendMessage,
+    cancelSendMessage, // エクスポートに追加
     requestHistory,
     sendToolConfirmation,
   };

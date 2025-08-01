@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp } from "lucide-react"
+import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square } from "lucide-react"
 import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
 import { useChat } from "@/hooks/useChat";
@@ -47,11 +47,43 @@ function getToolIconText(iconName?: string) {
 
 export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }: NewChatPanelProps) {
   const [input, setInput] = useState("")
-  // Destructure activeMessage and toolCardsData
-  const { messages, activeMessage, isGeneratingResponse, sendMessage, requestHistory } = useChat(); // Removed isOpen from useChat arguments
+  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory } = useChat();
 
-  const messagesContainerRef = useRef<HTMLDivElement>(null); // Reference to the scrollable messages container
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-resize textarea with max height
+  useEffect(() => {
+    const textarea = chatInputRef.current;
+    if (textarea) {
+      textarea.style.height = "auto";
+      const lineHeight = 24;
+      const maxScrollHeight = lineHeight * 6;
+      if (textarea.scrollHeight > maxScrollHeight) {
+        textarea.style.height = `${maxScrollHeight}px`;
+        textarea.style.overflowY = "scroll";
+      } else {
+        textarea.style.height = `${textarea.scrollHeight}px`;
+        textarea.style.overflowY = "hidden";
+      }
+    }
+  }, [input]);
+
+  const handleSendMessage = () => {
+    if (!input.trim()) return;
+    sendMessage(input);
+    setInput("");
+    if (chatInputRef.current) {
+      chatInputRef.current.focus();
+    }
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && e.altKey && !isGeneratingResponse) {
+      e.preventDefault();
+      handleSendMessage();
+    }
+  };
 
   // --- Scrolling Logic ---
   const isNearBottom = useCallback(() => {
@@ -103,43 +135,6 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       scrollBottom(true); // Force scroll to bottom on initial open
     }
   }, [isOpen, requestHistory, scrollBottom]);
-
-
-  // Auto-resize textarea with max height
-  useEffect(() => {
-    const textarea = chatInputRef.current;
-    if (textarea) {
-      textarea.style.height = "auto"; // Reset height to calculate scrollHeight correctly
-      const lineHeight = 24; // Assuming a line height of 24px (adjust if needed)
-      const maxScrollHeight = lineHeight * 6;
-
-      if (textarea.scrollHeight > maxScrollHeight) {
-        textarea.style.height = `${maxScrollHeight}px`;
-        textarea.style.overflowY = "scroll";
-      } else {
-        textarea.style.height = `${textarea.scrollHeight}px`;
-        textarea.style.overflowY = "hidden";
-      }
-    }
-  }, [input]);
-
-  const handleSendMessage = () => {
-    if (!input.trim() || isGeneratingResponse) return;
-    sendMessage(input); // Use sendMessage from useChat
-    setInput("")
-    if (chatInputRef.current) {
-      chatInputRef.current.focus();
-    }
-  }
-
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && e.altKey) {
-      e.preventDefault();
-      if (!isGeneratingResponse) {
-        handleSendMessage();
-      }
-    }
-  };
 
   if (!isOpen) return null
 
@@ -283,11 +278,11 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                     <Mic className="w-5 h-5" />
                   </Button>
                   <Button
-                    onClick={handleSendMessage}
-                    disabled={isGeneratingResponse || !input.trim()}
+                    onClick={isGeneratingResponse ? cancelSendMessage : handleSendMessage}
+                    disabled={!isGeneratingResponse && !input.trim()}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
-                    <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
+                    {isGeneratingResponse ? <Square className="w-3 h-3" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
                   </Button>
                 </div>
               </div>
