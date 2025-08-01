@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
-import { useToast } from "@/components/ui/use-toast"
 import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
 import { useChat } from "@/hooks/useChat";
@@ -62,7 +61,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
-  const { toast } = useToast();
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory } = useChat();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -199,6 +198,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
   // --- File Handling ---
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    setUploadError(null); // Clear previous errors
     const files = event.target.files;
     if (files && files.length > 0) {
       const newFilesArray = Array.from(files);
@@ -206,11 +206,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       const oneGB = 1024 * 1024 * 1024;
 
       if (totalSize > oneGB) {
-        toast({
-          title: "アップロード上限超過",
-          description: "合計ファイルサイズが1GBを超えています。",
-          variant: "destructive",
-        });
+        setUploadError("合計ファイルサイズが1GBを超えています。");
         // Reset the input value to allow selecting the same file again
         if(fileInputRef.current) {
           fileInputRef.current.value = "";
@@ -225,9 +221,10 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     if(fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  }, [selectedFiles, toast]);
+  }, [selectedFiles]);
 
   const handleRemoveFile = useCallback((fileToRemove: File) => {
+    setUploadError(null); // Clear errors when a file is removed
     setSelectedFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
   }, []);
 
@@ -442,6 +439,14 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                   </div>
                 </div>
               )}
+
+              {/* Upload Error Message */}
+              {uploadError && (
+                <div className="mb-2 px-2 py-1 text-xs text-red-600 bg-red-100 border border-red-300 rounded-md">
+                  {uploadError}
+                </div>
+              )}
+
               <Textarea
                 ref={chatInputRef}
                 value={input}
