@@ -1,9 +1,11 @@
-const { createServer } = require('http');
+const { createServer: createHttpServer } = require('http');
+const { createServer: createHttpsServer } = require('https');
 const { parse } = require('url');
 const next = require('next');
 const { WebSocketServer } = require('ws');
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
@@ -197,8 +199,13 @@ function startGemini(wss) {
 // --- End of Gemini Process Logic ---
 
 
+const httpsOptions = {
+  key: fs.readFileSync(path.resolve(__dirname, 'certs/key.pem')),
+  cert: fs.readFileSync(path.resolve(__dirname, 'certs/cert.pem')),
+};
+
 app.prepare().then(() => {
-  const server = createServer(async (req, res) => {
+  const httpsServer = createHttpsServer(httpsOptions, async (req, res) => {
     try {
       const parsedUrl = parse(req.url, true);
       await handle(req, res, parsedUrl);
@@ -209,9 +216,16 @@ app.prepare().then(() => {
     }
   });
 
-  const wss = new WebSocketServer({ port: 3001 });
+  const httpServer = createHttpServer((req, res) => {
+    const host = req.headers.host;
+    const httpsUrl = `https://${host}${req.url}`;
+    res.writeHead(301, { Location: httpsUrl });
+    res.end();
+  });
 
-  server.on('upgrade', (request, socket, head) => {
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpsServer.on('upgrade', (request, socket, head) => {
     const { pathname } = parse(request.url, true);
     if (pathname === '/ws') {
       wss.handleUpgrade(request, socket, head, (ws) => {
@@ -307,8 +321,13 @@ app.prepare().then(() => {
   // Start Gemini process with the wss instance
   startGemini(wss);
 
-  server.listen(port, (err) => {
+  httpsServer.listen(443, (err) => {
     if (err) throw err;
-    console.log(`> Ready on http://${hostname}:${port}`);
+    console.log(`> Ready on https://${hostname}:443`);
+  });
+
+  httpServer.listen(80, (err) => {
+    if (err) throw err;
+    console.log(`> HTTP redirect server running on http://${hostname}:80`);
   });
 });
