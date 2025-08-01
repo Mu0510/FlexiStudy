@@ -518,7 +518,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                   </Button>
                   <Button
                     onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
-                    disabled={!input.trim() && selectedFiles.length === 0 || isUploading}
+                    disabled={!(isGeneratingResponse || isUploading) && !input.trim() && selectedFiles.length === 0}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
                     {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
