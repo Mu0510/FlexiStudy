@@ -163,7 +163,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto"> {/* Added ref here */}
-        <div className="p-4 space-y-8 max-w-prose mx-auto">
+        <div className="p-4 space-y-8 max-w-prose mx-auto pb-24">
         {messages.map((msg) => {
           // Render tool messages
           if (msg.type === "tool") {
@@ -256,29 +256,29 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div className="flex-shrink-0 px-4 pt-2 pb-4">
-        <div className="relative flex flex-col rounded-2xl border border-gray-200 bg-white p-2 focus-within:border-gray-400 transition-colors shadow-lg -mt-10">
+        <div className="relative flex flex-col rounded-2xl border border-gray-300 bg-white p-2 focus-within:border-gray-500 transition-colors shadow-lg -mt-10">
           <Textarea
             ref={chatInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="システムと対話... (Alt+Enterで送信)"
-            className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 px-2 py-1"
+            className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
             rows={1}
             disabled={isGeneratingResponse}
           />
           <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-0.5 text-gray-500 rounded-lg p-0.5 focus-within:ring-2 focus-within:ring-red-400">
-                <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full">
+            <div className="flex items-center gap-1 text-gray-500">
+                <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
                     <Plus className="w-4 h-4" />
                 </Button>
-                <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full">
+                <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2">
                     <SlidersHorizontal className="w-4 h-4" />
+                    <span className="text-sm">ツール</span>
                 </Button>
-                <span className="text-sm ml-1 pr-1">ツール</span>
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full">
+              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
                 <Mic className="w-5 h-5" />
               </Button>
               <Button
