@@ -5,6 +5,8 @@ import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
+import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/components/ui/use-toast"
 import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
 import { useChat } from "@/hooks/useChat";
@@ -59,6 +61,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const [input, setInput] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<number>(0);
+  const { toast } = useToast();
   const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory } = useChat();
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -98,25 +102,55 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       const controller = new AbortController();
       uploadAbortControllerRef.current = controller;
       setIsUploading(true);
+      setUploadProgress(0);
 
       try {
-        const response = await fetch('/api/upload', {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal, // Pass the signal to the fetch request
+        await new Promise<void>((resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          const controllerSignal = controller.signal;
+
+          xhr.open('POST', '/api/upload', true);
+
+          // Abort handling
+          const abortHandler = () => {
+            xhr.abort();
+            reject(new DOMException('Aborted', 'AbortError'));
+          };
+          controllerSignal.addEventListener('abort', abortHandler);
+
+          // Progress handling
+          xhr.upload.onprogress = (event) => {
+            if (event.lengthComputable) {
+              const percentComplete = (event.loaded / event.total) * 100;
+              setUploadProgress(percentComplete);
+            }
+          };
+
+          // Completion and error handling
+          xhr.onload = () => {
+            controllerSignal.removeEventListener('abort', abortHandler);
+            if (xhr.status >= 200 && xhr.status < 300) {
+              const result = JSON.parse(xhr.responseText);
+              if (result.success) {
+                const fileNames = selectedFiles.map(file => `- ${file.name}`).join('\n');
+                fileUploadMessage = `[System]ユーザーは「${result.uploadPath}」に以下のファイルをアップロードしました：\n${fileNames}`;
+              }
+              resolve();
+            } else {
+              console.error("File upload failed:", xhr.statusText);
+              reject(new Error(xhr.statusText));
+            }
+          };
+
+          xhr.onerror = () => {
+            controllerSignal.removeEventListener('abort', abortHandler);
+            console.error("An error occurred during file upload.");
+            reject(new Error("Network error"));
+          };
+
+          xhr.send(formData);
         });
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          console.error("File upload failed:", errorData.details || "Unknown error");
-          return; 
-        }
-
-        const result = await response.json();
-        if (result.success) {
-          const fileNames = selectedFiles.map(file => `- ${file.name}`).join('\n');
-          fileUploadMessage = `[System]ユーザーは「${result.uploadPath}」に以下のファイルをアップロードしました：\n${fileNames}`;
-        }
       } catch (error: any) {
         if (error.name === 'AbortError') {
           console.log('File upload was aborted.');
@@ -128,6 +162,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         // Clear the abort controller ref and uploading state
         uploadAbortControllerRef.current = null;
         setIsUploading(false);
+        setUploadProgress(0);
       }
     }
 
@@ -164,23 +199,33 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
   // --- File Handling ---
   const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("handleFileSelect triggered.");
     const files = event.target.files;
     if (files && files.length > 0) {
-      console.log(`Files selected: ${files.length}`, Array.from(files).map(f => f.name));
-      // Now directly use selectedFiles from the closure, which is guaranteed to be up-to-date
-      // because selectedFiles is in the dependency array.
-      const newFiles = [...selectedFiles, ...Array.from(files)];
-      console.log(`Updating selectedFiles state. New count: ${newFiles.length}`);
-      setSelectedFiles(newFiles);
-    } else {
-      console.log("No files selected or event.target.files is null.");
+      const newFilesArray = Array.from(files);
+      const totalSize = selectedFiles.reduce((acc, file) => acc + file.size, 0) + newFilesArray.reduce((acc, file) => acc + file.size, 0);
+      const oneGB = 1024 * 1024 * 1024;
+
+      if (totalSize > oneGB) {
+        toast({
+          title: "アップロード上限超過",
+          description: "合計ファイルサイズが1GBを超えています。",
+          variant: "destructive",
+        });
+        // Reset the input value to allow selecting the same file again
+        if(fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+        return;
+      }
+
+      const updatedFiles = [...selectedFiles, ...newFilesArray];
+      setSelectedFiles(updatedFiles);
     }
     // Reset the input value to allow selecting the same file again
     if(fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  }, [selectedFiles]); // KEY CHANGE: Add selectedFiles to the dependency array
+  }, [selectedFiles, toast]);
 
   const handleRemoveFile = useCallback((fileToRemove: File) => {
     setSelectedFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
@@ -371,18 +416,27 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 <div className="mb-2 p-2 border-b border-gray-200">
                   <div className="flex space-x-2 overflow-x-auto">
                     {selectedFiles.map((file, index) => (
-                      <div key={index} className="flex-shrink-0 bg-gray-100 rounded-lg p-2 flex items-center space-x-2 text-sm">
+                      <div key={index} className={cn(
+                        "flex-shrink-0 bg-gray-100 rounded-lg p-2 flex items-center space-x-2 text-sm relative", // Added relative positioning
+                        isUploading && "opacity-50"
+                      )}>
                         <FileIcon className="h-5 w-5 text-gray-500" />
                         <span className="font-medium text-gray-700 truncate max-w-[100px]">{file.name}</span>
                         <span className="text-gray-500 text-xs">{formatFileSize(file.size)}</span>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 rounded-full"
+                          className="h-6 w-6 rounded-full disabled:pointer-events-none"
                           onClick={() => handleRemoveFile(file)}
+                          disabled={isUploading}
                         >
                           <X className="h-4 w-4" />
                         </Button>
+                        {isUploading && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1">
+                            <Progress value={uploadProgress} className="h-1" />
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
