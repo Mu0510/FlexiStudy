@@ -70,6 +70,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null); // Ref for the scroll anchor
   const prevScrollHeightRef = useRef(0);
+  const prevScrollTopRef = useRef(0);
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -281,22 +282,37 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     if (!container) return;
 
     const currentScrollHeight = container.scrollHeight;
+    const currentScrollTop = container.scrollTop;
     const prevScrollHeight = prevScrollHeightRef.current;
+    const prevScrollTop = prevScrollTopRef.current;
 
     console.log(`useLayoutEffect triggered. currentScrollHeight: ${currentScrollHeight}, prevScrollHeight: ${prevScrollHeight}, activeMessage: ${!!activeMessage}, isFetchingHistory: ${isFetchingHistory}`);
 
-    // コンテンツの高さが変わった場合、またはactiveMessageが更新された場合
-    if (currentScrollHeight !== prevScrollHeight || activeMessage) {
-      // 履歴読み込み中でない、かつユーザーが最下部にいる場合のみ自動スクロール
-      if (!isFetchingHistory && isNearBottom()) {
-        console.log("--- Auto-scrolling to bottom ---");
+    // コンテンツの高さが増加した場合
+    if (currentScrollHeight > prevScrollHeight) {
+      // 履歴読み込み中でない、かつ、コンテンツ増加前にユーザーが最下部にいた場合
+      const wasNearBottomBeforeContentAdded = (prevScrollHeight - prevScrollTop <= container.clientHeight + 5);
+      if (!isFetchingHistory && wasNearBottomBeforeContentAdded) {
+        console.log("--- Auto-scrolling to bottom (content added) ---");
         scrollBottom(true);
+      } else if (activeMessage) { // activeMessageの更新によるスクロール
+        // activeMessageの更新時も、ユーザーが最下部にいる場合のみスクロール
+        if (isNearBottom()) {
+          console.log("--- Auto-scrolling to bottom (activeMessage update) ---");
+          scrollBottom(true);
+        }
       } else {
         console.log("--- Auto-scroll condition not met ---");
+      }
+    } else if (activeMessage) { // コンテンツの高さは変わらないがactiveMessageが更新された場合
+      if (isNearBottom()) {
+        console.log("--- Auto-scrolling to bottom (activeMessage update, no height change) ---");
+        scrollBottom(true);
       }
     }
 
     prevScrollHeightRef.current = currentScrollHeight;
+    prevScrollTopRef.current = currentScrollTop;
   }, [messages, activeMessage, isFetchingHistory, isNearBottom, scrollBottom]);
 
   // Initial history load and scroll to bottom
