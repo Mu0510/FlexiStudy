@@ -109,7 +109,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
         const result = await response.json();
         if (result.success) {
-          fileUploadMessage = `[System]ユーザーは「${result.uploadPath}」にファイルをアップロードしました`;
+          const fileNames = selectedFiles.map(file => `- ${file.name}`).join('\n');
+          fileUploadMessage = `[System]ユーザーは「${result.uploadPath}」に以下のファイルをアップロードしました：\n${fileNames}`;
         }
       } catch (error) {
         // TODO: Show a toast or an error message to the user
@@ -141,7 +142,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   };
 
   // --- File Handling ---
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (files) {
       setSelectedFiles(prevFiles => [...prevFiles, ...Array.from(files)]);
@@ -150,15 +151,15 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     if(fileInputRef.current) {
       fileInputRef.current.value = "";
     }
-  };
+  }, []); // Empty dependency array means this function is created only once
 
-  const handleRemoveFile = (fileToRemove: File) => {
+  const handleRemoveFile = useCallback((fileToRemove: File) => {
     setSelectedFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
-  };
+  }, []);
 
-  const triggerFileSelect = () => {
+  const triggerFileSelect = useCallback(() => {
     fileInputRef.current?.click();
-  };
+  }, []);
 
 
   // --- Scrolling Logic ---
