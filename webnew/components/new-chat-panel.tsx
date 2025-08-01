@@ -105,12 +105,21 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   }, [isOpen, requestHistory, scrollBottom]);
 
 
-  // Auto-resize textarea
+  // Auto-resize textarea with max height
   useEffect(() => {
     const textarea = chatInputRef.current;
     if (textarea) {
-      textarea.style.height = "auto";
-      textarea.style.height = `${textarea.scrollHeight}px`;
+      textarea.style.height = "auto"; // Reset height to calculate scrollHeight correctly
+      const lineHeight = 24; // Assuming a line height of 24px (adjust if needed)
+      const maxScrollHeight = lineHeight * 6;
+
+      if (textarea.scrollHeight > maxScrollHeight) {
+        textarea.style.height = `${maxScrollHeight}px`;
+        textarea.style.overflowY = "scroll";
+      } else {
+        textarea.style.height = `${textarea.scrollHeight}px`;
+        textarea.style.overflowY = "hidden";
+      }
     }
   }, [input]);
 
@@ -246,27 +255,27 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         </div>
       </div>
 
-      <div className="flex-shrink-0 p-4 border-t">
-        <div className="flex flex-col rounded-2xl border border-gray-200 bg-white p-2 focus-within:border-gray-400 transition-colors">
+      <div className="flex-shrink-0 px-4 pt-2 pb-4">
+        <div className="relative flex flex-col rounded-2xl border border-gray-200 bg-white p-2 focus-within:border-gray-400 transition-colors shadow-lg -mt-10">
           <Textarea
             ref={chatInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder="システムと対話... (Alt+Enterで送信)"
-            className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-hidden placeholder:text-gray-400"
+            className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 px-2 py-1"
             rows={1}
             disabled={isGeneratingResponse}
           />
           <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-1 text-gray-500">
-              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full">
-                <Plus className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full">
-                <SlidersHorizontal className="w-4 h-4" />
-              </Button>
-              <span className="text-sm ml-1">ツール</span>
+            <div className="flex items-center gap-0.5 text-gray-500 rounded-lg p-0.5 focus-within:ring-2 focus-within:ring-red-400">
+                <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full">
+                    <Plus className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="w-7 h-7 rounded-full">
+                    <SlidersHorizontal className="w-4 h-4" />
+                </Button>
+                <span className="text-sm ml-1 pr-1">ツール</span>
             </div>
             <div className="flex items-center gap-2">
               <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full">
