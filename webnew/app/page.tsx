@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Dashboard } from "@/components/dashboard"
-import { StudyRecords } from "@/components/study-records"
+import dynamic from "next/dynamic"
+
+const StudyRecords = dynamic(() => import("@/components/study-records").then(mod => mod.StudyRecords), {
+  ssr: false,
+});
 import { Analytics } from "@/components/analytics"
 import { ExamAnalysis } from "@/components/exam-analysis"
 import { Settings } from "@/components/settings"
