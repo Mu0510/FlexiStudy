@@ -3,6 +3,14 @@ import { NextResponse, NextRequest } from 'next/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '1gb',
+    },
+  },
+};
+
 export async function POST(req: NextRequest) {
   console.log('--- Upload API Received Request ---');
   console.log('Current working directory:', process.cwd());

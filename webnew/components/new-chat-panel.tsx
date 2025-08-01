@@ -63,6 +63,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadAbortControllerRef = useRef<AbortController | null>(null);
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -86,25 +87,27 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
     let fileUploadMessage = "";
 
-    // --- Phase 4: File Upload Logic ---
+    // --- Phase 4: File Upload Logic with AbortController ---
     if (selectedFiles.length > 0) {
       const formData = new FormData();
       selectedFiles.forEach(file => {
         formData.append("files", file);
       });
 
+      const controller = new AbortController();
+      uploadAbortControllerRef.current = controller;
+
       try {
-        // We will integrate AbortController later
         const response = await fetch('/api/upload', {
           method: 'POST',
           body: formData,
+          signal: controller.signal, // Pass the signal to the fetch request
         });
 
         if (!response.ok) {
           const errorData = await response.json();
-          // TODO: Show a toast or an error message to the user
           console.error("File upload failed:", errorData.details || "Unknown error");
-          return; // Stop the process if upload fails
+          return; 
         }
 
         const result = await response.json();
@@ -112,10 +115,16 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
           const fileNames = selectedFiles.map(file => `- ${file.name}`).join('\n');
           fileUploadMessage = `[System]ユーザーは「${result.uploadPath}」に以下のファイルをアップロードしました：\n${fileNames}`;
         }
-      } catch (error) {
-        // TODO: Show a toast or an error message to the user
-        console.error("An error occurred during file upload:", error);
-        return; // Stop the process on network error etc.
+      } catch (error: any) {
+        if (error.name === 'AbortError') {
+          console.log('File upload was aborted.');
+        } else {
+          console.error("An error occurred during file upload:", error);
+        }
+        return;
+      } finally {
+        // Clear the abort controller ref once the upload is complete or aborted
+        uploadAbortControllerRef.current = null;
       }
     }
 
@@ -131,6 +140,15 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     setSelectedFiles([]);
     if (chatInputRef.current) {
       chatInputRef.current.focus();
+    }
+  };
+
+  const handleCancel = () => {
+    // Cancel the AI response generation
+    cancelSendMessage();
+    // Abort the file upload if it's in progress
+    if (uploadAbortControllerRef.current) {
+      uploadAbortControllerRef.current.abort();
     }
   };
 
@@ -392,7 +410,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                     <Mic className="w-5 h-5" />
                   </Button>
                   <Button
-                    onClick={isGeneratingResponse ? cancelSendMessage : handleSendMessage}
+                    onClick={isGeneratingResponse ? handleCancel : handleSendMessage}
                     disabled={!isGeneratingResponse && (!input.trim() && selectedFiles.length === 0)}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
