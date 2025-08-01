@@ -257,8 +257,9 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     const container = messagesContainerRef.current;
     if (!container) return false;
     const { scrollHeight, scrollTop, clientHeight } = container;
-    // chat.js uses +5 for threshold
-    return scrollHeight - scrollTop <= clientHeight + 5;
+    const nearBottom = scrollHeight - scrollTop <= clientHeight + 5;
+    console.log(`isNearBottom: ${nearBottom} (scrollHeight: ${scrollHeight}, scrollTop: ${scrollTop}, clientHeight: ${clientHeight})`);
+    return nearBottom;
   }, []);
 
   const scrollBottom = useCallback((force = false) => {
@@ -282,11 +283,16 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     const currentScrollHeight = container.scrollHeight;
     const prevScrollHeight = prevScrollHeightRef.current;
 
+    console.log(`useLayoutEffect triggered. currentScrollHeight: ${currentScrollHeight}, prevScrollHeight: ${prevScrollHeight}, activeMessage: ${!!activeMessage}, isFetchingHistory: ${isFetchingHistory}`);
+
     // コンテンツの高さが変わった場合、またはactiveMessageが更新された場合
     if (currentScrollHeight !== prevScrollHeight || activeMessage) {
       // 履歴読み込み中でない、かつユーザーが最下部にいる場合のみ自動スクロール
       if (!isFetchingHistory && isNearBottom()) {
+        console.log("--- Auto-scrolling to bottom ---");
         scrollBottom(true);
+      } else {
+        console.log("--- Auto-scroll condition not met ---");
       }
     }
 
