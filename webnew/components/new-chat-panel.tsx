@@ -256,7 +256,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div className="flex-shrink-0 px-4 pt-2 pb-4">
-        <div className="relative flex flex-col rounded-2xl border border-gray-300 bg-white p-2 focus-within:border-gray-500 transition-colors shadow-lg -mt-10">
+        <div className="relative flex flex-col rounded-2xl border border-gray-300 bg-white p-2 transition-colors shadow-lg -mt-10">
           <Textarea
             ref={chatInputRef}
             value={input}
@@ -268,13 +268,13 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             disabled={isGeneratingResponse}
           />
           <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-1 text-gray-500">
+            <div className="flex items-center gap-0.5 text-gray-500">
                 <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
                     <Plus className="w-4 h-4" />
                 </Button>
                 <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2">
                     <SlidersHorizontal className="w-4 h-4" />
-                    <span className="text-sm">ツール</span>
+                    <span className="text-sm font-light">ツール</span>
                 </Button>
             </div>
             <div className="flex items-center gap-2">
