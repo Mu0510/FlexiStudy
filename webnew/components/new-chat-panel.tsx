@@ -255,8 +255,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
         </div>
       </div>
 
-      <div className="flex-shrink-0 px-4 pt-2 pb-4">
-        <div className="relative flex flex-col rounded-2xl border border-gray-300 bg-white p-2 transition-colors shadow-lg -mt-10">
+      <div className="flex-shrink-0 px-4 pt-2 pb-4 flex justify-center">
+        <div className="relative w-full max-w-prose flex flex-col rounded-2xl border border-gray-300 bg-white p-2 transition-colors shadow-lg -mt-10">
           <Textarea
             ref={chatInputRef}
             value={input}
@@ -284,9 +284,9 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
               <Button
                 onClick={handleSendMessage}
                 disabled={isGeneratingResponse || !input.trim()}
-                className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
+                className="w-7 h-7 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
               >
-                <ArrowUp className="w-4 h-4" />
+                <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
               </Button>
             </div>
           </div>
