@@ -254,7 +254,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
             placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力... (Alt+Enterで送信)"}
-            className="w-full resize-none border-none bg-transparent outline-none focus:outline-none focus:ring-0 focus:border-transparent overflow-hidden"
+            className="w-full resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-hidden"
             rows={1}
             disabled={isGeneratingResponse}
           />
