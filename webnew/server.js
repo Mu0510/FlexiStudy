@@ -201,7 +201,7 @@ function startGemini(wss) {
         isRestartingGemini = false; // 再起動完了
       }
     });
-    oldProcess.kill();
+    oldProcess.kill('SIGKILL'); // SIGKILL を1回だけ実行
   } else {
     _startNewGeminiProcess(wss);
   }
@@ -293,12 +293,7 @@ app.prepare().then(() => {
                 ongoingText = '';
             }
 
-            if (inputText.trim() === '/clear') {
-                history.length = 0;
-                broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'command' } });
-                startGemini(wss);
-                return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
-            }
+            
 
             // Save the original message with files to history for the UI
             const rec = { id: String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
