@@ -500,14 +500,14 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 placeholder="システムと対話... (Alt+Enterで送信)"
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
                 rows={1}
-                disabled={isGeneratingResponse || isUploading}
+                disabled={isUploading}
               />
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-0 text-gray-500">
-                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100" onClick={triggerFileSelect} disabled={isGeneratingResponse || isUploading}>
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100" onClick={triggerFileSelect} disabled={isUploading}>
                         <Plus className="w-5 h-5" />
                     </Button>
-                    <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2" disabled={isGeneratingResponse || isUploading}>
+                    <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2" disabled={isUploading}>
                         <SlidersHorizontal className="w-4 h-4" />
                         <span className="text-sm font-light">ツール</span>
                     </Button>
@@ -518,7 +518,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                   </Button>
                   <Button
                     onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
-                    disabled={!(isGeneratingResponse || isUploading) && !input.trim() && selectedFiles.length === 0}
+                    disabled={!input.trim() && selectedFiles.length === 0 || isUploading}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
                     {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
