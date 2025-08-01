@@ -288,22 +288,6 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   }, [messages, activeMessage, isNearBottom, scrollBottom]);
 
 
-  const prevMessagesLength = useRef(messages.length);
-
-  useLayoutEffect(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-
-    const wasNearBottom = isNearBottom();
-    const isNewMessage = messages.length > prevMessagesLength.current;
-
-    if (isNewMessage && wasNearBottom) {
-      scrollBottom(true);
-    }
-
-    prevMessagesLength.current = messages.length;
-  }, [messages, activeMessage, isNearBottom, scrollBottom]);
-
   if (!isOpen) return null
 
   return (
