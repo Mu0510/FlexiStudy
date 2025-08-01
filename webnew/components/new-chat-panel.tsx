@@ -89,7 +89,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const handleSendMessage = async () => {
     if (!input.trim() && selectedFiles.length === 0) return;
 
-    let fileUploadMessage = "";
+    let uploadedFiles: { name: string, path: string, size: number }[] = [];
 
     // --- Phase 4: File Upload Logic with AbortController ---
     if (selectedFiles.length > 0) {
@@ -104,7 +104,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       setUploadProgress(0);
 
       try {
-        await new Promise<void>((resolve, reject) => {
+        const result = await new Promise<{ success: boolean, files: { name: string, path: string, size: number }[] }>((resolve, reject) => {
           const xhr = new XMLHttpRequest();
           const controllerSignal = controller.signal;
 
@@ -129,12 +129,12 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
           xhr.onload = () => {
             controllerSignal.removeEventListener('abort', abortHandler);
             if (xhr.status >= 200 && xhr.status < 300) {
-              const result = JSON.parse(xhr.responseText);
-              if (result.success) {
-                const fileNames = selectedFiles.map(file => `- ${file.name}`).join('\n');
-                fileUploadMessage = `[System]ユーザーは「${result.uploadPath}」に以下のファイルをアップロードしました：\n${fileNames}`;
+              const response = JSON.parse(xhr.responseText);
+              if (response.success) {
+                resolve(response);
+              } else {
+                 reject(new Error(response.message || 'Upload failed'));
               }
-              resolve();
             } else {
               console.error("File upload failed:", xhr.statusText);
               reject(new Error(xhr.statusText));
@@ -149,6 +149,10 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
           xhr.send(formData);
         });
+
+        if (result.success) {
+          uploadedFiles = result.files;
+        }
 
       } catch (error: any) {
         if (error.name === 'AbortError') {
@@ -165,11 +169,9 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       }
     }
 
-    // Combine messages and send
-    const finalMessage = [fileUploadMessage, input].filter(Boolean).join("\n\n");
-    
-    if (finalMessage) {
-      sendMessage(finalMessage);
+    // Send message with text and file info
+    if (input.trim() || uploadedFiles.length > 0) {
+      sendMessage({ text: input, files: uploadedFiles });
     }
 
     // Reset inputs

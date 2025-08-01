@@ -216,7 +216,9 @@ app.prepare().then(() => {
         }
 
         if (msg.method === 'sendUserMessage') {
-            const inputText = msg.params?.chunks?.[0]?.text || '';
+            const { text, files } = msg.params?.chunks?.[0] || {};
+            const inputText = text || '';
+
             if (ongoingText.length > 0) {
                 const rec = { id: String(Date.now()), ts: Date.now(), role: 'assistant', text: ongoingText.trimEnd() };
                 history.push(rec);
@@ -228,7 +230,7 @@ app.prepare().then(() => {
                 startGemini(wss);
                 return ws.send(JSON.stringify({ jsonrpc:'2.0', id:msg.id, result:null }));
             }
-            const rec = { id: String(Date.now()), ts: Date.now(), role:'user', text: inputText };
+            const rec = { id: String(Date.now()), ts: Date.now(), role:'user', text: inputText, files: files || [] };
             history.push(rec);
         }
 

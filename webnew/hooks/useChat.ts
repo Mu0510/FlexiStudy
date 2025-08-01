@@ -3,10 +3,17 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { marked } from 'marked';
 import * as Diff from 'diff'; // jsdiff ライブラリをインポート
 
+interface FileInfo {
+  name: string;
+  path: string;
+  size: number;
+}
+
 interface Message {
   id: string;
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
+  files?: FileInfo[];
   type?: 'text' | 'tool'; // ユーザー/アシスタントは'text'、ツールメッセージは'tool'
   toolCallId?: string; // ツールメッセージ用
   status?: 'running' | 'finished' | 'error'; // ツールメッセージ用
@@ -374,6 +381,7 @@ export const useChat = () => {
                     id: m.id,
                     role: m.role,
                     content: m.text || '',
+                    files: m.files || [],
                   };
                 } else if (m.role === 'tool') {
                     // マージ済みのツールオブジェクトをそのまま返す
@@ -461,17 +469,19 @@ export const useChat = () => {
     };
   }, []);
 
-  const sendMessage = useCallback((text: string) => {
+  const sendMessage = useCallback((messageData: { text: string; files?: FileInfo[] }) => {
     if (!ws.current || isGeneratingResponse) return;
 
     setIsGeneratingResponse(true);
+
+    const { text, files } = messageData;
 
     const newMessage: Message = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
         role: "user",
         content: text,
+        files: files || [],
         type: "text",
-        // timestamp: new Date().toISOString(), // timestamp is not in the interface
       };
 
     setMessages(prev => [...prev, newMessage]);
@@ -483,7 +493,7 @@ export const useChat = () => {
       jsonrpc: '2.0',
       id: reqId,
       method: 'sendUserMessage',
-      params: { chunks: [{ text }] }
+      params: { chunks: [{ text, files }] }
     };
     ws.current.send(JSON.stringify(req));
   }, [isGeneratingResponse]);
