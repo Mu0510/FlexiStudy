@@ -52,80 +52,117 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
   console.log(`Gemini process started with PID: ${geminiProcess.pid}`);
 
   let buf = '';
+  let braceLevel = 0;
+  let inString = false;
+  let jsonStart = -1;
+
   geminiProcess.stdout.on('data', data => {
     buf += data.toString();
-    const lines = buf.split('\n');
-    buf = lines.pop() || '';
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      let msg;
-      try { msg = JSON.parse(line); }
-      catch { msg = { stdout: line }; }
-      console.log('[Gemini CLI Output] ' + JSON.stringify(msg));
+    let cursor = 0;
 
-      if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
-          const rec = { id:String(Date.now()), ts:Date.now(),
-                       role:'assistant', text:ongoingText.trimEnd() };
-          history.push(rec);
-          console.log('[History] Saved assistant message (before other message): ' + JSON.stringify(rec));
-          ongoingText = '';
-      }
+    while (cursor < buf.length) {
+      const char = buf[cursor];
 
-      if (msg.method === 'streamAssistantMessageChunk') {
-          const { chunk: c } = msg.params || {};
-          if (c?.text) {
-              ongoingText += c.text;
-              broadcast(wss, msg);
+      if (jsonStart === -1) {
+        if (char === '{') {
+          jsonStart = cursor;
+          braceLevel = 1;
+        }
+      } else {
+        if (inString) {
+          if (char === '\\') {
+            cursor++; // Skip escaped character
+          } else if (char === '"') {
+            inString = false;
           }
-          if (c?.thought) {
-              broadcast(wss, { jsonrpc: '2.0', method: 'streamAssistantThoughtChunk', params: { thought: c.thought } });
+        } else {
+          if (char === '"') {
+            inString = true;
+          } else if (char === '{') {
+            braceLevel++;
+          } else if (char === '}') {
+            braceLevel--;
+            if (braceLevel === 0) {
+              const jsonString = buf.substring(jsonStart, cursor + 1);
+              jsonStart = -1;
+              buf = buf.substring(cursor + 1);
+              cursor = -1; // Reset cursor to loop from the start of the new buffer
+
+              try {
+                const msg = JSON.parse(jsonString);
+                console.log('[Gemini CLI Output] ' + jsonString);
+
+                // --- Start of existing message processing logic ---
+                if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
+                    const rec = { id:String(Date.now()), ts:Date.now(),
+                                 role:'assistant', text:ongoingText.trimEnd() };
+                    history.push(rec);
+                    console.log('[History] Saved assistant message (before other message): ' + JSON.stringify(rec));
+                    ongoingText = '';
+                }
+
+                if (msg.method === 'streamAssistantMessageChunk') {
+                    const { chunk: c } = msg.params || {};
+                    if (c?.text) {
+                        ongoingText += c.text;
+                        broadcast(wss, msg);
+                    }
+                    if (c?.thought) {
+                        broadcast(wss, { jsonrpc: '2.0', method: 'streamAssistantThoughtChunk', params: { thought: c.thought } });
+                    }
+                    continue;
+                }
+
+                const methodsToExclude = ['initialize', 'requestToolCallConfirmation', 'updateToolCall'];
+                if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
+                    if (ongoingText.length > 0) {
+                        const rec = { id:String(Date.now()), ts:Date.now(),
+                                     role:'assistant', text:ongoingText.trimEnd() };
+                        broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
+                    }
+                    broadcast(wss, msg);
+                    continue;
+                }
+
+                if (msg.role && msg.text) {
+                    history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
+                }
+                if (msg.method === 'updateToolCall') {
+                  broadcast(wss, msg);
+                  geminiProcess.stdin.write(JSON.stringify({
+                    jsonrpc: '2.0',
+                    id:      msg.id,
+                    result:  null
+                  }) + '\n');
+                  history.push({ ...msg, ts: Date.now(), type:'tool' });
+                  return;
+                }
+                else if (msg.method === 'pushToolCall') {
+                    history.push({
+                        ...msg,
+                        ts: msg.ts || Date.now(),
+                        type: 'tool'
+                    });
+                }
+                else if (msg.method === 'requestToolCallConfirmation') {
+                    history.push({
+                        ...msg,
+                        ts: msg.ts || Date.now(),
+                        type: 'tool'
+                    });
+                }
+
+                broadcast(wss, msg);
+                // --- End of existing message processing logic ---
+
+              } catch (e) {
+                console.error('Error parsing JSON object:', e, jsonString);
+              }
+            }
           }
-          continue;
+        }
       }
-
-      const methodsToExclude = ['initialize', 'requestToolCallConfirmation', 'updateToolCall'];
-      if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
-          if (ongoingText.length > 0) {
-              const rec = { id:String(Date.now()), ts:Date.now(),
-                           role:'assistant', text:ongoingText.trimEnd() };
-              broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
-          }
-          // The original msg might also contain useful info, but for now, we prioritize the 'rec' message.
-          // If 'msg' itself is a complete message, it should be handled by 'addMessage' or 'streamAssistantMessageChunk' logic.
-          // For now, we'll keep broadcasting the original msg as well, but it might be redundant or need further refinement.
-          broadcast(wss, msg);
-          continue;
-      }
-
-      if (msg.role && msg.text) {
-          history.push({ ...msg, id: (msg.id !== undefined && msg.id !== null) ? String(msg.id) : String(Date.now()) });
-      }
-      if (msg.method === 'updateToolCall') {
-        broadcast(wss, msg);
-        geminiProcess.stdin.write(JSON.stringify({
-          jsonrpc: '2.0',
-          id:      msg.id,
-          result:  null
-        }) + '\n');
-        history.push({ ...msg, ts: Date.now(), type:'tool' });
-        return;
-      }
-      else if (msg.method === 'pushToolCall') {
-          history.push({
-              ...msg,
-              ts: msg.ts || Date.now(),
-              type: 'tool'
-          });
-      }
-      else if (msg.method === 'requestToolCallConfirmation') {
-          history.push({
-              ...msg,
-              ts: msg.ts || Date.now(),
-              type: 'tool'
-          });
-      }
-
-      broadcast(wss, msg);
+      cursor++;
     }
   });
 
