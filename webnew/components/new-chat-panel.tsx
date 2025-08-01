@@ -442,8 +442,16 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
               {/* Upload Error Message */}
               {uploadError && (
-                <div className="mb-2 px-2 py-1 text-xs text-red-600 bg-red-100 border border-red-300 rounded-md">
-                  {uploadError}
+                <div className="mb-2 px-3 py-2 text-xs text-red-700 bg-red-100 border border-red-300 rounded-md flex items-center justify-between">
+                  <span>{uploadError}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-red-700 hover:bg-red-200"
+                    onClick={() => setUploadError(null)}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
                 </div>
               )}
 
