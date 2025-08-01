@@ -69,6 +69,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null); // Ref for the scroll anchor
+  const prevScrollHeightRef = useRef(0);
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -278,16 +279,18 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const isNewMessageAdded = messages.length > prevMessagesLength.current;
-    const isActiveMessageUpdating = !!activeMessage;
+    const currentScrollHeight = container.scrollHeight;
+    const prevScrollHeight = prevScrollHeightRef.current;
 
-    if (!isFetchingHistory && (isNewMessageAdded || isActiveMessageUpdating)) {
-      if (isNearBottom()) {
+    // コンテンツの高さが変わった場合、またはactiveMessageが更新された場合
+    if (currentScrollHeight !== prevScrollHeight || activeMessage) {
+      // 履歴読み込み中でない、かつユーザーが最下部にいる場合のみ自動スクロール
+      if (!isFetchingHistory && isNearBottom()) {
         scrollBottom(true);
       }
     }
 
-    prevMessagesLength.current = messages.length;
+    prevScrollHeightRef.current = currentScrollHeight;
   }, [messages, activeMessage, isFetchingHistory, isNearBottom, scrollBottom]);
 
   // Initial history load and scroll to bottom
