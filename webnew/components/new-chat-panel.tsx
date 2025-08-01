@@ -173,6 +173,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     // Send message with text and file info
     if (input.trim() || uploadedFiles.length > 0) {
       sendMessage({ text: input, files: uploadedFiles });
+      scrollBottom(true); // Force scroll to bottom on send
     }
 
     // Reset inputs
@@ -264,13 +265,15 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     if (!container) return;
 
     if (force || isNearBottom()) {
-      container.scrollTop = container.scrollHeight;
+      // Use requestAnimationFrame to ensure scrolling happens after the DOM has been updated.
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
     }
   }, [isNearBottom]);
 
-  // Scroll to bottom when messages or activeMessage change
+  // Scroll to bottom for new messages, but not for history loads
   useEffect(() => {
-    // Don't auto-scroll if the user has scrolled up to view history
     if (isNearBottom()) {
       scrollBottom();
     }
