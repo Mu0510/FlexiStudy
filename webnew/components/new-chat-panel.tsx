@@ -253,30 +253,33 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
-            placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力... (Alt+Enterで送信)"}
-            className="w-full resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-hidden"
+            placeholder="システムと対話... (Alt+Enterで送信)"
+            className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 overflow-hidden placeholder:text-gray-400"
             rows={1}
             disabled={isGeneratingResponse}
           />
           <div className="flex items-center justify-between mt-2">
-            <div className="flex items-center gap-2 text-gray-500">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Plus className="w-5 h-5" strokeWidth={2} />
+            <div className="flex items-center gap-1 text-gray-500">
+              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full">
+                <Plus className="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <SlidersHorizontal className="w-5 h-5" strokeWidth={2} />
+              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full">
+                <SlidersHorizontal className="w-4 h-4" />
               </Button>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <Mic className="w-5 h-5" strokeWidth={2} />
+              <span className="text-sm ml-1">ツール</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full">
+                <Mic className="w-5 h-5" />
+              </Button>
+              <Button
+                onClick={handleSendMessage}
+                disabled={isGeneratingResponse || !input.trim()}
+                className="w-8 h-8 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
+              >
+                <ArrowUp className="w-4 h-4" />
               </Button>
             </div>
-            <Button
-              onClick={handleSendMessage}
-              disabled={isGeneratingResponse || !input.trim()}
-              className="bg-black hover:bg-gray-800 text-white rounded-full p-2"
-            >
-              <ArrowUp className="w-4 h-4" strokeWidth={2} />
-            </Button>
           </div>
         </div>
       </div>
