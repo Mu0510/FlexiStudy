@@ -197,11 +197,26 @@ function startGemini(wss) {
     oldProcess.on('close', function(code, signal) {
       if (this.pid === oldPid) {
         console.log(`Old Gemini process (PID: ${oldPid}) exited. Starting new one.`);
-        _startNewGeminiProcess(wss);
-        isRestartingGemini = false; // 再起動完了
+        // _startNewGeminiProcess(wss); // 直接呼び出しを削除
+        setTimeout(() => { // 1秒のディレイを追加
+          _startNewGeminiProcess(wss);
+          isRestartingGemini = false; // 再起動完了
+        }, 1000);
       }
     });
-    oldProcess.kill('SIGKILL'); // SIGKILL を1回だけ実行
+    oldProcess.kill(); // SIGTERM を送る
+    setTimeout(() => { // 3秒後にSIGKILLを試みる
+      try {
+        process.kill(oldPid, 0); // まだ生きてたら
+        console.warn('Forcing SIGKILL...');
+        oldProcess.kill('SIGKILL');
+      } catch (e) {
+        // プロセスが既に終了している場合はエラーになるので無視
+        if (e.code !== 'ESRCH') { // ESRCH はプロセスが存在しないエラー
+          console.error('Error during forced SIGKILL:', e);
+        }
+      }
+    }, 3000);
   } else {
     _startNewGeminiProcess(wss);
   }
