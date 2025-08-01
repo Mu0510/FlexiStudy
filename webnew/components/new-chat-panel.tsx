@@ -1,7 +1,7 @@
 // webnew/components/new-chat-panel.tsx
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
@@ -173,7 +173,6 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     // Send message with text and file info
     if (input.trim() || uploadedFiles.length > 0) {
       sendMessage({ text: input, files: uploadedFiles });
-      scrollBottom(true); // Force scroll to bottom on send
     }
 
     // Reset inputs
@@ -272,44 +271,29 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     }
   }, [isNearBottom]);
 
-  // Scroll to bottom for new messages, but not for history loads
-  useEffect(() => {
-    if (isNearBottom()) {
-      scrollBottom();
-    }
-  }, [messages, activeMessage, scrollBottom, isNearBottom]);
+  const prevMessagesLength = useRef(messages.length);
 
-  // 履歴読み込み時のスクロール位置維持
-  useEffect(() => {
+  useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    let prevScrollHeight = container.scrollHeight;
-    let prevScrollTop = container.scrollTop;
+    const wasNearBottom = isNearBottom();
+    const isNewMessage = messages.length > prevMessagesLength.current;
 
-    const observer = new MutationObserver(() => {
-      const newScrollHeight = container.scrollHeight;
-      if (newScrollHeight !== prevScrollHeight && prevScrollTop === 0) {
-         // This logic triggers when new history is loaded at the top
-        container.scrollTop = newScrollHeight - prevScrollHeight;
-      }
-      prevScrollHeight = newScrollHeight;
-      prevScrollTop = container.scrollTop;
-    });
+    if (isNewMessage && wasNearBottom) {
+      scrollBottom(true);
+    }
 
-    observer.observe(container, { childList: true, subtree: true });
-
-    return () => observer.disconnect();
-  }, [messages]);
+    prevMessagesLength.current = messages.length;
+  }, [messages, activeMessage, isNearBottom, scrollBottom]);
 
 
   // Initial history load and scroll to bottom
   useEffect(() => {
     if (isOpen) {
-      // requestHistory(true); // Request initial history when panel opens
       scrollBottom(true); // Force scroll to bottom on initial open
     }
-  }, [isOpen, requestHistory, scrollBottom]);
+  }, [isOpen, scrollBottom]);
 
   if (!isOpen) return null
 
