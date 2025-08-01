@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp } from "lucide-react"
 import { cn } from "@/lib/utils"
 // Import Message interface directly from useChat
@@ -50,7 +51,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const { messages, activeMessage, isGeneratingResponse, sendMessage, requestHistory } = useChat(); // Removed isOpen from useChat arguments
 
   const messagesContainerRef = useRef<HTMLDivElement>(null); // Reference to the scrollable messages container
-  const chatInputRef = useRef<HTMLInputElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
 
   // --- Scrolling Logic ---
   const isNearBottom = useCallback(() => {
@@ -113,7 +114,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyPress = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Alt+Enter for send, Enter for newline (as per chat.js)
     if (e.key === "Enter" && e.altKey) {
       e.preventDefault();
@@ -241,42 +242,37 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div className="flex-shrink-0 p-4 border-t">
-        <div className="flex items-center rounded-full border border-gray-200 bg-white px-4 py-2 w-full">
-          {/* 左側ツール */}
-          <div className="flex items-center gap-1 text-gray-500 mr-4">
-            <Plus className="w-5 h-5" strokeWidth={2} />
-            <SlidersHorizontal className="w-5 h-5" strokeWidth={2} />
-            <span className="text-sm">ツール</span>
-          </div>
-
-          {/* 入力 */}
-          <input
+        <div className="relative">
+          <Textarea
             ref={chatInputRef}
-            type="text"
-            placeholder="システムと対話"
-            className="flex-1 bg-transparent outline-none text-gray-800 placeholder-gray-400"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyPress={handleKeyPress}
+            placeholder={isGeneratingResponse ? "応答を生成中..." : "メッセージを入力..."}
+            className="w-full resize-none pr-16"
+            rows={1}
             disabled={isGeneratingResponse}
           />
-
-          {/* 右側マイク */}
-          <button
-            type="button"
-            className="text-gray-500 hover:text-gray-700 mr-3"
-          >
-            <Mic className="w-5 h-5" strokeWidth={2} />
-          </button>
-
-          {/* 送信ボタン */}
           <Button
             onClick={handleSendMessage}
             disabled={isGeneratingResponse || !input.trim()}
-            className="bg-black hover:bg-gray-800 text-white rounded-full p-2"
+            className="absolute right-2 bottom-2 bg-black hover:bg-gray-800 text-white rounded-full p-2"
           >
             <ArrowUp className="w-4 h-4" strokeWidth={2} />
           </Button>
+        </div>
+        <div className="flex items-center justify-between mt-2">
+            <div className="flex items-center gap-1 text-gray-500">
+                <Plus className="w-5 h-5" strokeWidth={2} />
+                <SlidersHorizontal className="w-5 h-5" strokeWidth={2} />
+                <span className="text-sm">ツール</span>
+            </div>
+            <button
+                type="button"
+                className="text-gray-500 hover:text-gray-700"
+            >
+                <Mic className="w-5 h-5" strokeWidth={2} />
+            </button>
         </div>
       </div>
     </div>
