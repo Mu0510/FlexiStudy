@@ -24,6 +24,7 @@ html {
   --font-mono: ${GeistMono.variable};
 }
         `}</style>
+        <link rel="manifest" href="/manifest.json" />
       </head>
       <body>
         <ViewportController />

@@ -104,7 +104,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   useEffect(() => {
     if (ws.current) return;
 
-    ws.current = new WebSocket(`ws://${window.location.hostname}:3001/ws`);
+    ws.current = new WebSocket(`wss://${window.location.hostname}:443/ws`);
 
     ws.current.onopen = () => {
       console.log('WebSocket connected');
@@ -555,6 +555,27 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     setIsGeneratingResponse(false); // UIを即座にリセット
   }, []);
 
+  const clearMessages = useCallback(() => {
+    setMessages([]);
+    setActiveMessage(null);
+    historyState.current = {
+      oldestTs: null,
+      loadedIds: new Set<string>(),
+      pendingHistory: new Set<number>(),
+      finished: false,
+      isFetchingHistory: false,
+      histReqId: 10000,
+    };
+    // サーバーにもクリアを通知するWebSocketメッセージを送信
+    if (ws.current) {
+      ws.current.send(JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'clearHistory',
+        params: {}
+      }));
+    }
+  }, []);
+
   return {
     messages,
     activeMessage,
@@ -562,8 +583,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     isFetchingHistory: historyState.current.isFetchingHistory,
     historyFinished: historyState.current.finished,
     sendMessage,
-    cancelSendMessage, // エクスポートに追加
+    cancelSendMessage,
     requestHistory,
     sendToolConfirmation,
+    clearMessages, // clearMessages をエクスポートに追加
   };
 };

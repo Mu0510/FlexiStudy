@@ -62,7 +62,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished } = useChat({
+  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
     onMessageReceived: () => {
       const container = messagesContainerRef.current;
       if (container) {
@@ -101,6 +101,17 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
   const handleSendMessage = async () => {
     if (!input.trim() && selectedFiles.length === 0) return;
+
+    // /clear コマンドの処理
+    if (input.trim() === '/clear') {
+      clearMessages();
+      setInput("");
+      setSelectedFiles([]);
+      if (chatInputRef.current) {
+        chatInputRef.current.focus();
+      }
+      return;
+    }
 
     let uploadedFiles: { name: string, path: string, size: number }[] = [];
 

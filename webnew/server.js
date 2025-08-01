@@ -25,6 +25,7 @@ const GEMINI_ARGS = [
 let geminiProcess = null;
 const history = [];
 let ongoingText = '';
+let isRestartingGemini = false; // 新しいフラグ
 
 function broadcast(wss, json){
   const str = JSON.stringify(json);
@@ -181,17 +182,26 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
 }
 
 function startGemini(wss) {
+  if (isRestartingGemini) {
+    console.log('Gemini process is already restarting. Skipping new request.');
+    return;
+  }
+
   if (geminiProcess) {
     console.log('Killing existing Gemini process for restart...');
+    isRestartingGemini = true; // 再起動中フラグを立てる
     const oldPid = geminiProcess.pid;
-    geminiProcess.on('close', function(code, signal) {
+    const oldProcess = geminiProcess; // 参照を保持
+    geminiProcess = null; // 古い参照をクリア
+
+    oldProcess.on('close', function(code, signal) {
       if (this.pid === oldPid) {
         console.log(`Old Gemini process (PID: ${oldPid}) exited. Starting new one.`);
         _startNewGeminiProcess(wss);
+        isRestartingGemini = false; // 再起動完了
       }
     });
-    geminiProcess.kill();
-    geminiProcess = null;
+    oldProcess.kill();
   } else {
     _startNewGeminiProcess(wss);
   }
@@ -250,6 +260,15 @@ app.prepare().then(() => {
             console.error('Failed to parse incoming WebSocket message as JSON:', e);
             if (geminiProcess) geminiProcess.stdin.write(text + '\n');
             return;
+        }
+
+        // --- clearHistory メソッドの処理を追加 ---
+        if (msg.method === 'clearHistory') {
+            console.log('[Server] Received clearHistory command.');
+            history.length = 0;
+            broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'command' } });
+            startGemini(wss); // Geminiプロセスを再起動
+            return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
         }
 
         if (msg.method === 'fetchHistory') {
