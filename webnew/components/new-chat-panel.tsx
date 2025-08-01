@@ -253,42 +253,42 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
   }, [isFetchingHistory, historyFinished, requestHistory]);
 
 
-  const isNearBottom = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return false;
-    const { scrollHeight, scrollTop, clientHeight } = container;
-    const nearBottom = scrollHeight - scrollTop <= clientHeight + 5;
-    console.log(`isNearBottom: ${nearBottom} (scrollHeight: ${scrollHeight}, scrollTop: ${scrollTop}, clientHeight: ${clientHeight})`);
-    return nearBottom;
-  }, []);
-
   const scrollBottom = useCallback((force = false) => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    if (force || isNearBottom()) {
-      // Use requestAnimationFrame to ensure scrolling happens after the DOM has been updated.
+    // isNearBottomのロジックをuseLayoutEffectから切り離し、必要に応じてここで再評価
+    const { scrollHeight, scrollTop, clientHeight } = container;
+    const nearBottom = scrollHeight - scrollTop <= clientHeight + 5;
+
+    if (force || nearBottom) { // force または現在最下部に近い場合のみスクロール
       requestAnimationFrame(() => {
         container.scrollTop = container.scrollHeight;
       });
     }
-  }, [isNearBottom]);
+  }, []); // isNearBottomへの依存を削除
 
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
 
     // DOM更新前のスクロール状態を記憶
-    shouldScrollToBottomRef.current = isNearBottom();
+    // ここで直接 isNearBottom のロジックを記述し、DOM更新前の値をキャプチャ
+    const prevScrollHeight = container.scrollHeight;
+    const prevScrollTop = container.scrollTop;
+    const prevClientHeight = container.clientHeight;
+    const wasNearBottom = (prevScrollHeight - prevScrollTop) <= (prevClientHeight + 5);
+
+    shouldScrollToBottomRef.current = wasNearBottom;
 
     // メッセージが追加された、またはactiveMessageが更新された場合
     // ただし、履歴読み込みによるメッセージ追加の場合はスクロールしない
-    if (!isFetchingHistory && (messages.length > 0 || activeMessage)) { // messages.length > 0 は初回ロード時を考慮
+    if (!isFetchingHistory && (messages.length > 0 || activeMessage)) {
       if (shouldScrollToBottomRef.current) {
-        scrollBottom(true);
+        scrollBottom(true); // 強制的にスクロール
       }
     }
-  }, [messages, activeMessage, isFetchingHistory, isNearBottom, scrollBottom]);
+  }, [messages, activeMessage, isFetchingHistory, scrollBottom]); // isNearBottomへの依存を削除
 
   // Initial history load and scroll to bottom
   useEffect(() => {
