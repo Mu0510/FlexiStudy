@@ -163,7 +163,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       </div>
 
       <div ref={messagesContainerRef} className="flex-1 overflow-y-auto"> {/* Added ref here */}
-        <div className="p-4 space-y-8 max-w-prose mx-auto pb-24">
+        <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
         {messages.map((msg) => {
           // Render tool messages
           if (msg.type === "tool") {
@@ -271,7 +271,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-0 text-gray-500">
                     <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
-                        <Plus className="w-4 h-4" />
+                        <Plus className="w-5 h-5" />
                     </Button>
                     <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2">
                         <SlidersHorizontal className="w-4 h-4" />
@@ -279,13 +279,13 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                     </Button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100">
+                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500">
                     <Mic className="w-5 h-5" />
                   </Button>
                   <Button
                     onClick={handleSendMessage}
                     disabled={isGeneratingResponse || !input.trim()}
-                    className="w-7 h-7 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
+                    className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
                   >
                     <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
                   </Button>
