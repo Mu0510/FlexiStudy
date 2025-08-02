@@ -4,6 +4,7 @@ import { GeistMono } from 'geist/font/mono'
 import './globals.css'
 import { ViewportController } from '@/components/viewport-controller'
 import { ThemeProvider } from "@/components/theme-provider"
+import { WebSocketProvider } from '@/context/WebSocketContext';
 
 export const metadata: Metadata = {
   title: 'FlexiStudy',
