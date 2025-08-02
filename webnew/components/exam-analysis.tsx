@@ -214,7 +214,7 @@ export function ExamAnalysis() {
       </div>
 
       {/* Exam History */}
-      <Card className="border-0 shadow-lg">
+      <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
         <CardHeader>
           <CardTitle className="flex items-center space-x-2">
             <TrendingUp className="w-5 h-5 text-green-600" />
