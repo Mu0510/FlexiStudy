@@ -26,7 +26,7 @@ export function ToolCard({ toolCard, onConfirm }: ToolCardProps) {
   const Icon = statusIcons[status];
 
   return (
-    <Card className="w-full">
+    <Card className="w-full bg-white dark:bg-slate-800">
       <CardHeader className="flex flex-row items-center justify-between p-4">
         <div className="flex items-center space-x-2">
           {Icon}
@@ -39,18 +39,18 @@ export function ToolCard({ toolCard, onConfirm }: ToolCardProps) {
       {isExpanded && (
         <CardContent className="p-4">
           {command && (
-            <div className="flex items-center space-x-2 p-2 bg-muted rounded-md">
-              <Code size={16} />
-              <pre className="text-sm"><code>{command}</code></pre>
+            <div className="flex items-center space-x-2 p-2 bg-gray-100 dark:bg-slate-700 rounded-md">
+              <Code size={16} className="text-gray-600 dark:text-gray-400" />
+              <pre className="text-sm text-gray-800 dark:text-gray-200"><code>{command}</code></pre>
             </div>
           )}
-          <div className="mt-2 p-2 bg-background/50 text-foreground rounded-md">
+          <div className="mt-2 p-2 bg-gray-50 dark:bg-slate-700/50 text-gray-800 dark:text-gray-200 rounded-md">
             <pre className="text-sm whitespace-pre-wrap"><code>{content}</code></pre>
           </div>
           {!isConfirmed && (
             <div className="mt-4 flex justify-end space-x-2">
               <Button variant="outline" size="sm">Cancel</Button>
-              <Button size="sm" onClick={() => onConfirm(callId)}>Confirm</Button>
+              <Button size="sm" onClick={() => onConfirm(callId)} className="bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-700 dark:hover:bg-blue-800">Confirm</Button>
             </div>
           )}
         </CardContent>
