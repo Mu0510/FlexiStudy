@@ -26,7 +26,30 @@
 *   `webnew/components/tool-card-item.tsx`
 *   `webnew/components/study-records.tsx` (修正済み)
 
-## 3. 今後のタスク
+## 3. 完了したタスク
+
+### a. 目標開始機能とチャット連携 (c5591ea, 57549fb)
+- **内容:**
+  - 「今日の目標」カードの「開始」ボタンをクリックすると、フローティングチャットパネルが開き、選択された目標の情報（タスク名、教科など）がチャット入力欄の上に表示されるようになりました。
+  - 表示された目標情報は、「×」ボタンでクリアできます。
+  - 目標が選択された状態でメッセージを送信すると、その目標情報がシステムメッセージとしてAIに送信され、学習開始のコンテキストが共有されます。
+- **影響範囲:**
+  - `webnew/components/daily-goals-card.tsx`
+  - `webnew/components/study-records.tsx`
+  - `webnew/app/page.tsx`
+  - `webnew/components/new-chat-panel.tsx`
+  - `webnew/hooks/useChat.ts`
+
+### b. アプリケーション時刻のJST（日本標準時）統一 (4cfeada)
+- **内容:**
+  - これまでUTCとJSTが混在していた学習ログのタイムスタンプを、JSTに統一しました。
+  - `manage_log.py`がデータベースにJSTで時刻を記録するように修正しました。
+  - これにより、ダッシュボードや学習記録に表示されるすべての時刻がJSTに基づいたものになります。
+- **影響範囲:**
+  - `manage_log.py`
+  - `webnew/server.js` (目標開始機能のバックエンド処理も同時に修正)
+
+## 4. 今後のタスク
 
 1.  **[最優先] 上記コンポーネントのスタイル破壊の確認と修正**
 2.  **[未着手] `analytics.tsx` のダークモード対応**
@@ -35,7 +58,7 @@
     *   メッセージ受信時の自動スクロールが不安定な状態。
     *   `webnew/components/new-chat-panel.tsx`の`useLayoutEffect`内のロジックを再検討する必要がある。
 
-## 4. 主要な知識
+## 5. 主要な知識
 
 *   プロジェクトは、`webnew/`にNext.js/ReactチャットUIを持つGemini CLIアプリケーションです。
 *   WebSocket (`webnew/server.js`) がクライアント-サーバー間の通信に使用されます。
@@ -45,7 +68,7 @@
 *   ファイル添付情報は`[System]`メッセージを介してAIに伝えられます。
 *   履歴読み込みは、初回30メッセージ、以降20メッセージずつロードされます。
 
-## 5. ファイルシステムの状態
+## 6. ファイルシステムの状態
 
 *   **MODIFIED: `webnew/components/study-records.tsx`**
     *   ダークモード対応時のスタイル破壊を修正済み (`0e0cb96`)。
