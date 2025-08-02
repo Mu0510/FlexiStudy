@@ -27,10 +27,10 @@ const history = [];
 let ongoingText = '';
 let isRestartingGemini = false; // 新しいフラグ
 
-function broadcast(wss, json){
+function broadcast(wss, json, excludeClient){
   const str = JSON.stringify(json);
   for (const ws of wss.clients) {
-    if (ws.readyState === 1) { // WebSocket.OPEN
+    if (ws !== excludeClient && ws.readyState === 1) { // WebSocket.OPEN
         ws.send(str);
     }
   }
@@ -307,8 +307,8 @@ app.prepare().then(() => {
             const rec = { id: String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
             history.push(rec);
             
-            // Broadcast the new user message to all clients
-            broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
+            // Broadcast the new user message to all clients except the sender
+            broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } }, ws);
 
             // Create the message for the AI
             let messageForAI = inputText;
