@@ -67,9 +67,20 @@ export default function StudyApp() {
           }
         } else {
           const rawData = await response.json();
+
+          // APIからのレスポンスをフロントエンドが期待する形式に変換する
+          const transformedData = {
+            ...rawData,
+            sessions: rawData.sessions.map((session: any) => ({
+              ...session,
+              logs: session.details.map((detail: any) => ({
+                ...detail,
+                type: detail.event_type, // event_typeをtypeにマッピング
+              })),
+            })),
+          };
           
-          // APIからのレスポンス構造が統一されたので、変換ロジックを簡素化
-          setLogData(rawData);
+          setLogData(transformedData);
         }
       } catch (e: any) {
         setError(e.message);
