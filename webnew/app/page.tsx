@@ -73,9 +73,12 @@ export default function StudyApp() {
             ...rawData,
             sessions: rawData.sessions.map((session: any) => ({
               ...session,
+              start_time: session.session_start_time, // マッピング追加
+              end_time: session.session_end_time,     // マッピング追加
+              total_duration: session.total_study_minutes, // マッピング追加
               logs: session.details.map((detail: any) => ({
                 ...detail,
-                type: detail.event_type, // event_typeをtypeにマッピング
+                type: detail.event_type,
               })),
             })),
           };
