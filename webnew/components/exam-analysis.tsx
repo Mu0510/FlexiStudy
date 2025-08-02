@@ -87,7 +87,7 @@ export function ExamAnalysis() {
       </div>
 
       {/* Latest Exam Overview */}
-      <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-cyan-50 dark:bg-slate-800">
+      <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-cyan-50 dark:bg-slate-800 dark:from-transparent dark:to-transparent">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
