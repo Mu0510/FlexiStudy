@@ -503,7 +503,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
                   {/* Upload Error Message */}
                   {uploadError && (
-                    <div className="mb-2 px-3 py-2 text-xs text-red-700 bg-red-100 border border-red-300 rounded-md flex items-center justify-between">
+                    <div className="mb-2 px-3 py-2 text-xs text-red-700 bg-red-100 border border-red-300 rounded-md flex items-center justify-between dark:bg-red-900/50 dark:text-red-400 dark:border-red-800">
                       <span>{uploadError}</span>
                       <Button
                         variant="ghost"
