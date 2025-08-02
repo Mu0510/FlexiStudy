@@ -15,6 +15,17 @@ import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import { motion, AnimatePresence } from "framer-motion";
 
+interface Goal {
+  id: string | number;
+  completed: boolean;
+  subject: string;
+  task: string;
+  details?: string;
+  tags?: string[];
+  total_problems?: number | null;
+  completed_problems?: number | null;
+}
+
 interface NewChatPanelProps {
   showAs?: 'floating' | 'embedded';
   // --- Floating mode props ---
@@ -23,9 +34,13 @@ interface NewChatPanelProps {
   isFullScreen?: boolean;
   setIsFullScreen?: (isFullScreen: boolean) => void;
   onMaximizeClick?: () => void; // New prop
+  // --- Goal related props ---
+  selectedGoal?: Goal | null;
+  onClearSelectedGoal?: () => void;
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
+
 
 function getRelativePath(absolutePath?: string) {
   if (!absolutePath) return '';
@@ -65,7 +80,9 @@ export function NewChatPanel({
   onClose, 
   isFullScreen, 
   setIsFullScreen,
-  onMaximizeClick
+  onMaximizeClick,
+  selectedGoal,
+  onClearSelectedGoal
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
 
@@ -504,6 +521,32 @@ export function NewChatPanel({
       <div className="flex-shrink-0 px-4 pt-2 pb-4 flex justify-center">
         <div className="w-full max-w-prose">
             <div className="relative w-[95%] mx-auto flex flex-col rounded-2xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-2 transition-colors shadow-lg -mt-10">
+              {/* Selected Goal Section */}
+              {selectedGoal && (
+                <div className="mb-2 p-2 border-b border-gray-200 dark:border-slate-700">
+                  <div className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm">
+                    <Play className="h-5 w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={selectedGoal.task}>
+                        {selectedGoal.task}
+                      </p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs">
+                        {selectedGoal.subject}
+                        {selectedGoal.tags && selectedGoal.tags.length > 0 && ` - ${selectedGoal.tags.join(', ')}`}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 rounded-full flex-shrink-0"
+                      onClick={onClearSelectedGoal}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* File Preview Section */}
               {selectedFiles.length > 0 && (
                 <div className="mb-2 p-2 border-b border-gray-200 dark:border-slate-700">

@@ -17,6 +17,18 @@ import { Settings } from "@/components/settings"
 import { NewChatPanel } from "@/components/new-chat-panel"
 import { MobileHeader } from "@/components/mobile-header"
 
+// Define Goal type, ideally this would be in a shared types file
+interface Goal {
+  id: string | number;
+  completed: boolean;
+  subject: string;
+  task: string;
+  details?: string;
+  tags?: string[];
+  total_problems?: number | null;
+  completed_problems?: number | null;
+}
+
 export default function StudyApp() {
   const [activeView, setActiveView] = useState("records")
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -35,6 +47,7 @@ export default function StudyApp() {
   const [uniqueSubjects, setUniqueSubjects] = useState<string[]>([]);
   const [subjectColors, setSubjectColors] = useState<Record<string, string>>({});
   const [dashboardData, setDashboardData] = useState(null);
+  const [selectedGoalForChat, setSelectedGoalForChat] = useState<Goal | null>(null);
 
   const chatStateBeforeSystemView = useRef(false);
 
@@ -188,6 +201,15 @@ export default function StudyApp() {
     }
   };
 
+  const handleStartGoal = (goal: Goal) => {
+    setSelectedGoalForChat(goal);
+    setIsNewChatOpen(true);
+  };
+
+  const handleClearSelectedGoal = () => {
+    setSelectedGoalForChat(null);
+  };
+
   const renderActiveView = () => {
     switch (activeView) {
       case "dashboard":
@@ -200,6 +222,7 @@ export default function StudyApp() {
                   isLoading={isLoading}
                   error={error}
                   subjectColors={subjectColors}
+                  onStartGoal={handleStartGoal}
                />;
       case "analytics":
         return <Analytics />;
@@ -275,10 +298,13 @@ export default function StudyApp() {
             onClose={() => {
               setIsNewChatOpen(false);
               setIsFullScreen(false);
+              setSelectedGoalForChat(null);
             }} 
             isFullScreen={isFullScreen}
             setIsFullScreen={setIsFullScreen}
             onMaximizeClick={handleMaximizeClick}
+            selectedGoal={selectedGoalForChat}
+            onClearSelectedGoal={handleClearSelectedGoal}
           />
         )}
       </div>

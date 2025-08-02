@@ -30,9 +30,10 @@ interface DailyGoalsCardProps {
   className?: string;
   isToday?: boolean;
   onMoveGoal?: (goal: Goal) => void;
+  onStartGoal?: (goal: Goal) => void;
 }
 
-export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal }: DailyGoalsCardProps) {
+export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal, onStartGoal }: DailyGoalsCardProps) {
   if (!goals || goals.length === 0) {
     return (
       <Card className={className}>
@@ -120,6 +121,7 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
                   size="sm"
                   variant="outline"
                   className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
+                  onClick={() => onStartGoal?.(goal)}
                 >
                   <Play className="w-4 h-4 mr-1" />
                   開始
