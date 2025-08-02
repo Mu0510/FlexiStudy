@@ -263,77 +263,72 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
         </div>
       </div>
 
-      {/* Date Navigation & Summary */}
+      {/* Date Navigation */}
       <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
+        <CardContent className="p-4 sm:p-6">
+          <div className="flex items-center justify-between">
             <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('prev', e)} disabled={isLoading} className="dark:text-slate-200">
               <ChevronLeft className="w-4 h-4 mr-1" />
               前日
             </Button>
-            <div className="text-center">
-              <Popover open={isDatePickerOpen} onOpenChange={setDatePickerOpen}>
-                <PopoverTrigger asChild>
-                   <Button variant="ghost" className="text-2xl font-bold text-slate-800 dark:text-slate-100" disabled={isLoading}>
-                    {formatDate(selectedDate)}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="center">
-                  <Calendar
-                    mode="single"
-                    selected={new Date(selectedDate)}
-                    onSelect={handleDateSelect}
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-            </div>
+            <Popover open={isDatePickerOpen} onOpenChange={setDatePickerOpen}>
+              <PopoverTrigger asChild>
+                  <Button variant="ghost" className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100" disabled={isLoading}>
+                  {formatDate(selectedDate)}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="center">
+                <Calendar
+                  mode="single"
+                  selected={new Date(selectedDate)}
+                  onSelect={handleDateSelect}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
             <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('next', e)} disabled={isLoading} className="dark:text-slate-200">
               翌日
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
           </div>
-
-          {isLoading ? (
-            <div className="space-y-4 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Skeleton className="h-4 w-3/4 rounded" />
-              <div className="flex justify-between">
-                <Skeleton className="h-4 w-1/2 rounded" />
-                <Skeleton className="h-4 w-1/4 rounded" />
-              </div>
-            </div>
-          ) : logData && logData.daily_summary ? (
-            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <div className="grid md:grid-cols-[2fr_1fr] gap-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">この日のまとめ</h3>
-                  <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
-                </div>
-                <div className="space-y-4">
-                  <div>
-                    <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-2">学習した教科</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {logData.daily_summary.subjects.length > 0 ? (
-                        logData.daily_summary.subjects.map((subject, index) => (
-                          <Badge key={index} variant="secondary" className="dark:bg-slate-700 dark:text-slate-300">{subject}</Badge>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-500 dark:text-slate-400">記録がありません</p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                    <div className="flex items-center justify-between text-lg">
-                        <span className="font-semibold text-slate-800 dark:text-slate-100">総学習時間</span>
-                        <span className="font-bold text-blue-600 dark:text-blue-400">{formatDuration(logData.daily_summary.total_duration)}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : null}
         </CardContent>
       </Card>
+
+      {/* Daily Summary Card */}
+      {logData && logData.daily_summary && (
+        <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
+          <CardContent className="p-6">
+            <div className="grid md:grid-cols-[2fr_1fr] gap-6">
+              {/* Daily Summary Text */}
+              <div>
+                <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">この日のまとめ</h3>
+                <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
+              </div>
+              {/* Subjects and Total Time */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-2">学習した教科</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {logData.daily_summary.subjects.length > 0 ? (
+                      logData.daily_summary.subjects.map((subject, index) => (
+                        <Badge key={index} variant="secondary" className="dark:bg-slate-700 dark:text-slate-300">{subject}</Badge>
+                      ))
+                    ) : (
+                      <p className="text-sm text-slate-500 dark:text-slate-400">記録がありません</p>
+                    )}
+                  </div>
+                </div>
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
+                   <div className="flex items-center justify-between text-lg">
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">総学習時間</span>
+                      <span className="font-bold text-blue-600 dark:text-blue-400">{formatDuration(logData.daily_summary.total_duration)}</span>
+                   </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Content Area */}
       {renderContent()}
