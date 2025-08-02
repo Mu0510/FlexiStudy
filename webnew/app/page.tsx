@@ -4,6 +4,8 @@ import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Dashboard } from "@/components/dashboard"
 import dynamic from "next/dynamic"
+import { Button } from "@/components/ui/button"
+import { MessageSquare } from "lucide-react"
 
 const StudyRecords = dynamic(() => import("@/components/study-records").then(mod => mod.StudyRecords), {
   ssr: false,
@@ -114,7 +116,7 @@ export default function StudyApp() {
       <div className={isFullScreen ? 'hidden' : ''}>
         <MobileHeader
           onMenuClick={() => setIsMobileMenuOpen(true)}
-          
+          onChatClick={() => setIsNewChatOpen(true)}
         />
       </div>
 
@@ -127,8 +129,6 @@ export default function StudyApp() {
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             isMobileMenuOpen={isMobileMenuOpen}
             setIsMobileMenuOpen={setIsMobileMenuOpen}
-            
-            onNewChatClick={() => setIsNewChatOpen(true)}
           />
         </div>
 
@@ -140,6 +140,17 @@ export default function StudyApp() {
           <div className="max-w-7xl mx-auto">{renderActiveView()}</div>
         </main>
 
+        {/* Floating Chat Button for Desktop */}
+        {!isNewChatOpen && (
+          <div className="hidden lg:block fixed bottom-8 right-8 z-50">
+            <Button
+              onClick={() => setIsNewChatOpen(true)}
+              className="rounded-full w-16 h-16 bg-gradient-to-r from-primary-800 to-primary-700 text-white shadow-lg hover:scale-110 transition-transform"
+            >
+              <MessageSquare className="w-8 h-8" />
+            </Button>
+          </div>
+        )}
         
         <NewChatPanel 
           isOpen={isNewChatOpen} 
