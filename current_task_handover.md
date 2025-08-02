@@ -49,6 +49,14 @@
   - `manage_log.py`
   - `webnew/server.js` (目標開始機能のバックエンド処理も同時に修正)
 
+### c. フロントエンドの日付処理のタイムゾーン修正 (054e7b9)
+- **内容:**
+  - 学習記録の初期表示日が、JSTの深夜帯においてUTC基準で前日になってしまう問題を修正しました。
+  - `page.tsx`および`study-records.tsx`において、`new Date()`で日付を扱う際に`toISOString()`を使わず、JSTの年月日を直接取得する方法に変更しました。
+- **影響範囲:**
+  - `webnew/app/page.tsx`
+  - `webnew/components/study-records.tsx`
+
 ## 4. 今後のタスク
 
 1.  **[最優先] 上記コンポーネントのスタイル破壊の確認と修正**
