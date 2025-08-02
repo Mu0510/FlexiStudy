@@ -8,10 +8,22 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
+import { DailyGoalsCard } from "@/components/daily-goals-card";
 import { Skeleton } from "@/components/ui/skeleton"
 import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle } from "lucide-react"
 
 // Define the types for our data to ensure type safety
+interface Goal {
+  id: string | number;
+  completed: boolean;
+  subject: string;
+  task: string;
+  details?: string;
+  tags?: string[];
+  total_problems?: number | null;
+  completed_problems?: number | null;
+}
+
 interface LogEntry {
   type: 'START' | 'BREAK' | 'RESUME';
   duration_minutes: number;
@@ -35,6 +47,7 @@ interface DailySummary {
   total_duration: number;
   subjects: string[];
   summary: string;
+  goals?: Goal[];
 }
 
 interface LogData {
@@ -323,7 +336,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 </div>
               </div>
               <div className="mt-4 pt-6 border-t border-slate-200 dark:border-slate-700">
-                <div className="grid md:grid-cols-[2fr_1fr] gap-6">
+                <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2 pl-1">この日のまとめ</h3>
                     <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap pl-1">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
@@ -343,6 +356,15 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                     </div>
                   </div>
                 </div>
+              </div>
+              <div className="mt-6">
+                <DailyGoalsCard 
+                  goals={logData.daily_summary.goals ?? []}
+                  stats={{
+                    completedGoals: logData.daily_summary.goals?.filter(g => g.completed).length ?? 0,
+                    totalGoals: logData.daily_summary.goals?.length ?? 0,
+                  }}
+                />
               </div>
             </>
           ) : null}
