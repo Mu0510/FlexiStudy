@@ -408,16 +408,16 @@ export function NewChatPanel({
                 msg.status === "error" && "tool-card--error border-l-4 border-red-500"
               )}>
                 <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 flex-shrink min-w-0">
                     <span className="tool-card__icon-text text-xs border border-gray-500 dark:border-gray-400 rounded px-1 py-0.5">
                       {getToolIconText(msg.icon)}
                     </span>
-                    <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200">
+                    <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
                       {msg.label || "Tool Call"}
                     </CardTitle>
                   </div>
                   <div className="tool-card__line-break"></div>
-                  <code className="tool-card__command text-xs text-gray-600 dark:text-gray-400">
+                  <code className="tool-card__command text-xs text-gray-600 dark:text-gray-400 truncate flex-shrink min-w-0">
                     {getRelativePath(msg.command)}
                   </code>
                   <div className="tool-card__status-indicator">
