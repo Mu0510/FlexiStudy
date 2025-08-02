@@ -262,6 +262,33 @@ export function NewChatPanel({
     }
   }, [selectedFiles]);
 
+  const handlePaste = useCallback((event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = event.clipboardData.items;
+    const imageFiles: File[] = [];
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].kind === 'file' && items[i].type.startsWith('image/')) {
+        const file = items[i].getAsFile();
+        if (file) {
+          imageFiles.push(file);
+        }
+      }
+    }
+
+    if (imageFiles.length > 0) {
+      event.preventDefault();
+      setUploadError(null);
+      const totalSize = selectedFiles.reduce((acc, file) => acc + file.size, 0) + imageFiles.reduce((acc, file) => acc + file.size, 0);
+      const oneGB = 1024 * 1024 * 1024;
+
+      if (totalSize > oneGB) {
+        setUploadError("合計ファイルサイズが1GBを超えています。");
+        return;
+      }
+      
+      setSelectedFiles(prevFiles => [...prevFiles, ...imageFiles]);
+    }
+  }, [selectedFiles]);
+
   const handleRemoveFile = useCallback((fileToRemove: File) => {
     setUploadError(null); // Clear errors when a file is removed
     setSelectedFiles(prevFiles => prevFiles.filter(file => file !== fileToRemove));
@@ -529,6 +556,7 @@ export function NewChatPanel({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
                 placeholder="システムと対話... (Alt+Enterで送信)"
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1"
                 rows={1}

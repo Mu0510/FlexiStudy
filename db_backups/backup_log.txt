@@ -91,3 +91,4 @@ study_log_20250802_115245_165083.db: Before break session.
 study_log_20250802_115245_173013.db: Before session summary update.
 study_log_20250802_115425_213951.db: Before session summary update.
 study_log_20250802_123823_813302.db: Before resume session.
+study_log_20250802_140034_090866.db: Before ending session.
