@@ -40,7 +40,7 @@ export function Settings() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border-0 shadow-lg dark:bg-slate-800 dark:border-slate-700">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
                 <User className="w-5 h-5 text-blue-600" />
@@ -77,7 +77,7 @@ export function Settings() {
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg dark:bg-slate-800 dark:border-slate-700">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
                 <Bell className="w-5 h-5 text-green-600" />
@@ -117,7 +117,7 @@ export function Settings() {
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg dark:bg-slate-800 dark:border-slate-700">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
                 <Palette className="w-5 h-5 text-purple-600" />
@@ -160,7 +160,7 @@ export function Settings() {
 
         {/* Right Column */}
         <div className="space-y-6">
-          <Card className="border-0 shadow-lg dark:bg-slate-800 dark:border-slate-700">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
                 <Shield className="w-5 h-5 text-orange-600" />
@@ -194,7 +194,7 @@ export function Settings() {
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg dark:bg-slate-800 dark:border-slate-700">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
                 <SettingsIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
@@ -223,7 +223,7 @@ export function Settings() {
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg dark:bg-slate-800 dark:border-slate-700">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="text-base text-slate-800 dark:text-slate-200">アプリ情報</CardTitle>
             </CardHeader>

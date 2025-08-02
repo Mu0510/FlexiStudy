@@ -87,7 +87,7 @@ export function ExamAnalysis() {
       </div>
 
       {/* Latest Exam Overview */}
-      <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-cyan-50">
+      <Card className="border-0 shadow-lg bg-gradient-to-r from-blue-50 to-cyan-50 dark:bg-slate-800">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -130,7 +130,7 @@ export function ExamAnalysis() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Subject Breakdown */}
         <div className="lg:col-span-2">
-          <Card className="border-0 shadow-lg">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <BarChart3 className="w-5 h-5 text-blue-600" />
@@ -139,7 +139,7 @@ export function ExamAnalysis() {
             </CardHeader>
             <CardContent className="space-y-4">
               {examResults[0].subjects.map((subject, index) => (
-                <div key={index} className="p-4 bg-slate-50 rounded-lg">
+                <div key={index} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-3">
                       <h4 className="font-semibold text-slate-800">{subject.name}</h4>
@@ -174,7 +174,7 @@ export function ExamAnalysis() {
 
         {/* Weak Areas */}
         <div>
-          <Card className="border-0 shadow-lg">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <AlertCircle className="w-5 h-5 text-orange-600" />
@@ -183,7 +183,7 @@ export function ExamAnalysis() {
             </CardHeader>
             <CardContent className="space-y-3">
               {weakAreas.map((area, index) => (
-                <div key={index} className="p-3 bg-slate-50 rounded-lg">
+                <div key={index} className="p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <Badge
                       variant="outline"
