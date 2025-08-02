@@ -163,9 +163,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         if (activeMessage) {
           setMessages(prev => [...prev, {
             id: activeMessage.id,
+            ts: Date.now(), // タイムスタンプを追加
             role: 'assistant',
             content: activeMessage.content,
-          }]);
+          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
           setActiveMessage(null);
         }
         setIsGeneratingResponse(false);
@@ -192,9 +193,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       } else if (msg.method === 'pushMessage') {
         setMessages(prev => [...prev, {
           id: `msg-${Date.now()}`,
+          ts: Date.now(), // タイムスタンプを追加
           role: 'assistant',
           content: msg.params.content,
-        }]);
+        }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
         setActiveMessage(null);
         setIsGeneratingResponse(false);
         onMessageReceived?.();
@@ -207,14 +209,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
           setMessages(prev => [...prev, {
             id: activeMessageRef.current.id,
+            ts: Date.now(), // タイムスタンプを追加
             role: 'assistant',
             content: activeMessageRef.current.content,
-          }]);
+          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
           setActiveMessage(null); // activeMessage をクリア
         }
 
         setMessages(prev => [...prev, {
           id: toolId,
+          ts: Date.now(), // タイムスタンプを追加
           role: 'tool',
           type: 'tool',
           toolCallId: toolId,
@@ -226,7 +230,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId,
           toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage,
           toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
-        }]);
+        }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
 
         if (ws) { // ws.current から ws に変更
           sendWsMessage({
@@ -257,14 +261,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
           setMessages(prev => [...prev, {
             id: activeMessageRef.current.id,
+            ts: Date.now(), // タイムスタンプを追加
             role: 'assistant',
             content: activeMessageRef.current.content,
-          }]);
+          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
           setActiveMessage(null); // activeMessage をクリア
         }
 
         setMessages(prev => [...prev, {
           id: toolId,
+          ts: Date.now(), // タイムスタンプを追加
           role: 'tool',
           type: 'tool',
           toolCallId: toolId,
@@ -276,7 +282,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           toolCallConfirmationId: confirmation?.toolCallConfirmationId,
           toolCallConfirmationMessage: confirmation?.toolCallConfirmationMessage,
           toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
-        }]);
+        }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
         onMessageReceived?.();
       } else if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
@@ -452,9 +458,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                 }
                 return [...prevMessages, {
                   id: prevActiveMessage.id,
+                  ts: Date.now(), // タイムスタンプを追加
                   role: 'assistant',
                   content: prevActiveMessage.content,
-                }];
+                }].sort((a, b) => (a.ts || 0) - (b.ts || 0)); // ソート処理を追加
               });
             }
             // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
