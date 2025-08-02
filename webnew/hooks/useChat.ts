@@ -122,10 +122,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         onMessageReceived?.();
       } else if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
+        const incomingMessageId = msg.params.messageId; // ★ サーバーからの共通IDを取得
 
         setActiveMessage(prevActiveMessage => {
-            // ★ 修正点: chunk.messageId を最優先でIDとして使用する
-            const currentId = msg.params.messageId ?? prevActiveMessage?.id ?? `assistant-${Date.now()}`;
+            // ★ 修正点: サーバーからのIDを最優先で使用する
+            const currentId = prevActiveMessage?.id || incomingMessageId || msg.id || `assistant-${Date.now()}`;
             const currentTs = prevActiveMessage?.ts || Date.now(); // 既存のtsを使うか、なければ新規作成
             let newContent = prevActiveMessage?.content || '';
             let newType = prevActiveMessage?.type || 'thought';
