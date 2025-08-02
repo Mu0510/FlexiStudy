@@ -147,7 +147,7 @@ export default function StudyApp() {
               onClick={() => setIsNewChatOpen(true)}
               className="rounded-full w-14 h-14 bg-gradient-to-r from-accent-500 to-accent-600 text-white shadow-lg hover:scale-110 transition-transform"
             >
-              <MessageSquare className="w-7 h-7" />
+              <MessageSquare className="w-10 h-10" />
             </Button>
           </div>
         )}
