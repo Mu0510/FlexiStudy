@@ -615,3 +615,4 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     sendToolConfirmation,
     clearMessages, // clearMessages をエクスポートに追加
   };
+}
