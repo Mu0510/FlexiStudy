@@ -594,8 +594,13 @@ def get_chat_messages(limit=5, before_id=None):
 def show_logs_json_for_date(date_str):
     """指定された日付のログと概要をJSONで出力する"""
     output_data = {
-        "daily_summary": None,
-        "daily_goal": None,
+        "daily_summary": {
+            "date": date_str,
+            "summary": None,
+            "goals": [],
+            "total_duration": 0,
+            "subjects": []
+        },
         "total_day_study_minutes": 0,
         "subjects_studied": [],
         "sessions": []
@@ -607,12 +612,13 @@ def show_logs_json_for_date(date_str):
         cursor.execute("SELECT summary, goal FROM daily_summaries WHERE date = ?", (date_str,))
         daily_row = cursor.fetchone()
         if daily_row:
-            output_data["daily_summary"] = daily_row["summary"]
+            output_data["daily_summary"]["summary"] = daily_row["summary"]
             if daily_row["goal"]:
                 try:
-                    output_data["daily_goal"] = json.loads(daily_row["goal"])
+                    output_data["daily_summary"]["goals"] = json.loads(daily_row["goal"])
                 except json.JSONDecodeError:
-                    output_data["daily_goal"] = daily_row["goal"] # JSONとしてパースできない場合はそのまま文字列として扱う
+                    # パースできない場合は空のリストのままにするか、エラーとして扱う
+                    output_data["daily_summary"]["goals"] = []
 
         cursor.execute("""
             SELECT id, event_type, subject, content, start_time, end_time, summary
@@ -928,6 +934,8 @@ def main():
         get_dashboard_data(weekly_period_days)
     elif command == 'recalculate_durations':
         recalculate_all_durations()
+    elif command == 'auto_daily_summary':
+        auto_update_daily_summary()
     else:
         print("エラー: 不明なコマンド '{}'".format(command))
         sys.exit(1)

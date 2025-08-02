@@ -68,28 +68,8 @@ export default function StudyApp() {
         } else {
           const rawData = await response.json();
           
-          const transformedData = {
-            daily_summary: {
-              date: date,
-              total_duration: rawData.total_day_study_minutes,
-              subjects: rawData.subjects_studied,
-              summary: rawData.daily_summary,
-            },
-            sessions: rawData.sessions.map((session: any) => ({
-              session_id: session.session_id,
-              subject: session.subject,
-              start_time: session.session_start_time,
-              end_time: session.session_end_time,
-              total_duration: session.total_study_minutes,
-              summary: session.summary,
-              logs: session.details.map((detail: any) => ({
-                ...detail,
-                type: detail.event_type,
-              })),
-            })),
-          };
-          
-          setLogData(transformedData);
+          // APIからのレスポンス構造が統一されたので、変換ロジックを簡素化
+          setLogData(rawData);
         }
       } catch (e: any) {
         setError(e.message);
