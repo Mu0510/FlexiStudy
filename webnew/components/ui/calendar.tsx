@@ -53,12 +53,12 @@ function Calendar({
         ),
         button_previous: cn(
           buttonVariants({ variant: buttonVariant }),
-          'size-[--cell-size] aria-disabled:opacity-50 p-0 select-none',
+          'size-[--cell-size] aria-disabled:opacity-50 p-0 select-none dark:text-slate-200',
           defaultClassNames.button_previous
         ),
         button_next: cn(
           buttonVariants({ variant: buttonVariant }),
-          'size-[--cell-size] aria-disabled:opacity-50 p-0 select-none',
+          'size-[--cell-size] aria-disabled:opacity-50 p-0 select-none dark:text-slate-200',
           defaultClassNames.button_next
         ),
         month_caption: cn(
