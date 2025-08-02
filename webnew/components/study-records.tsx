@@ -53,7 +53,7 @@ interface StudyRecordsProps {
 const RecordsSkeleton = () => (
   <div className="space-y-4">
     {[...Array(3)].map((_, i) => (
-      <Card key={i} className="bg-white border-0 shadow-lg rounded-lg overflow-hidden">
+      <Card key={i} className="bg-card border-0 shadow-lg rounded-lg overflow-hidden">
         <CardHeader className="p-4 flex flex-row items-center justify-between">
           <div className="flex items-center space-x-4 flex-1 min-w-0">
             <Skeleton className="h-8 w-16 rounded-full" />
@@ -147,9 +147,9 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
 
     if (!logData || !logData.daily_summary) {
       return (
-        <div className="text-center p-10 bg-white rounded-lg shadow-lg">
+        <div className="text-center p-10 bg-card rounded-lg shadow-lg">
           <h2 className="text-xl font-semibold">この日付の学習記録はありません</h2>
-          <p className="text-slate-500 mt-2">別の日付を選択するか、新しい学習を開始してください。</p>
+          <p className="text-muted-foreground mt-2">別の日付を選択するか、新しい学習を開始してください。</p>
         </div>
       );
     }
@@ -157,14 +157,14 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     return (
       <div className="space-y-4">
         {logData.sessions.map((session) => (
-          <Card key={session.session_id} className="bg-white border-0 shadow-lg rounded-lg overflow-hidden">
+          <Card key={session.session_id} className="bg-card border-0 shadow-lg rounded-lg overflow-hidden">
             <CardHeader 
-              className="p-4 cursor-pointer hover:bg-slate-50"
+              className="p-4 cursor-pointer hover:bg-muted"
               onClick={() => toggleSession(session.session_id)}
             >
               <div className="grid grid-cols-[3.5rem_1fr] gap-x-4">
                 <div className="row-span-2 flex items-center justify-center">
-                  <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 text-base h-fit truncate">
+                  <Badge variant="outline" className="border-primary/20 text-primary bg-primary/10 text-base h-fit truncate">
                     {session.subject}
                   </Badge>
                 </div>
@@ -172,26 +172,26 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 <div className="min-w-0">
                   <div className="flex items-center justify-between w-full">
                     <div className="w-24 text-left">
-                      <span className="text-sm text-slate-500">(ID: {session.session_id})</span>
+                      <span className="text-sm text-muted-foreground">(ID: {session.session_id})</span>
                     </div>
                     <div className="w-[8.8rem] text-center">
-                      <span className="text-lg font-semibold text-slate-800 whitespace-nowrap">
+                      <span className="text-lg font-semibold text-foreground whitespace-nowrap">
                         {session.start_time} - {session.end_time}
                       </span>
                     </div>
                     <div className="w-[13.2rem] text-right">
                       <div className="flex items-center justify-end space-x-2">
-                        <Badge className="bg-green-100 text-green-800 border-green-200 text-base">
+                        <Badge className="bg-green-100 text-green-800 border-green-200 text-base dark:bg-green-900/30 dark:text-green-300 dark:border-green-700/50">
                           {formatDuration(session.total_duration)}
                         </Badge>
-                        {openSessions[session.session_id] ? <ChevronUp className="w-5 h-5 text-slate-500" /> : <ChevronDown className="w-5 h-5 text-slate-500" />}
+                        {openSessions[session.session_id] ? <ChevronUp className="w-5 h-5 text-muted-foreground" /> : <ChevronDown className="w-5 h-5 text-muted-foreground" />}
                       </div>
                     </div>
                   </div>
 
                   <div className="mt-1">
-                    <p className="pl-6 text-slate-700 text-sm">
-                      <MessageSquare className="mr-2 -ml-6 inline-block h-4 w-4 align-middle text-slate-400" />
+                    <p className="pl-6 text-muted-foreground text-sm">
+                      <MessageSquare className="mr-2 -ml-6 inline-block h-4 w-4 align-middle text-muted-foreground" />
                       <span className="align-middle">
                         {session.summary && (session.summary.startsWith(`${session.subject}：`) ? session.summary.substring(session.subject.length + 1) : session.summary)}
                       </span>
@@ -203,20 +203,20 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
             {openSessions[session.session_id] && (
               <CardContent className="p-6 pt-0">
                 <div className="border-t pt-4 mt-4">
-                  <h4 className="font-semibold text-slate-800 mb-3">セッション詳細</h4>
+                  <h4 className="font-semibold text-foreground mb-3">セッション詳細</h4>
                   <div className="space-y-3">
                     {session.logs.map((detail, index) => (
-                      <div key={index} className="flex items-center space-x-4 p-3 bg-slate-50 rounded-lg">
+                      <div key={index} className="flex items-center space-x-4 p-3 bg-muted rounded-lg">
                         <div className="flex items-center space-x-3">
-                          {detail.type === "START" && <div className="p-2 bg-green-100 rounded-full"><Play className="w-4 h-4 text-green-600" /></div>}
-                          {detail.type === "BREAK" && <div className="p-2 bg-orange-100 rounded-full"><Pause className="w-4 h-4 text-orange-600" /></div>}
-                          {detail.type === "RESUME" && <div className="p-2 bg-blue-100 rounded-full"><Play className="w-4 h-4 text-blue-600" /></div>}
+                          {detail.type === "START" && <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full"><Play className="w-4 h-4 text-green-600 dark:text-green-400" /></div>}
+                          {detail.type === "BREAK" && <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-full"><Pause className="w-4 h-4 text-orange-600 dark:text-orange-400" /></div>}
+                          {detail.type === "RESUME" && <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full"><Play className="w-4 h-4 text-blue-600 dark:text-blue-400" /></div>}
                           <Badge
                             variant="outline"
                             className={
-                              detail.type === "START" ? "border-green-200 text-green-700"
-                              : detail.type === "BREAK" ? "border-orange-200 text-orange-700"
-                              : "border-blue-200 text-blue-700"
+                              detail.type === "START" ? "border-green-200 text-green-700 dark:border-green-700/50 dark:text-green-300"
+                              : detail.type === "BREAK" ? "border-orange-200 text-orange-700 dark:border-orange-700/50 dark:text-orange-300"
+                              : "border-blue-200 text-blue-700 dark:border-blue-700/50 dark:text-blue-300"
                             }
                           >
                             {detail.type}
@@ -224,8 +224,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-medium text-slate-800">{detail.content || "休憩"}</span>
-                            <div className="flex items-center space-x-4 text-sm text-slate-600">
+                            <span className="font-medium text-foreground">{detail.content || "休憩"}</span>
+                            <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                               <span className="whitespace-nowrap">{formatDuration(detail.duration_minutes)}</span>
                               <span className="whitespace-nowrap">{detail.start_time} - {detail.end_time}</span>
                             </div>
@@ -248,12 +248,12 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">学習記録</h1>
-          <p className="text-slate-600 mt-1">あなたの学習履歴を詳細に確認できます</p>
+          <h1 className="text-3xl font-bold text-foreground">学習記録</h1>
+          <p className="text-muted-foreground mt-1">あなたの学習履歴を詳細に確認できます</p>
         </div>
         <div className="flex items-center space-x-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
             <Input placeholder="学習内容を検索..." className="pl-10 w-64" />
           </div>
           <Button variant="outline" size="sm">
@@ -274,7 +274,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
             <div className="text-center">
               <Popover open={isDatePickerOpen} onOpenChange={setDatePickerOpen}>
                 <PopoverTrigger asChild>
-                   <Button variant="ghost" className="text-2xl font-bold text-slate-800" disabled={isLoading}>
+                   <Button variant="ghost" className="text-2xl font-bold text-foreground" disabled={isLoading}>
                     {formatDate(selectedDate)}
                   </Button>
                 </PopoverTrigger>
@@ -296,23 +296,23 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 ) : logData ? (
                   <>
                     <div className="flex items-center space-x-2">
-                      <Clock className="w-4 h-4 text-blue-600" />
-                      <span className="text-sm text-slate-600">{!isMobile && '総学習時間: '}{formatDuration(logData.daily_summary.total_duration)}</span>
+                      <Clock className="w-4 h-4 text-blue-500" />
+                      <span className="text-sm text-muted-foreground">{!isMobile && '総学習時間: '}{formatDuration(logData.daily_summary.total_duration)}</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <BookOpen className="w-4 h-4 text-green-600" />
-                      <span className="text-sm text-slate-600">{!isMobile && 'セッション数: '}{logData.sessions.length}</span>
+                      <BookOpen className="w-4 h-4 text-green-500" />
+                      <span className="text-sm text-muted-foreground">{!isMobile && 'セッション数: '}{logData.sessions.length}</span>
                     </div>
                   </>
                 ) : (
                   <>
                     <div className="flex items-center space-x-2">
-                      <Clock className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-500">{!isMobile && '総学習時間: '}--</span>
+                      <Clock className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">{!isMobile && '総学習時間: '}--</span>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <BookOpen className="w-4 h-4 text-slate-400" />
-                      <span className="text-sm text-slate-500">{!isMobile && 'セッション数: '}--</span>
+                      <BookOpen className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground">{!isMobile && 'セッション数: '}--</span>
                     </div>
                   </>
                 )}
