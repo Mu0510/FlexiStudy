@@ -325,7 +325,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
       {isOpen && (
         <motion.div
           className={cn(
-            "bg-white border border-slate-200 shadow-2xl rounded-2xl flex flex-col z-50",
+            "bg-card border shadow-2xl rounded-2xl flex flex-col z-50",
             isFullScreen 
               ? "fixed inset-0"
               : "fixed bottom-4 right-4 w-96 h-[600px]"
@@ -358,7 +358,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
             <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
             {isFetchingHistory && (
               <div className="flex justify-center items-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-foreground"></div>
               </div>
             )}
             {messages.map((msg) => {
@@ -369,7 +369,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 // データソースを msg オブジェクトに一本化
                 return (
                   <Card key={msg.id} className={cn(
-                    "tool-card bg-gray-100 text-gray-900 rounded-lg p-3 shadow-md", // 薄いグレーのパネルに変更
+                    "tool-card bg-muted text-muted-foreground rounded-lg p-3 shadow-md",
                     "w-11/12 mx-auto my-1 mb-3",
                     msg.status === "running" && "tool-card--running", // running クラスを追加
                     msg.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
@@ -377,16 +377,16 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                   )}>
                     <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
                       <div className="flex items-center space-x-2">
-                        <span className="tool-card__icon-text text-xs border border-gray-500 rounded px-1 py-0.5">
+                        <span className="tool-card__icon-text text-xs border border-muted-foreground rounded px-1 py-0.5">
                           {getToolIconText(msg.icon)}
                         </span>
-                        <CardTitle className="tool-card__title text-sm font-medium text-gray-800">
+                        <CardTitle className="tool-card__title text-sm font-medium text-foreground">
                           {msg.label || "Tool Call"}
                         </CardTitle>
                       </div>
                       {/* chat.js の tool-card__line-break と tool-card__command に相当 */}
                       <div className="tool-card__line-break"></div>
-                      <code className="tool-card__command text-xs text-gray-600">
+                      <code className="tool-card__command text-xs text-muted-foreground">
                         {getRelativePath(msg.command)}
                       </code>
                       <div className="tool-card__status-indicator">
@@ -400,10 +400,10 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                         )}
                       </div>
                     </CardHeader>
-                    <CardContent className="p-0 text-sm text-white">
+                    <CardContent className="p-0 text-sm">
                       {/* Removed toolCallConfirmation logic for now, focusing on content */}
-                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 p-2 rounded not-prose max-h-48 overflow-auto">
-                        <div className="text-white" dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
+                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-background/50 p-2 rounded not-prose max-h-48 overflow-auto">
+                        <div className="text-foreground" dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
                       </pre>
                     </CardContent>
                   </Card>
@@ -417,10 +417,10 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                       <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
                         <div className="w-full flex flex-col gap-2 items-end">
                           {msg.files.map((file, index) => (
-                            <div key={index} className="bg-gray-100 rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
-                              <FileIcon className="h-5 w-5 text-gray-500 flex-shrink-0" />
-                              <span className="font-medium text-gray-700 truncate">{file.name}</span>
-                              <span className="text-gray-500 text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
+                            <div key={index} className="bg-muted rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
+                              <FileIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                              <span className="font-medium text-foreground truncate">{file.name}</span>
+                              <span className="text-muted-foreground text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
                             </div>
                           ))}
                         </div>
@@ -432,7 +432,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                       <div
                           className={cn(
                             "prose prose-sm dark:prose-invert",
-                            msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
+                            msg.role === "user" ? "ml-auto bg-muted text-foreground rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
                           )}
                         >
                           <ReactMarkdown
@@ -473,19 +473,19 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
           <div className="flex-shrink-0 px-4 pt-2 pb-4 flex justify-center">
             <div className="w-full max-w-prose">
-                <div className="relative w-[95%] mx-auto flex flex-col rounded-2xl border border-gray-300 bg-white p-2 transition-colors shadow-lg -mt-10">
+                <div className="relative w-[95%] mx-auto flex flex-col rounded-2xl border bg-background p-2 transition-colors shadow-lg -mt-10">
                   {/* File Preview Section */}
                   {selectedFiles.length > 0 && (
-                    <div className="mb-2 p-2 border-b border-gray-200">
+                    <div className="mb-2 p-2 border-b">
                       <div className="flex space-x-2 overflow-x-auto">
                         {selectedFiles.map((file, index) => (
                           <div key={index} className={cn(
-                            "flex-shrink-0 bg-gray-100 rounded-lg p-2 flex items-center space-x-2 text-sm relative", // Added relative positioning
+                            "flex-shrink-0 bg-muted rounded-lg p-2 flex items-center space-x-2 text-sm relative", // Added relative positioning
                             isUploading && "opacity-50"
                           )}>
-                            <FileIcon className="h-5 w-5 text-gray-500" />
-                            <span className="font-medium text-gray-700 truncate max-w-[100px]">{file.name}</span>
-                            <span className="text-gray-500 text-xs">{formatFileSize(file.size)}</span>
+                            <FileIcon className="h-5 w-5 text-muted-foreground" />
+                            <span className="font-medium text-foreground truncate max-w-[100px]">{file.name}</span>
+                            <span className="text-muted-foreground text-xs">{formatFileSize(file.size)}</span>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -527,30 +527,30 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={handleKeyDown}
                     placeholder="システムと対話... (Alt+Enterで送信)"
-                    className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 placeholder:font-light px-2 py-1"
+                    className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-muted-foreground placeholder:font-light px-2 py-1"
                     rows={1}
                     disabled={isUploading}
                   />
                   <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-0 text-gray-500">
-                        <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100" onClick={triggerFileSelect} disabled={isUploading}>
+                    <div className="flex items-center gap-0 text-muted-foreground">
+                        <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-muted" onClick={triggerFileSelect} disabled={isUploading}>
                             <Plus className="w-5 h-5" />
                         </Button>
-                        <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 flex items-center gap-2" disabled={isUploading}>
+                        <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-muted flex items-center gap-2" disabled={isUploading}>
                             <SlidersHorizontal className="w-4 h-4" />
                             <span className="text-sm font-light">ツール</span>
                         </Button>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 text-gray-500" disabled={isGeneratingResponse || isUploading}>
+                      <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-muted text-muted-foreground" disabled={isGeneratingResponse || isUploading}>
                         <Mic className="w-5 h-5" />
                       </Button>
                       <Button
                         onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
                         disabled={!(isGeneratingResponse || isUploading) && !input.trim() && selectedFiles.length === 0}
-                        className="w-7 h-7 p-0 flex-shrink-0 bg-black hover:bg-gray-800 text-white rounded-full flex items-center justify-center"
+                        className="w-7 h-7 p-0 flex-shrink-0 bg-primary hover:bg-primary/90 text-primary-foreground rounded-full flex items-center justify-center"
                       >
-                        {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="white" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
+                        {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="currentColor" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
                       </Button>
                     </div>
                   </div>
