@@ -11,7 +11,7 @@ interface MobileHeaderProps {
 
 export function MobileHeader({ onMenuClick, onChatClick }: MobileHeaderProps) {
   return (
-    <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-neutral-100 border-b border-neutral-300 z-50">
+    <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-background border-b z-50">
       <div className="flex items-center justify-between h-full px-4">
         <div className="flex items-center space-x-3">
           <Button variant="ghost" size="sm" onClick={onMenuClick} className="p-2">
@@ -19,14 +19,14 @@ export function MobileHeader({ onMenuClick, onChatClick }: MobileHeaderProps) {
           </Button>
           <div className="flex items-center space-x-2">
             <Image src="/images/logo.svg" alt="FlexiStudy Logo" width={28} height={28} />
-            <h1 className="text-lg font-bold text-slate-800">
+            <h1 className="text-lg font-bold text-foreground">
               FlexiStudy
             </h1>
           </div>
         </div>
 
         <Button variant="ghost" size="sm" onClick={onChatClick} className="p-2">
-          <MessageSquare className="w-5 h-5 text-accent-600" />
+          <MessageSquare className="w-5 h-5 text-accent" />
         </Button>
       </div>
     </header>

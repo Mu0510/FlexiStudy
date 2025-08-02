@@ -49,10 +49,7 @@ function SidebarNavContent({ activeView, onViewChange, onLinkClick, collapsed = 
               variant={activeView === item.id ? "default" : "ghost"}
               className={cn(
                 "w-full justify-start h-12 transition-all duration-200",
-                collapsed ? "px-3 justify-center" : "px-4",
-                activeView === item.id
-                  ? "bg-gradient-to-r from-primary-800 to-primary-700 text-neutral-100 shadow-lg"
-                  : "hover:bg-neutral-200 text-neutral-800",
+                collapsed ? "px-3 justify-center" : "px-4"
               )}
               onClick={() => handleViewChange(item.id)}
               title={item.label} // Tooltip for collapsed view
@@ -80,17 +77,17 @@ export function Sidebar({
       {/* --- Desktop Sidebar --- */}
       <aside
         className={cn(
-          "fixed left-0 top-0 h-screen border-r border-neutral-300 transition-all duration-300 z-40 hidden lg:flex flex-col bg-neutral-100",
+          "fixed left-0 top-0 h-screen border-r transition-all duration-300 z-40 hidden lg:flex flex-col bg-background",
           collapsed ? "w-16" : "w-64",
         )}
       >
         {/* Desktop Header */}
-        <div className="p-4 border-b border-neutral-300 h-[65px]">
+        <div className="p-4 border-b h-[65px]">
             <div className="flex items-center justify-between h-full">
               {!collapsed && (
                 <div className="flex items-center space-x-3">
                   <Image src="/images/logo.svg" alt="FlexiStudy Logo" width={32} height={32} />
-                  <h1 className="text-xl font-bold text-slate-800">
+                  <h1 className="text-xl font-bold text-foreground">
                     FlexiStudy
                   </h1>
                 </div>
@@ -110,12 +107,12 @@ export function Sidebar({
       {/* --- Mobile Sidebar (Sheet) --- */}
       <div className="lg:hidden">
         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
-          <SheetContent side="left" className="w-64 bg-neutral-100 p-0 flex flex-col">
+          <SheetContent side="left" className="w-64 bg-background p-0 flex flex-col">
             {/* Mobile Header */}
-            <div className="p-4 border-b border-neutral-300">
+            <div className="p-4 border-b">
                 <div className="flex items-center space-x-3">
                     <Image src="/images/logo.svg" alt="FlexiStudy Logo" width={32} height={32} />
-                    <h1 className="text-xl font-bold text-slate-800">FlexiStudy</h1>
+                    <h1 className="text-xl font-bold text-foreground">FlexiStudy</h1>
                 </div>
             </div>
             <SidebarNavContent 
