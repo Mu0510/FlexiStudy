@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { getSubjectStyle } from "@/lib/utils";
@@ -25,6 +26,18 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [notifications, setNotifications] = useState(true)
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
+  const [weeklyPeriod, setWeeklyPeriod] = useState('this_week');
+
+  useEffect(() => {
+    const savedPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
+    setWeeklyPeriod(savedPeriod);
+  }, []);
+
+  const handleWeeklyPeriodChange = (value: string) => {
+    setWeeklyPeriod(value);
+    localStorage.setItem('weeklyPeriod', value);
+    toast.info(`集計期間を「${value === 'this_week' ? '今週' : '過去7日間'}」に変更しました。`);
+  };
   
   useEffect(() => {
     setMounted(true)
@@ -91,6 +104,30 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
               ) : (
                 <p className="text-sm text-slate-500 dark:text-slate-400">まだ学習記録がありません。学習を開始すると教科が表示されます。</p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
+                <SettingsIcon className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+                <span>表示設定</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-base font-medium text-slate-800 dark:text-slate-200">「今週の学習時間」の集計期間</Label>
+                <RadioGroup value={weeklyPeriod} onValueChange={handleWeeklyPeriodChange} className="mt-2 space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="this_week" id="this_week" />
+                    <Label htmlFor="this_week" className="font-normal">今週（月曜始まり）</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="7_days" id="7_days" />
+                    <Label htmlFor="7_days" className="font-normal">過去7日間</Label>
+                  </div>
+                </RadioGroup>
+              </div>
             </CardContent>
           </Card>
 

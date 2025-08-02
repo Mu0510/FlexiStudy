@@ -1,27 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
+import { exec } from "child_process";
+import path from "path";
 
-export async function GET() {
-  // 今後、ここでデータベースからデータを取得します
-  const dashboardData = {
-    studyStats: {
-      todayTime: 86,
-      weeklyTime: 420,
-      streak: 12,
-      completedGoals: 2,
-      totalGoals: 5,
-    },
-    todayGoals: [
-      { id: 1, subject: "物理", task: "落下運動 基本問題 38~42", completed: true, problems: 5 },
-      { id: 2, subject: "物理", task: "落下運動 発展問題 43~53", completed: true, problems: 11 },
-      { id: 3, subject: "物理", task: "力のつりあい 基本問題 61~69", completed: false, problems: 9 },
-      { id: 4, subject: "数学", task: "関数の極限 78~98", completed: false, problems: 21 },
-      { id: 5, subject: "数学", task: "三角関数と極限 99~103", completed: false, problems: 5 },
-    ],
-    recentSessions: [
-      { subject: "物理", duration: 63, time: "14:44-15:47", topic: "セミナー物理 落下運動 発展問題 43~51" },
-      { subject: "物理", duration: 23, time: "15:59-16:22", topic: "セミナー物理 落下運動 発展問題 43~51" },
-    ],
-  };
+export async function GET(request: NextRequest) {
+  const scriptPath = path.resolve(process.cwd(), "../manage_log.py");
+  const weeklyPeriod = request.nextUrl.searchParams.get("weekly_period");
 
-  return NextResponse.json(dashboardData);
+  let command = `python3 ${scriptPath} dashboard_json`;
+  if (weeklyPeriod) {
+    command += ` ${weeklyPeriod}`;
+  }
+
+  return new Promise((resolve) => {
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error(`exec error: ${error}`);
+        resolve(NextResponse.json({ error: "Failed to fetch dashboard data", details: stderr }, { status: 500 }));
+        return;
+      }
+      try {
+        const data = JSON.parse(stdout);
+        resolve(NextResponse.json(data));
+      } catch (e) {
+        console.error(`json parse error: ${e}`);
+        resolve(NextResponse.json({ error: "Failed to parse dashboard data", details: stdout }, { status: 500 }));
+      }
+    });
+  });
 }

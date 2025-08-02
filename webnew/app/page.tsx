@@ -103,8 +103,14 @@ export default function StudyApp() {
 
   useEffect(() => {
     const fetchDashboardData = async () => {
+      const weeklyPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
+      const weeklyPeriodDays = weeklyPeriod === '7_days' ? 7 : null;
+      
       try {
-        const response = await fetch('/api/dashboard');
+        const apiUrl = weeklyPeriodDays 
+          ? `/api/dashboard?weekly_period=${weeklyPeriodDays}`
+          : '/api/dashboard';
+        const response = await fetch(apiUrl);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -116,6 +122,19 @@ export default function StudyApp() {
     };
 
     fetchDashboardData();
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'weeklyPeriod') {
+        fetchDashboardData();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+
   }, []);
 
   useEffect(() => {

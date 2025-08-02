@@ -265,9 +265,19 @@ def consolidate_last_break_into_resume():
 
 def update_end_time(log_id, end_time):
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE study_logs SET end_time = ? WHERE id = ?",
-            (end_time, log_id)
+        cursor = conn.cursor()
+        cursor.execute("SELECT start_time FROM study_logs WHERE id = ?", (log_id,))
+        start_time_str = cursor.fetchone()[0]
+        
+        start_time = datetime.datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
+        end_time_dt = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
+        
+        duration = end_time_dt - start_time
+        duration_minutes = int(duration.total_seconds() / 60)
+        
+        cursor.execute(
+            "UPDATE study_logs SET end_time = ?, duration_minutes = ? WHERE id = ?",
+            (end_time, duration_minutes, log_id)
         )
 
 def update_log_entry(log_id, event_type=None, subject=None, content=None, start_time=None, end_time=None, duration_minutes=None, summary=None):
@@ -608,6 +618,121 @@ def get_all_unique_subjects():
         subjects = [row[0] for row in cursor.fetchall()]
         return subjects
 
+def get_dashboard_data(weekly_period_days=None):
+    """ダッシュボード用のデータを取得してJSONで出力する"""
+    today = datetime.date.today()
+    today_str = today.strftime('%Y-%m-%d')
+    
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # 今日の学習時間
+        cursor.execute(
+            "SELECT SUM(duration_minutes) FROM study_logs WHERE DATE(start_time) = ? AND event_type IN ('START', 'RESUME')",
+            (today_str,)
+        )
+        today_time = cursor.fetchone()[0] or 0
+
+        # 週の学習時間
+        if weekly_period_days:
+            start_of_period = today - datetime.timedelta(days=int(weekly_period_days) - 1)
+            weekly_time_query = "SELECT SUM(duration_minutes) FROM study_logs WHERE DATE(start_time) >= ? AND event_type IN ('START', 'RESUME')"
+            params = (start_of_period.strftime('%Y-%m-%d'),)
+        else: # デフォルトは月曜始まりの週
+            start_of_week = today - datetime.timedelta(days=today.weekday())
+            weekly_time_query = "SELECT SUM(duration_minutes) FROM study_logs WHERE DATE(start_time) >= ? AND event_type IN ('START', 'RESUME')"
+            params = (start_of_week.strftime('%Y-%m-%d'),)
+        
+        cursor.execute(weekly_time_query, params)
+        weekly_time = cursor.fetchone()[0] or 0
+
+        # 連続学習日数
+        cursor.execute("SELECT DISTINCT DATE(start_time) FROM study_logs ORDER BY DATE(start_time) DESC")
+        dates = [datetime.datetime.strptime(row[0], '%Y-%m-%d').date() for row in cursor.fetchall()]
+        streak = 0
+        if dates:
+            current_date = today
+            if current_date in dates:
+                streak = 1
+                while (current_date - datetime.timedelta(days=1)) in dates:
+                    streak += 1
+                    current_date -= datetime.timedelta(days=1)
+
+        # 今日の目標
+        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (today_str,))
+        goal_row = cursor.fetchone()
+        today_goals = []
+        completed_goals = 0
+        total_goals = 0
+        if goal_row and goal_row['goal']:
+            try:
+                goals = json.loads(goal_row['goal'])
+                today_goals = goals
+                total_goals = len(goals)
+                completed_goals = sum(1 for g in goals if g.get('completed'))
+            except json.JSONDecodeError:
+                pass
+
+        # 最近の学習セッション (直近2件)
+        cursor.execute("""
+            SELECT subject, content, start_time, end_time, duration_minutes
+            FROM study_logs 
+            WHERE event_type IN ('START', 'RESUME')
+            ORDER BY start_time DESC 
+            LIMIT 2
+        """)
+        recent_sessions_raw = cursor.fetchall()
+        recent_sessions = []
+        for row in recent_sessions_raw:
+            start_time = datetime.datetime.strptime(row['start_time'], '%Y-%m-%d %H:%M:%S')
+            end_time = datetime.datetime.strptime(row['end_time'], '%Y-%m-%d %H:%M:%S') if row['end_time'] else start_time
+            recent_sessions.append({
+                'subject': row['subject'],
+                'duration': row['duration_minutes'],
+                'time': "{}-{}".format(start_time.strftime('%H:%M'), end_time.strftime('%H:%M')),
+                'topic': row['content']
+            })
+
+    dashboard_data = {
+        "studyStats": {
+            "todayTime": today_time,
+            "weeklyTime": weekly_time,
+            "streak": streak,
+            "completedGoals": completed_goals,
+            "totalGoals": total_goals
+        },
+        "todayGoals": today_goals,
+        "recentSessions": recent_sessions
+    }
+    
+    print(json.dumps(dashboard_data, indent=2, ensure_ascii=False))
+
+def recalculate_all_durations():
+    """すべてのログのduration_minutesを再計算する"""
+    backup_database("Before recalculating all durations.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, start_time, end_time FROM study_logs WHERE end_time IS NOT NULL")
+        logs = cursor.fetchall()
+        
+        for log_id, start_time_str, end_time_str in logs:
+            try:
+                start_time = datetime.datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
+                end_time = datetime.datetime.strptime(end_time_str, '%Y-%m-%d %H:%M:%S')
+                duration = end_time - start_time
+                duration_minutes = int(duration.total_seconds() / 60)
+                
+                conn.execute(
+                    "UPDATE study_logs SET duration_minutes = ? WHERE id = ?",
+                    (duration_minutes, log_id)
+                )
+            except (ValueError, TypeError) as e:
+                print("Could not process log ID {}: {}".format(log_id, e))
+        conn.commit()
+    print("すべてのログの学習時間を再計算しました。")
+
+
 def reconstruct_from_json(json_data_str):
     """JSONデータからデータベースを再構築する"""
     try:
@@ -751,6 +876,11 @@ def main():
     elif command == 'unique_subjects':
         subjects = get_all_unique_subjects()
         print(json.dumps(subjects, ensure_ascii=False))
+    elif command == 'dashboard_json':
+        weekly_period_days = sys.argv[2] if len(sys.argv) > 2 else None
+        get_dashboard_data(weekly_period_days)
+    elif command == 'recalculate_durations':
+        recalculate_all_durations()
     else:
         print("エラー: 不明なコマンド '{}'".format(command))
         sys.exit(1)
