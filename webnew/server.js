@@ -190,33 +190,26 @@ function startGemini(wss) {
   if (geminiProcess) {
     console.log('Killing existing Gemini process for restart...');
     isRestartingGemini = true; // 再起動中フラグを立てる
-    const oldPid = geminiProcess.pid;
-    const oldProcess = geminiProcess; // 参照を保持
-    geminiProcess = null; // 古い参照をクリア
-
-    oldProcess.on('close', function(code, signal) {
-      if (this.pid === oldPid) {
-        console.log(`Old Gemini process (PID: ${oldPid}) exited. Starting new one.`);
-        // _startNewGeminiProcess(wss); // 直接呼び出しを削除
-        setTimeout(() => { // 1秒のディレイを追加
-          _startNewGeminiProcess(wss);
-          isRestartingGemini = false; // 再起動完了
-        }, 1000);
-      }
+    
+    // 'close'イベントリスナーを一度だけ設定
+    geminiProcess.once('close', (code, signal) => {
+      console.log(`Old Gemini process (PID: ${geminiProcess.pid}) exited with code ${code}, signal ${signal}. Starting new one.`);
+      geminiProcess = null; // 参照を完全にクリア
+      _startNewGeminiProcess(wss);
+      isRestartingGemini = false; // 再起動完了
     });
-    oldProcess.kill(); // SIGTERM を送る
-    setTimeout(() => { // 3秒後にSIGKILLを試みる
-      try {
-        process.kill(oldPid, 0); // まだ生きてたら
-        console.warn('Forcing SIGKILL...');
-        oldProcess.kill('SIGKILL');
-      } catch (e) {
-        // プロセスが既に終了している場合はエラーになるので無視
-        if (e.code !== 'ESRCH') { // ESRCH はプロセスが存在しないエラー
-          console.error('Error during forced SIGKILL:', e);
-        }
+
+    // プロセスを終了させる
+    geminiProcess.kill('SIGTERM'); // まずは穏便に終了を試みる
+
+    // タイムアウトを設定して、強制終了
+    setTimeout(() => {
+      if (geminiProcess && !geminiProcess.killed) {
+        console.warn(`Gemini process (PID: ${geminiProcess.pid}) did not exit gracefully. Forcing SIGKILL.`);
+        geminiProcess.kill('SIGKILL');
       }
-    }, 3000);
+    }, 3000); // 3秒待っても終了しない場合
+
   } else {
     _startNewGeminiProcess(wss);
   }

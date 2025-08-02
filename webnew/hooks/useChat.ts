@@ -462,21 +462,25 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     };
 
     socket.onclose = (event) => {
-      console.log('WebSocket disconnected:', event.code, event.reason);
+      console.log(`WebSocket disconnected: Code=${event.code}, Reason=${event.reason}, WasClean=${event.wasClean}`);
       isConnecting.current = false;
       ws.current = null;
     };
 
     socket.onerror = (event) => {
-      console.error('WebSocket error:', event);
+      // The event object itself is often generic. More detailed errors are usually in the browser console.
+      console.error('WebSocket error occurred. See browser console for details.', event);
       isConnecting.current = false;
     };
 
     return () => {
       console.log('Cleaning up WebSocket connection.');
-      // クリーンアップ関数が呼ばれたときに、socketが現在のws.currentと一致する場合のみ閉じる
+      // Only close if the socket is in a connecting or open state.
+      if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
+        socket.close(1000, "Component unmounting"); // 1000 is a normal closure
+      }
+      // If the cleanup is for the current active socket, clear the ref.
       if (ws.current === socket) {
-        socket.close();
         ws.current = null;
       }
     };
