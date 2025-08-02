@@ -296,41 +296,47 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
 
           {isLoading ? (
             <div className="space-y-4 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <Skeleton className="h-4 w-3/4 rounded" />
-              <div className="flex justify-between">
-                <Skeleton className="h-4 w-1/2 rounded" />
-                <Skeleton className="h-4 w-1/4 rounded" />
+              <div className="flex justify-center space-x-6">
+                <Skeleton className="h-4 w-32 rounded" />
+                <Skeleton className="h-4 w-24 rounded" />
               </div>
+              <Skeleton className="h-4 w-3/4 rounded mt-4" />
             </div>
           ) : logData && logData.daily_summary ? (
-            <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-              <div className="grid md:grid-cols-[2fr_1fr] gap-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">この日のまとめ</h3>
-                  <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
+            <>
+              <div className="flex items-center justify-center space-x-6 mt-2 h-5 mb-4">
+                <div className="flex items-center space-x-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  <span className="text-sm text-slate-600 dark:text-slate-400">{!isMobile && '総学習時間: '}{formatDuration(logData.daily_summary.total_duration)}</span>
                 </div>
-                <div className="space-y-4">
+                <div className="flex items-center space-x-2">
+                  <BookOpen className="w-4 h-4 text-green-600" />
+                  <span className="text-sm text-slate-600 dark:text-slate-400">{!isMobile && 'セッション数: '}{logData.sessions.length}</span>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+                <div className="grid md:grid-cols-[2fr_1fr] gap-6">
                   <div>
-                    <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-2">学習した教科</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {logData.daily_summary.subjects.length > 0 ? (
-                        logData.daily_summary.subjects.map((subject, index) => (
-                          <Badge key={index} variant="secondary" className="dark:bg-slate-700 dark:text-slate-300">{subject}</Badge>
-                        ))
-                      ) : (
-                        <p className="text-sm text-slate-500 dark:text-slate-400">記録がありません</p>
-                      )}
-                    </div>
+                    <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">この日のまとめ</h3>
+                    <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
                   </div>
-                  <div className="border-t border-slate-200 dark:border-slate-700 pt-4">
-                    <div className="flex items-center justify-between text-lg">
-                        <span className="font-semibold text-slate-800 dark:text-slate-100">総学習時間</span>
-                        <span className="font-bold text-blue-600 dark:text-blue-400">{formatDuration(logData.daily_summary.total_duration)}</span>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-2">学習した教科</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {logData.daily_summary.subjects.length > 0 ? (
+                          logData.daily_summary.subjects.map((subject, index) => (
+                            <Badge key={index} variant="secondary" className="dark:bg-slate-700 dark:text-slate-300">{subject}</Badge>
+                          ))
+                        ) : (
+                          <p className="text-sm text-slate-500 dark:text-slate-400">記録がありません</p>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            </>
           ) : null}
         </CardContent>
       </Card>
