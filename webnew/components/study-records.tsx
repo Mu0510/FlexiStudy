@@ -95,6 +95,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
   const isMobile = useIsMobile();
 
+  const isToday = new Date(selectedDate).toDateString() === new Date().toDateString();
+
   const toggleSession = (sessionId: number) => {
     setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
   };
@@ -172,7 +174,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     }
 
     return (
-      <div className="space-y-4 pb-6">
+      <div className="space-y-4 pb-16">
         {logData.sessions.map((session) => (
           <Card key={session.session_id} className="bg-white dark:bg-slate-800 border-0 shadow-lg rounded-lg overflow-hidden">
             <CardHeader 
@@ -366,6 +368,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                     completedGoals: logData.daily_summary.goals?.filter(g => g.completed).length ?? 0,
                     totalGoals: logData.daily_summary.goals?.length ?? 0,
                   }}
+                  isToday={isToday}
                 />
               </div>
             </>

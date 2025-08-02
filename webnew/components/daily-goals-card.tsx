@@ -1,10 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Progress } from "@/components/ui/progress"
-import { Badge } from "@/components/ui/badge"
-import { Flag, CheckCircle2, Circle, Play } from "lucide-react"
+import { Flag, CheckCircle2, Circle, Play, ArrowRightToLine } from "lucide-react"
 
 // 型定義
 interface Goal {
@@ -28,9 +24,10 @@ interface DailyGoalsCardProps {
   stats: DailyGoalsStats;
   title?: string;
   className?: string;
+  isToday?: boolean;
 }
 
-export function DailyGoalsCard({ goals, stats, title = "今日の目標", className }: DailyGoalsCardProps) {
+export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true }: DailyGoalsCardProps) {
   if (!goals || goals.length === 0) {
     return (
       <Card className={className}>
@@ -113,14 +110,25 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
               )}
             </div>
             {!goal.completed && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
-              >
-                <Play className="w-4 h-4 mr-1" />
-                開始
-              </Button>
+              isToday ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
+                >
+                  <Play className="w-4 h-4 mr-1" />
+                  開始
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-sky-600 border-sky-200 hover:bg-sky-50 bg-transparent dark:text-sky-400 dark:border-sky-900/50 dark:hover:bg-sky-900/50 dark:bg-transparent"
+                >
+                  <ArrowRightToLine className="w-4 h-4 mr-1" />
+                  今日に移動
+                </Button>
+              )
             )}
           </div>
         ))}
