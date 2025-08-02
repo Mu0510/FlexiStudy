@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Dashboard } from "@/components/dashboard"
 import dynamic from "next/dynamic"
@@ -23,15 +23,31 @@ export default function StudyApp() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   
   const [isNewChatOpen, setIsNewChatOpen] = useState(false)
-  const [isFullScreen, setIsFullScreen] = useState(false); // 全画面表示用の state
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   const [logData, setLogData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(() => {
     const date = new Date();
-    return date.toISOString().split('T')[0]; // Get YYYY-MM-DD format
+    return date.toISOString().split('T')[0];
   });
+
+  const chatStateBeforeSystemView = useRef(false);
+
+  const handleViewChange = (view: string) => {
+    if (view === 'system-chat') {
+      chatStateBeforeSystemView.current = isNewChatOpen;
+      setIsNewChatOpen(false);
+    } else if (activeView === 'system-chat') {
+      setIsNewChatOpen(chatStateBeforeSystemView.current);
+    }
+    setActiveView(view);
+  };
+
+  const handleMaximizeClick = () => {
+    handleViewChange('system-chat');
+  };
 
   useEffect(() => {
     const fetchLogData = async (date: string) => {
@@ -41,7 +57,7 @@ export default function StudyApp() {
         const response = await fetch(`/api/logs/${date}`);
         if (!response.ok) {
           if (response.status === 404) {
-            setLogData(null); // No data for this date
+            setLogData(null);
           } else {
             const errorData = await response.json();
             throw new Error(errorData.details || `HTTP error! status: ${response.status}`);
@@ -49,26 +65,25 @@ export default function StudyApp() {
         } else {
           const rawData = await response.json();
           
-          // Transform the data to fit the frontend's expected structure
           const transformedData = {
             daily_summary: {
-              date: date, // Use the date we fetched for
+              date: date,
               total_duration: rawData.total_day_study_minutes,
               subjects: rawData.subjects_studied,
               summary: rawData.daily_summary,
             },
             sessions: rawData.sessions.map((session: any) => ({
-            session_id: session.session_id,
-            subject: session.subject,
-            start_time: session.session_start_time,
-            end_time: session.session_end_time,
-            total_duration: session.total_study_minutes, // Rename key
-            summary: session.summary,
-            logs: session.details.map((detail: any) => ({
-              ...detail,
-              type: detail.event_type, // Rename key
+              session_id: session.session_id,
+              subject: session.subject,
+              start_time: session.session_start_time,
+              end_time: session.session_end_time,
+              total_duration: session.total_study_minutes,
+              summary: session.summary,
+              logs: session.details.map((detail: any) => ({
+                ...detail,
+                type: detail.event_type,
+              })),
             })),
-          })),
           };
           
           setLogData(transformedData);
@@ -88,7 +103,6 @@ export default function StudyApp() {
   };
 
   const renderActiveView = () => {
-    // isLoading and error checks are now handled inside the specific components
     switch (activeView) {
       case "dashboard":
         return <Dashboard />;
@@ -114,8 +128,8 @@ export default function StudyApp() {
   };
 
   return (
-    <div className={`min-h-screen bg-background ${isFullScreen ? 'overflow-hidden' : ''}`}>
-      <div className={isFullScreen ? 'hidden' : ''}>
+    <div className={`min-h-screen bg-background ${isFullScreen && activeView !== 'system-chat' ? 'overflow-hidden' : ''}`}>
+      <div className={isFullScreen && activeView !== 'system-chat' ? 'hidden' : ''}>
         <MobileHeader
           onMenuClick={() => setIsMobileMenuOpen(true)}
           onChatClick={() => setIsNewChatOpen(true)}
@@ -123,10 +137,10 @@ export default function StudyApp() {
       </div>
 
       <div className="flex h-screen">
-        <div className={isFullScreen ? 'hidden' : ''}>
+        <div className={isFullScreen && activeView !== 'system-chat' ? 'hidden' : ''}>
           <Sidebar
             activeView={activeView}
-            onViewChange={setActiveView}
+            onViewChange={handleViewChange}
             collapsed={sidebarCollapsed}
             onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
             isMobileMenuOpen={isMobileMenuOpen}
@@ -137,7 +151,7 @@ export default function StudyApp() {
         <main
           className={`flex-1 transition-all duration-300 flex flex-col ${
             sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
-          } ${isFullScreen ? 'hidden' : ''}`}
+          } ${isFullScreen && activeView !== 'system-chat' ? 'hidden' : ''}`}
         >
           <div className="flex-1 p-6 pt-20 lg:pt-6 overflow-y-auto">
             <div className="max-w-7xl mx-auto h-full">{renderActiveView()}</div>
@@ -145,7 +159,7 @@ export default function StudyApp() {
         </main>
 
         {/* Floating Chat Button for Desktop */}
-        {!isNewChatOpen && (
+        {!isNewChatOpen && activeView !== 'system-chat' && (
           <div className="hidden lg:block fixed bottom-8 right-8 z-50">
             <Button
               onClick={() => setIsNewChatOpen(true)}
@@ -162,16 +176,19 @@ export default function StudyApp() {
           </div>
         )}
         
-        <NewChatPanel 
-          showAs="floating"
-          isOpen={isNewChatOpen} 
-          onClose={() => {
-            setIsNewChatOpen(false);
-            setIsFullScreen(false); // 全画面表示もリセット
-          }} 
-          isFullScreen={isFullScreen}
-          setIsFullScreen={setIsFullScreen}
-        />
+        {activeView !== 'system-chat' && (
+          <NewChatPanel 
+            showAs="floating"
+            isOpen={isNewChatOpen} 
+            onClose={() => {
+              setIsNewChatOpen(false);
+              setIsFullScreen(false);
+            }} 
+            isFullScreen={isFullScreen}
+            setIsFullScreen={setIsFullScreen}
+            onMaximizeClick={handleMaximizeClick}
+          />
+        )}
       </div>
     </div>
   )

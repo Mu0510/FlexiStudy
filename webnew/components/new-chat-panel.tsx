@@ -22,6 +22,7 @@ interface NewChatPanelProps {
   onClose?: () => void;
   isFullScreen?: boolean;
   setIsFullScreen?: (isFullScreen: boolean) => void;
+  onMaximizeClick?: () => void; // New prop
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -63,7 +64,8 @@ export function NewChatPanel({
   isOpen, 
   onClose, 
   isFullScreen, 
-  setIsFullScreen 
+  setIsFullScreen,
+  onMaximizeClick
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
 
@@ -329,6 +331,14 @@ export function NewChatPanel({
     }
   };
 
+  const handleToggleFullScreen = () => {
+    if (onMaximizeClick) {
+      onMaximizeClick();
+    } else if (setIsFullScreen) {
+      setIsFullScreen(!isFullScreen);
+    }
+  };
+
   const ChatContent = (
     <>
       <input
@@ -338,11 +348,11 @@ export function NewChatPanel({
         onChange={handleFileSelect}
         className="hidden"
       />
-      {isFloating && onClose && setIsFullScreen && (
+      {isFloating && onClose && (
         <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Gemini Chat</h2>
           <div className="flex items-center space-x-2">
-            <Button variant="ghost" size="sm" onClick={() => setIsFullScreen(!isFullScreen)} className="p-2">
+            <Button variant="ghost" size="sm" onClick={handleToggleFullScreen} className="p-2">
               {isFullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </Button>
             <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
