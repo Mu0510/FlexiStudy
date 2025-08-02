@@ -600,6 +600,14 @@ def show_logs_json_for_date(date_str):
 
     print(json.dumps(output_data, indent=2, ensure_ascii=False))
 
+def get_all_unique_subjects():
+    """すべての学習ログからユニークな教科のリストを取得する"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT subject FROM study_logs WHERE subject IS NOT NULL AND subject != '' ORDER BY subject")
+        subjects = [row[0] for row in cursor.fetchall()]
+        return subjects
+
 def reconstruct_from_json(json_data_str):
     """JSONデータからデータベースを再構築する"""
     try:
@@ -740,6 +748,9 @@ def main():
             print(json.dumps(dict(log_entry), indent=2, ensure_ascii=False))
         else:
             print("ログID {} が見つかりません。".format(sys.argv[2]))
+    elif command == 'unique_subjects':
+        subjects = get_all_unique_subjects()
+        print(json.dumps(subjects, ensure_ascii=False))
     else:
         print("エラー: 不明なコマンド '{}'".format(command))
         sys.exit(1)

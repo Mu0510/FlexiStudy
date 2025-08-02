@@ -10,20 +10,38 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { SettingsIcon, User, Bell, Palette, Shield, Download, Upload, Trash2, Save } from "lucide-react"
 
-export function Settings() {
+export function Settings({ uniqueSubjects }: { uniqueSubjects: string[] }) {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [notifications, setNotifications] = useState(true)
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
+  const [subjectColors, setSubjectColors] = useState<Record<string, string>>(() => {
+    if (typeof window !== 'undefined') {
+      const savedColors = localStorage.getItem('subjectColors');
+      return savedColors ? JSON.parse(savedColors) : {};
+    }
+    return {};
+  });
 
-  // useEffect only runs on the client, so we can safely show the UI
   useEffect(() => {
     setMounted(true)
   }, [])
 
+  useEffect(() => {
+    if (mounted) {
+      localStorage.setItem('subjectColors', JSON.stringify(subjectColors));
+    }
+  }, [subjectColors, mounted]);
+
+  const handleColorChange = (subject: string, color: string) => {
+    setSubjectColors(prevColors => ({
+      ...prevColors,
+      [subject]: color,
+    }));
+  };
+
   if (!mounted) {
-    // You can return a loading skeleton here
     return null
   }
 
@@ -40,6 +58,36 @@ export function Settings() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
+                <Palette className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                <span>教科ごとの色設定</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {uniqueSubjects.length > 0 ? (
+                uniqueSubjects.map((subject) => (
+                  <div key={subject} className="flex items-center justify-between">
+                    <Label htmlFor={`color-${subject}`} className="text-base font-medium text-slate-800 dark:text-slate-200">
+                      {subject}
+                    </Label>
+                    <Input
+                      id={`color-${subject}`}
+                      type="color"
+                      value={subjectColors[subject] || '#000000'} // Default to black if no color is set
+                      onChange={(e) => handleColorChange(subject, e.target.value)}
+                      className="w-12 h-12 p-1 rounded-md border-none cursor-pointer"
+                      style={{ backgroundColor: subjectColors[subject] || '#000000' }} // Show selected color in input
+                    />
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-500 dark:text-slate-400">まだ学習記録がありません。学習を開始すると教科が表示されます。</p>
+              )}
+            </CardContent>
+          </Card>
+
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
@@ -139,20 +187,6 @@ export function Settings() {
                     setTheme(checked ? 'dark' : 'light')
                   }}
                 />
-              </div>
-
-              <div>
-                <Label className="text-base font-medium mb-3 block text-slate-800 dark:text-slate-200">アクセントカラー</Label>
-                <div className="grid grid-cols-6 gap-3">
-                  {["bg-blue-500", "bg-green-500", "bg-purple-500", "bg-pink-500", "bg-orange-500", "bg-red-500"].map(
-                    (color, index) => (
-                      <button
-                        key={index}
-                        className={`w-10 h-10 rounded-lg ${color} border-2 border-transparent hover:border-slate-300 dark:hover:border-slate-600 transition-colors`}
-                      />
-                    ),
-                  )}
-                </div>
               </div>
             </CardContent>
           </Card>

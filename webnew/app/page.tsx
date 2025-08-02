@@ -32,6 +32,7 @@ export default function StudyApp() {
     const date = new Date();
     return date.toISOString().split('T')[0];
   });
+  const [uniqueSubjects, setUniqueSubjects] = useState<string[]>([]);
 
   const chatStateBeforeSystemView = useRef(false);
 
@@ -98,6 +99,22 @@ export default function StudyApp() {
     fetchLogData(selectedDate);
   }, [selectedDate]);
 
+  useEffect(() => {
+    const fetchUniqueSubjects = async () => {
+      try {
+        const response = await fetch('/api/subjects');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const subjects = await response.json();
+        setUniqueSubjects(subjects);
+      } catch (e) {
+        console.error("Failed to fetch unique subjects:", e);
+      }
+    };
+    fetchUniqueSubjects();
+  }, []);
+
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
   };
@@ -119,7 +136,7 @@ export default function StudyApp() {
       case "exams":
         return <ExamAnalysis />;
       case "settings":
-        return <Settings />;
+        return <Settings uniqueSubjects={uniqueSubjects} />;
       case "system-chat":
         return <NewChatPanel showAs="embedded" />;
       default:

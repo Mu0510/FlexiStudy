@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -72,11 +72,31 @@ const RecordsSkeleton = () => (
   </div>
 );
 
+const getContrastColor = (hexcolor: string) => {
+  if (!/^#([A-Fa-f0-9]{3}){1,2}$/.test(hexcolor)) {
+    return '#000000'; // Default to black if invalid hex
+  }
+  const r = parseInt(hexcolor.substr(1, 2), 16);
+  const g = parseInt(hexcolor.substr(3, 2), 16);
+  const b = parseInt(hexcolor.substr(5, 2), 16);
+  const y = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+  return (y >= 128) ? '#000000' : '#FFFFFF';
+};
 
 export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error }: StudyRecordsProps) {
   const [openSessions, setOpenSessions] = useState<Record<number, boolean>>({});
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
+  const [subjectColors, setSubjectColors] = useState<Record<string, string>>({});
   const isMobile = useIsMobile();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedColors = localStorage.getItem('subjectColors');
+      if (savedColors) {
+        setSubjectColors(JSON.parse(savedColors));
+      }
+    }
+  }, []);
 
   const toggleSession = (sessionId: number) => {
     setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
@@ -164,7 +184,15 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
             >
               <div className="grid grid-cols-[3.5rem_1fr] gap-x-4">
                 <div className="row-span-2 flex items-center justify-center">
-                  <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:bg-blue-900/30 text-base h-fit truncate">
+                  <Badge
+                    variant="outline"
+                    className="text-base h-fit truncate"
+                    style={{
+                      backgroundColor: subjectColors[session.subject] || '#E0F2F7', // Default light blue
+                      color: subjectColors[session.subject] ? getContrastColor(subjectColors[session.subject]) : '#000000', // Default black
+                      borderColor: subjectColors[session.subject] || '#B3E5FC', // Default slightly darker blue
+                    }}
+                  >
                     {session.subject}
                   </Badge>
                 </div>
