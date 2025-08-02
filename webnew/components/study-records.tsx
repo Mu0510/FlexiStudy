@@ -326,7 +326,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       <div className="flex flex-wrap gap-2 justify-center">
                         {logData.daily_summary.subjects.length > 0 ? (
                           logData.daily_summary.subjects.map((subject, index) => (
-                            <Badge key={index} variant="secondary" className="dark:bg-slate-700 dark:text-slate-300">{subject}</Badge>
+                            <Badge key={index} variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:bg-blue-900/30 text-base h-fit truncate">{subject}</Badge>
                           ))
                         ) : (
                           <p className="text-sm text-slate-500 dark:text-slate-400">記録がありません</p>
