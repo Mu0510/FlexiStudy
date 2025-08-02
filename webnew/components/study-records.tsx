@@ -360,7 +360,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
               <div className="mt-6">
                 <DailyGoalsCard
                   title="この日の目標"
-                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg"
+                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
                   goals={logData.daily_summary.goals ?? []}
                   stats={{
                     completedGoals: logData.daily_summary.goals?.filter(g => g.completed).length ?? 0,
