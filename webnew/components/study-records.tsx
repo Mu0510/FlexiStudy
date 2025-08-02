@@ -318,12 +318,12 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 <div className="grid md:grid-cols-[2fr_1fr] gap-6">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-3">この日のまとめ</h3>
-                    <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
+                    <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap pl-1">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
                   </div>
                   <div className="space-y-4">
                     <div>
                       <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-2">学習した教科</h4>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 justify-center">
                         {logData.daily_summary.subjects.length > 0 ? (
                           logData.daily_summary.subjects.map((subject, index) => (
                             <Badge key={index} variant="secondary" className="dark:bg-slate-700 dark:text-slate-300">{subject}</Badge>
