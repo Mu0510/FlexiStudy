@@ -6,6 +6,7 @@ import { Dashboard } from "@/components/dashboard"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { MessageSquare } from "lucide-react"
+import Image from "next/image"
 
 const StudyRecords = dynamic(() => import("@/components/study-records").then(mod => mod.StudyRecords), {
   ssr: false,
@@ -145,9 +146,15 @@ export default function StudyApp() {
           <div className="hidden lg:block fixed bottom-8 right-8 z-50">
             <Button
               onClick={() => setIsNewChatOpen(true)}
-              className="rounded-full w-14 h-14 bg-gradient-to-r from-accent-500 to-accent-600 text-white shadow-lg hover:scale-110 transition-transform"
+              className="rounded-full w-14 h-14 bg-gradient-to-r from-accent-500 to-accent-600 text-white shadow-lg hover:scale-110 transition-transform p-0"
             >
-              <MessageSquare className="w-7 h-7" />
+              <Image
+                src="/images/app-icon.png"
+                alt="Chat"
+                width={56}
+                height={56}
+                className="rounded-full"
+              />
             </Button>
           </div>
         )}
