@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { useIsMobile } from "@/hooks/use-mobile"
+import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -91,15 +92,45 @@ import { getSubjectStyle } from "@/lib/utils";
 
 
 export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors }: StudyRecordsProps) {
+  const { toast } = useToast();
   const [openSessions, setOpenSessions] = useState<Record<number, boolean>>({});
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
   const isMobile = useIsMobile();
-
   const isToday = new Date(selectedDate).toDateString() === new Date().toDateString();
 
   const handleMoveGoal = async (goal: Goal) => {
-    // TODO: APIを実装する
-    alert(`「${goal.task}」を今日の目標に移動します。（機能は未実装です）`);
+    try {
+      const response = await fetch('/api/goals/move', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ goal }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.details || '目標の移動に失敗しました。');
+      }
+
+      toast({
+        title: "目標を移動しました",
+        description: `「${goal.task}」を今日の目標に追加しました。`,
+      });
+
+      // 今日の日付のデータを再読み込み
+      const todayStr = new Date().toISOString().split('T')[0];
+      onDateChange(todayStr);
+
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        variant: "destructive",
+        title: "エラー",
+        description: error.message || '目標の移動中に不明なエラーが発生しました。',
+      });
+    }
   };
 
   const toggleSession = (sessionId: number) => {

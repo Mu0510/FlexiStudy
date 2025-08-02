@@ -586,6 +586,52 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
         conn.commit()
     print("日付 {} の目標を更新しました。".format(date_str))
 
+def add_goal_to_date(goal_json_str, date_str):
+    """指定された日付に新しい目標を1つ追加する"""
+    backup_database("Before adding a goal to a specific date.")
+    try:
+        new_goal = json.loads(goal_json_str)
+        # 新しい目標のIDを再生成し、未完了状態にする
+        new_goal['id'] = str(uuid.uuid4())
+        new_goal['completed'] = False
+        if 'completed_problems' in new_goal:
+            new_goal['completed_problems'] = 0
+        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        new_goal['created_at'] = now
+        new_goal['updated_at'] = now
+
+    except json.JSONDecodeError as e:
+        print("エラー: 追加する目標データが有効なJSON形式ではありません。{}".format(e))
+        return
+    except Exception as e:
+        print("エラー: 目標データの処理中にエラーが発生しました。{}".format(e))
+        return
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # 指定日の既存の目標を取得
+        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
+        existing_row = cursor.fetchone()
+        
+        existing_goals = []
+        if existing_row and existing_row[0]:
+            try:
+                existing_goals = json.loads(existing_row[0])
+                if not isinstance(existing_goals, list):
+                    existing_goals = []
+            except json.JSONDecodeError:
+                existing_goals = [] # パースできなければ空リストから開始
+
+        # 新しい目標を追加
+        existing_goals.append(new_goal)
+        
+        # 更新された目標リストをJSON文字列として保存
+        updated_goals_json_str = json.dumps(existing_goals, ensure_ascii=False)
+        add_or_update_daily_goal(updated_goals_json_str, date_str)
+
+    print("日付 {} に目標「{}」を追加しました。".format(date_str, new_goal.get('task', '')))
+
+
 def add_or_update_session_summary(summary_text, session_id=None):
     backup_database("Before session summary update.")
     """セッションの概要を追加または更新する"""
@@ -940,6 +986,11 @@ def main():
             print("使用法: daily_goal \"<json_string>\" [YYYY-MM-DD]")
             sys.exit(1)
         add_or_update_daily_goal(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
+    elif command == 'add_goal_to_date':
+        if len(sys.argv) != 4:
+            print("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
+            sys.exit(1)
+        add_goal_to_date(sys.argv[2], sys.argv[3])
     elif command == 'backup':
         backup_now()
     elif command == 'undo':
