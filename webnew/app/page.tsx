@@ -146,14 +146,14 @@ export default function StudyApp() {
           <div className="hidden lg:block fixed bottom-8 right-8 z-50">
             <Button
               onClick={() => setIsNewChatOpen(true)}
-              className="rounded-full w-14 h-14 bg-gradient-to-r from-accent-500 to-accent-600 text-white shadow-lg hover:scale-110 transition-transform p-0"
+              className="rounded-2xl w-14 h-14 bg-gradient-to-r from-accent-500 to-accent-600 text-white shadow-lg hover:scale-110 transition-transform p-0"
             >
               <Image
                 src="/images/app-icon.png"
                 alt="Chat"
                 width={56}
                 height={56}
-                className="rounded-full"
+                className="rounded-2xl"
               />
             </Button>
           </div>
