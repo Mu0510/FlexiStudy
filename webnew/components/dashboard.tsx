@@ -31,74 +31,74 @@ export function Dashboard() {
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
       {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-primary to-primary/90 rounded-2xl p-6 text-primary-foreground">
+      <div className="bg-gradient-to-r from-primary-800 to-primary-700 rounded-2xl p-6 text-neutral-100 dark:from-primary-600 dark:to-primary-700">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold mb-2">おかえりなさい！</h2>
-            <p className="text-primary-foreground/80">今日も頑張って学習を続けましょう</p>
+            <p className="text-neutral-200 dark:text-neutral-300">今日も頑張って学習を続けましょう</p>
           </div>
           <div className="text-right">
             <div className="text-3xl font-bold">{studyStats.streak}</div>
-            <div className="text-primary-foreground/80 text-sm">日連続</div>
+            <div className="text-neutral-200 dark:text-neutral-300 text-sm">日連続</div>
           </div>
         </div>
       </div>
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card>
+        <Card className="border-0 shadow-md bg-gradient-to-br from-neutral-100 to-neutral-200 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Clock className="w-5 h-5 text-primary" />
+              <div className="p-2 bg-primary-100 dark:bg-primary-900/50 rounded-lg">
+                <Clock className="w-5 h-5 text-primary-700 dark:text-primary-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">{studyStats.todayTime}分</div>
-                <div className="text-sm text-muted-foreground">今日の学習時間</div>
+                <div className="text-2xl font-bold text-primary-800 dark:text-neutral-100">{studyStats.todayTime}分</div>
+                <div className="text-sm text-primary-700 dark:text-neutral-400">今日の学習時間</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-md bg-gradient-to-br from-secondary-50 to-secondary-100 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-secondary/20 dark:bg-secondary/30 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-secondary-foreground/80" />
+              <div className="p-2 bg-secondary-200 dark:bg-secondary-900/50 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-secondary-700 dark:text-secondary-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">{studyStats.weeklyTime}分</div>
-                <div className="text-sm text-muted-foreground">今週の学習時間</div>
+                <div className="text-2xl font-bold text-secondary-800 dark:text-neutral-100">{studyStats.weeklyTime}分</div>
+                <div className="text-sm text-secondary-700 dark:text-neutral-400">今週の学習時間</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-md bg-gradient-to-br from-accent-50 to-accent-100 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-accent/10 rounded-lg">
-                <Target className="w-5 h-5 text-accent" />
+              <div className="p-2 bg-accent-200 dark:bg-accent-900/50 rounded-lg">
+                <Target className="w-5 h-5 text-accent-700 dark:text-accent-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">
+                <div className="text-2xl font-bold text-accent-800 dark:text-neutral-100">
                   {studyStats.completedGoals}/{studyStats.totalGoals}
                 </div>
-                <div className="text-sm text-muted-foreground">今日の目標達成</div>
+                <div className="text-sm text-accent-700 dark:text-neutral-400">今日の目標達成</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-0 shadow-md bg-gradient-to-br from-primary-50 to-primary-100 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary/10 rounded-lg">
-                <Award className="w-5 h-5 text-primary" />
+              <div className="p-2 bg-primary-200 dark:bg-primary-900/50 rounded-lg">
+                <Award className="w-5 h-5 text-primary-700 dark:text-primary-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-foreground">{studyStats.streak}</div>
-                <div className="text-sm text-muted-foreground">連続学習日数</div>
+                <div className="text-2xl font-bold text-primary-800 dark:text-neutral-100">{studyStats.streak}</div>
+                <div className="text-sm text-primary-700 dark:text-neutral-400">連続学習日数</div>
               </div>
             </div>
           </CardContent>
@@ -108,14 +108,14 @@ export function Dashboard() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Today's Goals */}
         <div className="lg:col-span-2">
-          <Card>
+          <Card className="border-0 shadow-lg bg-white dark:bg-neutral-800">
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center space-x-2 text-foreground">
-                  <Target className="w-5 h-5 text-primary" />
+                <CardTitle className="flex items-center space-x-2 text-neutral-800 dark:text-neutral-200">
+                  <Target className="w-5 h-5 text-primary-600 dark:text-primary-400" />
                   <span>今日の目標</span>
                 </CardTitle>
-                <Badge variant="secondary">
+                <Badge variant="secondary" className="bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-400">
                   {studyStats.completedGoals}/{studyStats.totalGoals} 完了
                 </Badge>
               </div>
@@ -125,12 +125,12 @@ export function Dashboard() {
               {todayGoals.map((goal) => (
                 <div
                   key={goal.id}
-                  className="flex items-center space-x-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
+                  className="flex items-center space-x-3 p-3 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors"
                 >
                   {goal.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-success-600 dark:text-success-500" />
+                    <CheckCircle2 className="w-5 h-5 text-success-700 dark:text-success-500" />
                   ) : (
-                    <Circle className="w-5 h-5 text-muted-foreground" />
+                    <Circle className="w-5 h-5 text-neutral-400 dark:text-neutral-500" />
                   )}
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
@@ -138,16 +138,16 @@ export function Dashboard() {
                         variant="outline"
                         className={
                           goal.subject === "物理"
-                            ? "border-primary/50 text-primary"
-                            : "border-secondary/50 text-secondary-foreground/80"
+                            ? "border-primary-200 text-primary-700 dark:border-primary-900/50 dark:text-primary-400"
+                            : "border-secondary-200 text-secondary-700 dark:border-secondary-900/50 dark:text-secondary-400"
                         }
                       >
                         {goal.subject}
                       </Badge>
-                      <span className="text-sm text-muted-foreground">{goal.problems}問</span>
+                      <span className="text-sm text-neutral-500 dark:text-neutral-400">{goal.problems}問</span>
                     </div>
                     <div
-                      className={`font-medium ${goal.completed ? "text-muted-foreground line-through" : "text-foreground"}`}
+                      className={`font-medium ${goal.completed ? "text-neutral-500 line-through dark:text-neutral-400" : "text-neutral-800 dark:text-neutral-200"}`}
                     >
                       {goal.task}
                     </div>
@@ -156,6 +156,7 @@ export function Dashboard() {
                     <Button
                       size="sm"
                       variant="outline"
+                      className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
                     >
                       <Play className="w-4 h-4 mr-1" />
                       開始
@@ -169,51 +170,51 @@ export function Dashboard() {
 
         {/* Recent Activity & Quick Actions */}
         <div className="space-y-6">
-          <Card>
+          <Card className="border-0 shadow-lg bg-white dark:bg-neutral-800">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center space-x-2 text-foreground">
-                <BookOpen className="w-5 h-5 text-secondary-foreground/80" />
+              <CardTitle className="flex items-center space-x-2 text-neutral-800 dark:text-neutral-200">
+                <BookOpen className="w-5 h-5 text-secondary-600 dark:text-secondary-400" />
                 <span>最近の学習</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {recentSessions.map((session, index) => (
-                <div key={index} className="p-3 bg-muted/50 rounded-lg">
+                <div key={index} className="p-3 bg-neutral-100 dark:bg-neutral-700/50 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <Badge variant="outline" className="border-primary/50 text-primary">
+                    <Badge variant="outline" className="border-primary-200 text-primary-700 dark:border-primary-900/50 dark:text-primary-400">
                       {session.subject}
                     </Badge>
-                    <span className="text-sm font-medium text-muted-foreground">{session.duration}分</span>
+                    <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">{session.duration}分</span>
                   </div>
-                  <div className="text-sm text-muted-foreground mb-1">{session.time}</div>
-                  <div className="text-sm text-foreground font-medium">{session.topic}</div>
+                  <div className="text-sm text-neutral-600 dark:text-neutral-400 mb-1">{session.time}</div>
+                  <div className="text-sm text-neutral-800 dark:text-neutral-200 font-medium">{session.topic}</div>
                 </div>
               ))}
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="border-0 shadow-lg bg-white dark:bg-neutral-800">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center space-x-2 text-foreground">
-                <Zap className="w-5 h-5 text-accent" />
+              <CardTitle className="flex items-center space-x-2 text-neutral-800 dark:text-neutral-200">
+                <Zap className="w-5 h-5 text-accent-600 dark:text-accent-400" />
                 <span>クイックアクション</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full justify-start">
+              <Button className="w-full justify-start bg-gradient-to-r from-primary-800 to-primary-700 hover:from-primary-900 hover:to-primary-800 dark:from-primary-600 dark:to-primary-700 dark:hover:from-primary-700 dark:hover:to-primary-800">
                 <Play className="w-4 h-4 mr-2" />
                 集中モード開始
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-start"
+                className="w-full justify-start border-secondary-200 text-secondary-700 hover:bg-secondary-50 bg-transparent dark:border-secondary-900/50 dark:text-secondary-400 dark:hover:bg-secondary-900/50 dark:bg-transparent"
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 今日の復習確認
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-start"
+                className="w-full justify-start border-accent-200 text-accent-700 hover:bg-accent-50 bg-transparent dark:border-accent-900/50 dark:text-accent-400 dark:hover:bg-accent-900/50 dark:bg-transparent"
               >
                 <TrendingUp className="w-4 h-4 mr-2" />
                 学習分析を見る
