@@ -186,6 +186,20 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         setIsGeneratingResponse(false);
         onMessageReceived?.();
       } else if (msg.method === 'addMessage') {
+        // ① もし前回の assistant ストリームがまだ activeMessage に残っていたら確定
+        setActiveMessage(prev => {
+          if (prev && prev.type === 'assistant') {
+            setMessages(p => {
+              if (p.some(m => m.id === prev.id)) return p; // 重複防止
+              const newMessages = [...p, { id: prev.id, ts: prev.ts, role: 'assistant', content: prev.content }];
+              newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+              return newMessages;
+            });
+            return null;   // flush 済みなのでクリア
+          }
+          return prev;
+        });
+
         const { message } = msg.params;
         setMessages(prev => {
           // 重複を避ける
@@ -481,41 +495,26 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
       } else if (msg.id !== undefined && msg.result === null) {
         // ACPモードでは、sendUserMessage への応答 (result:null) がストリーム全体の完了を示す
-        if (msg.id === lastSentRequestId.current) {
-          console.log(`[DEBUG] Completion signal received (id: ${msg.id}). Finalizing active message.`);
+        // ★ 修正点: lastSentRequestId のチェックを外す
+        console.log(`[DEBUG] Completion signal received (id: ${msg.id}). Finalizing active message.`);
 
-          // 関数型アップデートを使い、ref のタイミング問題を起こさずに activeMessage を確定させる
-          setActiveMessage(prevActiveMessage => {
-            if (prevActiveMessage && prevActiveMessage.type === 'assistant') {
-              setMessages(prev => {
-                let newMessages;
-                // ★ 修正点: 重複キーエラーを防ぐため、同じIDのメッセージが既に存在しないか確認
-                if (prev.some(m => m.id === prevActiveMessage.id)) {
-                  // 存在する場合は、内容を更新する（ストリーミングが完了した最終版の内容で）
-                  newMessages = prev.map(m => 
-                    m.id === prevActiveMessage.id 
-                      ? { ...m, content: prevActiveMessage.content } 
-                      : m
-                  );
-                } else {
-                  // 存在しない場合は、新しいメッセージとして追加する
-                  newMessages = [...prev, {
-                    id: prevActiveMessage.id,
-                    ts: prevActiveMessage.ts, // activeMessageのタイムスタンプを利用
-                    role: 'assistant',
-                    content: prevActiveMessage.content,
-                  }];
-                }
-                newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-                return newMessages;
-              });
-            }
-            // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
-            return null; // activeMessage をクリア
-          });
+        // 関数型アップデートを使い、ref のタイミング問題を起こさずに activeMessage を確定させる
+        setActiveMessage(prevActiveMessage => {
+          if (prevActiveMessage && prevActiveMessage.type === 'assistant') {
+            setMessages(p => {
+              if (p.some(m => m.id === prevActiveMessage.id)) {
+                return p;
+              }
+              const newMessages = [...p, { id: prevActiveMessage.id, ts: prevActiveMessage.ts, role: 'assistant', content: prevActiveMessage.content }];
+              newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+              return newMessages;
+            });
+          }
+          // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
+          return null; // activeMessage をクリア
+        });
 
-          setIsGeneratingResponse(false);
-        }
+        setIsGeneratingResponse(false);
       }
     }); // subscribeの閉じ括弧
 
