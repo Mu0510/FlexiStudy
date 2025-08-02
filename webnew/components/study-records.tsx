@@ -164,7 +164,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
             >
               <div className="grid grid-cols-[3.5rem_1fr] gap-x-4">
                 <div className="row-span-2 flex items-center justify-center">
-                  <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 dark:border-primary/20 dark:text-primary dark:bg-primary/10 text-base h-fit truncate">
+                  <Badge variant="outline" className="border-blue-200 text-blue-700 bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:bg-blue-900/30 text-base h-fit truncate">
                     {session.subject}
                   </Badge>
                 </div>
@@ -267,7 +267,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
       <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('prev', e)} disabled={isLoading}>
+            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('prev', e)} disabled={isLoading} className="dark:text-slate-200">
               <ChevronLeft className="w-4 h-4 mr-1" />
               前日
             </Button>

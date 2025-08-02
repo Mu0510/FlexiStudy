@@ -50,25 +50,25 @@ export function Settings() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="firstName">名前</Label>
-                  <Input id="firstName" defaultValue="田中" className="mt-1" />
+                  <Label htmlFor="firstName" className="dark:text-slate-200">名前</Label>
+                  <Input id="firstName" defaultValue="田中" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
                 </div>
                 <div>
-                  <Label htmlFor="lastName">姓</Label>
-                  <Input id="lastName" defaultValue="太郎" className="mt-1" />
+                  <Label htmlFor="lastName" className="dark:text-slate-200">姓</Label>
+                  <Input id="lastName" defaultValue="太郎" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
                 </div>
               </div>
               <div>
-                <Label htmlFor="email">メールアドレス</Label>
-                <Input id="email" type="email" defaultValue="tanaka@example.com" className="mt-1" />
+                <Label htmlFor="email" className="dark:text-slate-200">メールアドレス</Label>
+                <Input id="email" type="email" defaultValue="tanaka@example.com" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
               </div>
               <div>
-                <Label htmlFor="school">学校名</Label>
-                <Input id="school" defaultValue="○○高等学校" className="mt-1" />
+                <Label htmlFor="school" className="dark:text-slate-200">学校名</Label>
+                <Input id="school" defaultValue="○○高等学校" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
               </div>
               <div>
-                <Label htmlFor="grade">学年</Label>
-                <Input id="grade" defaultValue="3年生" className="mt-1" />
+                <Label htmlFor="grade" className="dark:text-slate-200">学年</Label>
+                <Input id="grade" defaultValue="3年生" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
               </div>
               <Button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
                 <Save className="w-4 h-4 mr-2" />
