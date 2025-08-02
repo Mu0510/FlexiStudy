@@ -11,7 +11,7 @@ interface MobileHeaderProps {
 
 export function MobileHeader({ onMenuClick, onChatClick }: MobileHeaderProps) {
   return (
-    <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-background border-b z-50">
+    <header className="lg:hidden fixed top-0 left-0 right-0 h-16 bg-white dark:bg-background border-b z-50">
       <div className="flex items-center justify-between h-full px-4">
         <div className="flex items-center space-x-3">
           <Button variant="ghost" size="sm" onClick={onMenuClick} className="p-2">
