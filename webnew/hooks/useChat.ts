@@ -78,17 +78,14 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const [activeMessage, setActiveMessage] = useState<ActiveMessage | null>(null);
   const activeMessageRef = useRef<ActiveMessage | null>(null);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
-  // toolCardsData は削除
+  const ws = useRef<WebSocket | null>(null);
+  const isConnecting = useRef(false); // 接続処理中フラグ
+  const requestIdCounter = useRef<number>(1);
+  const lastSentRequestId = useRef<number | null>(null);
 
   useEffect(() => {
     activeMessageRef.current = activeMessage;
   }, [activeMessage]);
-
-  const ws = useRef<WebSocket | null>(null);
-  const requestIdCounter = useRef<number>(1);
-  const lastSentRequestId = useRef<number | null>(null);
-  // pendingToolBodies は一旦削除し、ロジックを簡略化
-  // const pendingToolBodies = useRef<Map<string, { status: string, content: any }>>(new Map());
 
   const historyState = useRef({
     oldestTs: null as number | null,
@@ -99,20 +96,24 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     histReqId: 10000,
   });
 
-  // updateToolCardData ヘルパーは不要になったため削除
-
   useEffect(() => {
-    if (ws.current) return;
+    // 既に接続済み、または接続処理中の場合は何もしない
+    if (ws.current || isConnecting.current) return;
 
-    ws.current = new WebSocket(`wss://${window.location.hostname}:443/ws`);
+    isConnecting.current = true;
+    console.log('Attempting to connect WebSocket...');
 
-    ws.current.onopen = () => {
+    const socket = new WebSocket(`wss://${window.location.hostname}:443/ws`);
+    ws.current = socket;
+
+    socket.onopen = () => {
       console.log('WebSocket connected');
+      isConnecting.current = false;
       requestHistory(true);
       setIsGeneratingResponse(false);
     };
 
-    ws.current.onmessage = (event) => {
+    socket.onmessage = (event) => {
       console.log('[DEBUG] Received WebSocket message:', event.data);
       let msg;
       try {
@@ -460,22 +461,32 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       }
     };
 
-    ws.current.onclose = () => {
-      console.log('WebSocket disconnected');
+    socket.onclose = (event) => {
+      console.log('WebSocket disconnected:', event.code, event.reason);
+      isConnecting.current = false;
+      ws.current = null;
     };
 
-    ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
+    socket.onerror = (event) => {
+      console.error('WebSocket error:', event);
+      isConnecting.current = false;
     };
 
     return () => {
-      ws.current?.close();
-      ws.current = null;
+      console.log('Cleaning up WebSocket connection.');
+      // クリーンアップ関数が呼ばれたときに、socketが現在のws.currentと一致する場合のみ閉じる
+      if (ws.current === socket) {
+        socket.close();
+        ws.current = null;
+      }
     };
   }, []);
 
   const sendMessage = useCallback((messageData: { text: string; files?: FileInfo[] }) => {
-    if (!ws.current || isGeneratingResponse) return;
+    if (!ws.current || ws.current.readyState !== WebSocket.OPEN || isGeneratingResponse) {
+      console.warn("WebSocket is not open or busy, cannot send message.");
+      return;
+    }
 
     setIsGeneratingResponse(true);
 
@@ -532,13 +543,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     historyState.current.pendingHistory.add(id);
     const limit = isInitialLoad ? 30 : 20;
 
-    if (ws.current) {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({
         jsonrpc: '2.0',
         id,
         method: 'fetchHistory',
         params: { limit: limit, before: historyState.current.oldestTs }
       }));
+    } else {
+      console.warn("WebSocket is not open, cannot fetch history.");
+      historyState.current.isFetchingHistory = false;
     }
   }, []);
 
@@ -546,7 +560,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     if (!ws.current || !lastSentRequestId.current) return;
 
     const req = {
-      jsonrpc: '2.0',
+      jsonrpc: '20',
       id: lastSentRequestId.current,
       method: 'cancelSendMessage',
       params: {}
@@ -567,7 +581,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       histReqId: 10000,
     };
     // サーバーにもクリアを通知するWebSocketメッセージを送信
-    if (ws.current) {
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({
         jsonrpc: '2.0',
         method: 'clearHistory',
