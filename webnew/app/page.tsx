@@ -112,7 +112,7 @@ export default function StudyApp() {
   };
 
   return (
-    <div className={`min-h-screen bg-gradient-to-br from-neutral-100 to-neutral-300 ${isFullScreen ? 'overflow-hidden' : ''}`}>
+    <div className={`min-h-screen bg-background ${isFullScreen ? 'overflow-hidden' : ''}`}>
       <div className={isFullScreen ? 'hidden' : ''}>
         <MobileHeader
           onMenuClick={() => setIsMobileMenuOpen(true)}
