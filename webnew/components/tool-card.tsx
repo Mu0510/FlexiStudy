@@ -39,12 +39,12 @@ export function ToolCard({ toolCard, onConfirm }: ToolCardProps) {
       {isExpanded && (
         <CardContent className="p-4">
           {command && (
-            <div className="flex items-center space-x-2 p-2 bg-gray-100 rounded-md">
+            <div className="flex items-center space-x-2 p-2 bg-muted rounded-md">
               <Code size={16} />
               <pre className="text-sm"><code>{command}</code></pre>
             </div>
           )}
-          <div className="mt-2 p-2 bg-gray-800 text-white rounded-md">
+          <div className="mt-2 p-2 bg-background/50 text-foreground rounded-md">
             <pre className="text-sm whitespace-pre-wrap"><code>{content}</code></pre>
           </div>
           {!isConfirmed && (

@@ -59,23 +59,23 @@ export function ToolCardItem({ msg, getToolIconText, getRelativePath }: ToolCard
   return (
     <div key={msg.id} className={cn("flex", "justify-start")}>
       <Card className={cn(
-        "tool-card bg-gray-100 text-gray-900 rounded-lg p-3 shadow-md mx-auto w-[95%]", // AIメッセージと同じ幅と中央揃え
+        "tool-card bg-muted text-muted-foreground rounded-lg p-3 shadow-md mx-auto w-[95%]", // AIメッセージと同じ幅と中央揃え
         msg.status === "running" && "tool-card--running", // running クラスを追加
         msg.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
         msg.status === "error" && "tool-card--error border-l-4 border-red-500" // error クラスとボーダー
       )}>
         <CardHeader ref={headerRef} className="flex flex-row items-center justify-between p-0 mb-1">
           <div className="flex items-center space-x-2">
-            <span className="tool-card__icon-text text-xs border border-gray-500 rounded px-1 py-0.5">
+            <span className="tool-card__icon-text text-xs border border-muted-foreground rounded px-1 py-0.5">
               {getToolIconText(msg.icon)}
             </span>
-            <CardTitle className="tool-card__title text-sm font-medium text-gray-800">
+            <CardTitle className="tool-card__title text-sm font-medium text-foreground">
               {msg.label || "Tool Call"}
             </CardTitle>
           </div>
           {/* chat.js の tool-card__line-break と tool-card__command に相当 */}
           <div className="tool-card__line-break"></div>
-          <code className="tool-card__command text-xs text-gray-600">
+          <code className="tool-card__command text-xs text-muted-foreground">
             {getRelativePath(msg.command)}
           </code>
           <div className="tool-card__status-indicator">
@@ -89,9 +89,9 @@ export function ToolCardItem({ msg, getToolIconText, getRelativePath }: ToolCard
             )}
           </div>
         </CardHeader>
-        <CardContent className="p-0 text-sm text-gray-700">
+        <CardContent className="p-0 text-sm text-muted-foreground">
           {/* Removed toolCallConfirmation logic for now, focusing on content */}
-          <pre ref={bodyRef} className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 p-2 rounded not-prose overflow-y-auto" style={{ maxHeight: bodyMaxHeight }}>
+          <pre ref={bodyRef} className="tool-card__body text-xs whitespace-pre-wrap break-words bg-background/50 p-2 rounded not-prose overflow-y-auto" style={{ maxHeight: bodyMaxHeight }}>
             <div dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
           </pre>
         </CardContent>
