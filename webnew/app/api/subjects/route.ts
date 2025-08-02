@@ -4,7 +4,7 @@ import path from 'path';
 
 export async function GET() {
   return new Promise((resolve) => {
-    const scriptPath = path.join(process.cwd(), 'manage_log.py');
+    const scriptPath = path.join(process.cwd(), '..', 'manage_log.py');
     exec(`python3 ${scriptPath} unique_subjects`, (error, stdout, stderr) => {
       if (error) {
         console.error(`exec error: ${error}`);
