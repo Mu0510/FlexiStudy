@@ -26,6 +26,7 @@ let geminiProcess = null;
 const history = [];
 let ongoingText = '';
 let isRestartingGemini = false; // 新しいフラグ
+let currentAssistantId = null; // ★ 返信ごとに一意なIDを保持する変数
 
 function broadcast(wss, json){
   const str = JSON.stringify(json);
@@ -97,11 +98,13 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
 
                 // --- Start of existing message processing logic ---
                 if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
-                    const rec = { id:String(Date.now()), ts:Date.now(),
+                    // ★ 修正点: currentAssistantId を使用
+                    const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(),
                                  role:'assistant', text:ongoingText.trimEnd() };
                     history.push(rec);
                     console.log('[History] Saved assistant message (before other message): ' + JSON.stringify(rec));
                     ongoingText = '';
+                    currentAssistantId = null; // ★ リセット
                 }
 
                 if (msg.method === 'streamAssistantMessageChunk') {
@@ -109,7 +112,10 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                     if (c?.text) {
                         ongoingText += c.text;
                     }
-                    // streamAssistantMessageChunk はそのままブロードキャスト
+                    // ★ 修正点: currentAssistantId をメッセージに付与
+                    if (currentAssistantId) {
+                      msg.params.messageId = currentAssistantId;
+                    }
                     broadcast(wss, msg);
                     continue;
                 }
@@ -117,9 +123,12 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                 const methodsToExclude = ['initialize', 'requestToolCallConfirmation', 'updateToolCall'];
                 if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
                     if (ongoingText.length > 0) {
-                        const rec = { id:String(Date.now()), ts:Date.now(),
+                        // ★ 修正点: currentAssistantId を使用
+                        const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(),
                                      role:'assistant', text:ongoingText.trimEnd() };
                         broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
+                        ongoingText = '';
+                        currentAssistantId = null; // ★ リセット
                     }
                     broadcast(wss, msg);
                     continue;
@@ -301,7 +310,8 @@ app.prepare().then(() => {
                 ongoingText = '';
             }
 
-            
+            // ★ 修正点: アシスタントの返信IDをここで生成
+            currentAssistantId = `assistant-${Date.now()}`;
 
             // Save the original message with files to history for the UI
             const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
