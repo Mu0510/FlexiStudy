@@ -111,3 +111,6 @@ study_log_20250802_224212_517572.db: Before daily goal update.
 study_log_20250802_224218_991457.db: Before daily goal update.
 study_log_20250802_224245_288579.db: Before daily goal update.
 study_log_20250802_224335_895366.db: Before daily goal update.
+study_log_20250802_232033_312127.db: Before daily summary update.
+study_log_20250802_232455_487464.db: Before daily summary update.
+study_log_20250802_233611_664753.db: Before daily summary update.

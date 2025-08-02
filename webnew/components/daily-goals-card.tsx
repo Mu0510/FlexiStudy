@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { Target, CheckCircle2, Circle, Play } from "lucide-react"
+import { Flag, CheckCircle2, Circle, Play } from "lucide-react"
 
 // 型定義
 interface Goal {
@@ -36,7 +36,7 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
       <Card className={className}>
         <CardHeader>
           <CardTitle className="flex items-center space-x-2 text-neutral-800 dark:text-neutral-200">
-            <Target className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+            <Flag className="w-5 h-5 text-primary-600 dark:text-primary-400" />
             <span>{title}</span>
           </CardTitle>
         </CardHeader>
@@ -54,7 +54,7 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center space-x-2 text-neutral-800 dark:text-neutral-200">
-            <Target className="w-5 h-5 text-primary-600 dark:text-primary-400" />
+            <Flag className="w-5 h-5 text-primary-600 dark:text-primary-400" />
             <span>{title}</span>
           </CardTitle>
           <Badge variant="secondary" className="bg-primary-100 text-primary-700 dark:bg-primary-900/50 dark:text-primary-400">

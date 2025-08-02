@@ -358,8 +358,9 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 </div>
               </div>
               <div className="mt-6">
-                <DailyGoalsCard 
+                <DailyGoalsCard
                   title="この日の目標"
+                  className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg"
                   goals={logData.daily_summary.goals ?? []}
                   stats={{
                     completedGoals: logData.daily_summary.goals?.filter(g => g.completed).length ?? 0,
