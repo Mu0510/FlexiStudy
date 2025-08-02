@@ -1,6 +1,6 @@
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { marked } from 'markdown';
+import { marked } from 'marked';
 import * as Diff from 'diff'; // jsdiff ライブラリをインポート
 import { useWebSocket } from '@/context/WebSocketContext'; // WebSocketContextからuseWebSocketをインポート
 
