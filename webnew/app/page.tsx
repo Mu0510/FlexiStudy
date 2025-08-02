@@ -5,9 +5,7 @@ import { Sidebar } from "@/components/sidebar"
 import { Dashboard } from "@/components/dashboard"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
-import { MessageSquare } from "lucide-react"
 import Image from "next/image"
-import { motion } from "framer-motion"
 
 const StudyRecords = dynamic(() => import("@/components/study-records").then(mod => mod.StudyRecords), {
   ssr: false,
@@ -144,15 +142,10 @@ export default function StudyApp() {
 
         {/* Floating Chat Button for Desktop */}
         {!isNewChatOpen && (
-          <motion.div
-            className="hidden lg:block fixed bottom-8 right-8 z-50"
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          >
+          <div className="hidden lg:block fixed bottom-8 right-8 z-50">
             <Button
               onClick={() => setIsNewChatOpen(true)}
-              className="rounded-2xl w-14 h-14 bg-white shadow-lg hover:scale-110 transition-transform p-0 flex items-center justify-center"
+              className="rounded-2xl w-14 h-14 bg-white shadow-lg hover:scale-110 transition-transform p-0 flex items-center justify-center focus-visible:ring-0 focus-visible:ring-offset-0"
             >
               <Image
                 src="/images/app-icon.png"
@@ -162,7 +155,7 @@ export default function StudyApp() {
                 className="rounded-xl"
               />
             </Button>
-          </motion.div>
+          </div>
         )}
         
         <NewChatPanel 
