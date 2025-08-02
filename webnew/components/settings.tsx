@@ -43,7 +43,7 @@ export function Settings() {
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <User className="w-5 h-5 text-blue-600" />
+                <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <span>プロフィール設定</span>
               </CardTitle>
             </CardHeader>
@@ -80,7 +80,7 @@ export function Settings() {
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <Bell className="w-5 h-5 text-green-600" />
+                <Bell className="w-5 h-5 text-green-600 dark:text-green-400" />
                 <span>通知設定</span>
               </CardTitle>
             </CardHeader>
@@ -120,7 +120,7 @@ export function Settings() {
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <Palette className="w-5 h-5 text-purple-600" />
+                <Palette className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 <span>テーマ設定</span>
               </CardTitle>
             </CardHeader>
@@ -163,7 +163,7 @@ export function Settings() {
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <Shield className="w-5 h-5 text-orange-600" />
+                <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 <span>データ管理</span>
               </CardTitle>
             </CardHeader>
