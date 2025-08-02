@@ -70,8 +70,8 @@ export function ExamAnalysis() {
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-slate-800">模試分析</h1>
-          <p className="text-slate-600 mt-1">模試結果を詳細に分析して弱点を克服しましょう</p>
+          <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">模試分析</h1>
+          <p className="text-slate-600 dark:text-slate-400 mt-1">模試結果を詳細に分析して弱点を克服しましょう</p>
         </div>
 
         <div className="flex items-center space-x-3">
@@ -91,37 +91,37 @@ export function ExamAnalysis() {
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-2xl font-bold text-slate-800">{examResults[0].name}</h2>
-              <p className="text-slate-600">{examResults[0].date}</p>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{examResults[0].name}</h2>
+              <p className="text-slate-600 dark:text-slate-400">{examResults[0].date}</p>
             </div>
-            <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-lg px-4 py-2">
+            <Badge className="bg-blue-100 text-blue-800 border-blue-200 text-lg px-4 py-2 dark:bg-blue-900/50 dark:text-blue-200 dark:border-blue-800">
               総合得点: {examResults[0].totalScore}/{examResults[0].maxScore}
             </Badge>
           </div>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="text-center">
-              <div className="text-3xl font-bold text-blue-700">{examResults[0].rank}</div>
-              <div className="text-sm text-slate-600">全国順位</div>
+              <div className="text-3xl font-bold text-blue-700 dark:text-blue-400">{examResults[0].rank}</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">全国順位</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-green-700">
+              <div className="text-3xl font-bold text-green-700 dark:text-green-400">
                 {Math.round((examResults[0].totalScore / examResults[0].maxScore) * 100)}%
               </div>
-              <div className="text-sm text-slate-600">得点率</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">得点率</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-purple-700">
+              <div className="text-3xl font-bold text-purple-700 dark:text-purple-400">
                 {examResults[0].totalParticipants.toLocaleString()}
               </div>
-              <div className="text-sm text-slate-600">受験者数</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">受験者数</div>
             </div>
             <div className="text-center">
-              <div className="text-3xl font-bold text-orange-700">
+              <div className="text-3xl font-bold text-orange-700 dark:text-orange-400">
                 {examResults[0].rank - examResults[1].rank > 0 ? "+" : ""}
                 {examResults[0].rank - examResults[1].rank}
               </div>
-              <div className="text-sm text-slate-600">前回比</div>
+              <div className="text-sm text-slate-600 dark:text-slate-400">前回比</div>
             </div>
           </div>
         </CardContent>
@@ -132,8 +132,8 @@ export function ExamAnalysis() {
         <div className="lg:col-span-2">
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <BarChart3 className="w-5 h-5 text-blue-600" />
+              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-100">
+                <BarChart3 className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                 <span>科目別詳細分析</span>
               </CardTitle>
             </CardHeader>
@@ -142,8 +142,8 @@ export function ExamAnalysis() {
                 <div key={index} className="p-4 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center space-x-3">
-                      <h4 className="font-semibold text-slate-800">{subject.name}</h4>
-                      <Badge variant="outline" className="border-slate-200 text-slate-600">
+                      <h4 className="font-semibold text-slate-800 dark:text-slate-100">{subject.name}</h4>
+                      <Badge variant="outline" className="border-slate-200 text-slate-600 dark:border-slate-600 dark:text-slate-400">
                         順位: {subject.rank}位
                       </Badge>
                     </div>
@@ -153,12 +153,12 @@ export function ExamAnalysis() {
                   </div>
 
                   <div className="space-y-2">
-                    <div className="flex justify-between text-sm text-slate-600">
+                    <div className="flex justify-between text-sm text-slate-600 dark:text-slate-400">
                       <span>得点率: {Math.round((subject.score / subject.max) * 100)}%</span>
                       <span>平均: {subject.average}点</span>
                     </div>
                     <Progress value={(subject.score / subject.max) * 100} className="h-2" />
-                    <div className="flex justify-between text-xs text-slate-500">
+                    <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400">
                       <span>
                         平均との差: {subject.score > subject.average ? "+" : ""}
                         {subject.score - subject.average}点
@@ -176,8 +176,8 @@ export function ExamAnalysis() {
         <div>
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <AlertCircle className="w-5 h-5 text-orange-600" />
+              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-100">
+                <AlertCircle className="w-5 h-5 text-orange-600 dark:text-orange-400" />
                 <span>重点改善分野</span>
               </CardTitle>
             </CardHeader>
@@ -189,20 +189,20 @@ export function ExamAnalysis() {
                       variant="outline"
                       className={
                         area.priority === "high"
-                          ? "border-red-200 text-red-700 bg-red-50"
-                          : "border-orange-200 text-orange-700 bg-orange-50"
+                          ? "border-red-200 text-red-700 bg-red-50 dark:border-red-800 dark:text-red-400 dark:bg-red-900/50"
+                          : "border-orange-200 text-orange-700 bg-orange-50 dark:border-orange-800 dark:text-orange-400 dark:bg-orange-900/50"
                       }
                     >
                       {area.subject}
                     </Badge>
-                    <span className="text-sm font-medium text-slate-600">{area.accuracy}%</span>
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-400">{area.accuracy}%</span>
                   </div>
-                  <div className="text-sm text-slate-800 font-medium mb-2">{area.topic}</div>
+                  <div className="text-sm text-slate-800 font-medium mb-2 dark:text-slate-100">{area.topic}</div>
                   <Progress value={area.accuracy} className="h-1" />
                   <Button
                     size="sm"
                     variant="outline"
-                    className="w-full mt-2 text-xs border-blue-200 text-blue-700 hover:bg-blue-50 bg-transparent"
+                    className="w-full mt-2 text-xs border-blue-200 text-blue-700 hover:bg-blue-50 bg-transparent dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/50"
                   >
                     対策問題を開始
                   </Button>
@@ -216,29 +216,29 @@ export function ExamAnalysis() {
       {/* Exam History */}
       <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <TrendingUp className="w-5 h-5 text-green-600" />
+          <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-100">
+            <TrendingUp className="w-5 h-5 text-green-600 dark:text-green-400" />
             <span>成績推移</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
             {examResults.map((exam, index) => (
-              <div key={exam.id} className="flex items-center space-x-4 p-4 bg-slate-50 rounded-lg">
+              <div key={exam.id} className="flex items-center space-x-4 p-4 bg-slate-50 rounded-lg dark:bg-slate-700/50">
                 <div className="flex-shrink-0">
-                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                    <FileText className="w-6 h-6 text-blue-600" />
+                  <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center dark:bg-blue-900/50">
+                    <FileText className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                   </div>
                 </div>
 
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
-                    <h4 className="font-semibold text-slate-800">{exam.name}</h4>
-                    <Badge variant="outline" className="border-slate-200 text-slate-600">
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100">{exam.name}</h4>
+                    <Badge variant="outline" className="border-slate-200 text-slate-600 dark:border-slate-600 dark:text-slate-400">
                       {exam.date}
                     </Badge>
                   </div>
-                  <div className="flex items-center space-x-6 text-sm text-slate-600">
+                  <div className="flex items-center space-x-6 text-sm text-slate-600 dark:text-slate-400">
                     <span>
                       総合: {exam.totalScore}/{exam.maxScore}
                     </span>
