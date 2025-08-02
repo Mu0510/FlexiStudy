@@ -169,6 +169,21 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         }
         setIsGeneratingResponse(false);
         onMessageReceived?.();
+      } else if (msg.method === 'addMessage') {
+        const { message } = msg.params;
+        setMessages(prev => {
+          // 重複を避ける
+          if (prev.some(m => m.id === message.id)) {
+            return prev;
+          }
+          return [...prev, {
+            id: message.id,
+            role: message.role,
+            content: message.text,
+            files: message.files || [],
+          }];
+        });
+        onMessageReceived?.();
       } else if (msg.method === 'pushMessage') {
         setMessages(prev => [...prev, {
           id: `msg-${Date.now()}`,
