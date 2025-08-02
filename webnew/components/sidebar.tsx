@@ -82,7 +82,7 @@ export function Sidebar({
         )}
       >
         {/* Desktop Header */}
-        <div className="p-4 border-b h-[65px]">
+        <div className="p-4 border-b h-[65px] bg-white dark:bg-background">
             <div className="flex items-center justify-between h-full">
               {!collapsed && (
                 <div className="flex items-center space-x-3">
@@ -109,7 +109,7 @@ export function Sidebar({
         <Sheet open={isMobileMenuOpen} onOpenChange={setIsMobileMenuOpen}>
           <SheetContent side="left" className="w-64 bg-background p-0 flex flex-col">
             {/* Mobile Header */}
-            <div className="p-4 border-b">
+            <div className="p-4 border-b bg-white dark:bg-background">
                 <div className="flex items-center space-x-3">
                     <Image src="/images/logo.svg" alt="FlexiStudy Logo" width={32} height={32} />
                     <h1 className="text-xl font-bold text-foreground">FlexiStudy</h1>
