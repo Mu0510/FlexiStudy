@@ -34,6 +34,7 @@ export default function StudyApp() {
   });
   const [uniqueSubjects, setUniqueSubjects] = useState<string[]>([]);
   const [subjectColors, setSubjectColors] = useState<Record<string, string>>({});
+  const [dashboardData, setDashboardData] = useState(null);
 
   const chatStateBeforeSystemView = useRef(false);
 
@@ -101,6 +102,23 @@ export default function StudyApp() {
   }, [selectedDate]);
 
   useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const response = await fetch('/api/dashboard');
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        setDashboardData(data);
+      } catch (e) {
+        console.error("Failed to fetch dashboard data:", e);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
     const fetchInitialData = async () => {
       try {
         // Fetch unique subjects
@@ -160,7 +178,7 @@ export default function StudyApp() {
   const renderActiveView = () => {
     switch (activeView) {
       case "dashboard":
-        return <Dashboard />;
+        return <Dashboard dashboardData={dashboardData} />;
       case "records":
         return <StudyRecords 
                   logData={logData} 

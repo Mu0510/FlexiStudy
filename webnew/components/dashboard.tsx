@@ -5,28 +5,33 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { Target, Clock, TrendingUp, BookOpen, Calendar, Award, Zap, CheckCircle2, Circle, Play } from "lucide-react"
+import { Skeleton } from "@/components/ui/skeleton"
 
-export function Dashboard() {
-  const todayGoals = [
-    { id: 1, subject: "物理", task: "落下運動 基本問題 38~42", completed: true, problems: 5 },
-    { id: 2, subject: "物理", task: "落下運動 発展問題 43~53", completed: true, problems: 11 },
-    { id: 3, subject: "物理", task: "力のつりあい 基本問題 61~69", completed: false, problems: 9 },
-    { id: 4, subject: "数学", task: "関数の極限 78~98", completed: false, problems: 21 },
-    { id: 5, subject: "数学", task: "三角関数と極限 99~103", completed: false, problems: 5 },
-  ]
+export function Dashboard({ dashboardData }) {
+  const { studyStats, todayGoals, recentSessions } = dashboardData || {};
 
-  const studyStats = {
-    todayTime: 86,
-    weeklyTime: 420,
-    streak: 12,
-    completedGoals: 2,
-    totalGoals: 5,
+  if (!dashboardData) {
+    return (
+      <div className="space-y-6 pt-16 lg:pt-0">
+        <Skeleton className="h-24 w-full rounded-2xl" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2">
+            <Skeleton className="h-96 w-full" />
+          </div>
+          <div className="space-y-6">
+            <Skeleton className="h-64 w-full" />
+            <Skeleton className="h-48 w-full" />
+          </div>
+        </div>
+      </div>
+    );
   }
-
-  const recentSessions = [
-    { subject: "物理", duration: 63, time: "14:44-15:47", topic: "セミナー物理 落下運動 発展問題 43~51" },
-    { subject: "物理", duration: 23, time: "15:59-16:22", topic: "セミナー物理 落下運動 発展問題 43~51" },
-  ]
 
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
