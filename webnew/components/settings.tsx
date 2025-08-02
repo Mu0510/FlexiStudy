@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useTheme } from "next-themes"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,10 +11,20 @@ import { Badge } from "@/components/ui/badge"
 import { SettingsIcon, User, Bell, Palette, Shield, Download, Upload, Trash2, Save } from "lucide-react"
 
 export function Settings() {
-  const [darkMode, setDarkMode] = useState(false)
+  const { theme, setTheme, resolvedTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
   const [notifications, setNotifications] = useState(true)
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
+
+  // useEffect only runs on the client, so we can safely show the UI
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  if (!mounted) {
+    return null // or a loading skeleton
+  }
 
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
@@ -122,7 +133,13 @@ export function Settings() {
                   </Label>
                   <p className="text-sm text-slate-600">暗いテーマに切り替える</p>
                 </div>
-                <Switch id="darkMode" checked={darkMode} onCheckedChange={setDarkMode} />
+                <Switch
+                  id="darkMode"
+                  checked={resolvedTheme === 'dark'}
+                  onCheckedChange={(checked) => {
+                    setTheme(checked ? 'dark' : 'light')
+                  }}
+                />
               </div>
 
               <div>
