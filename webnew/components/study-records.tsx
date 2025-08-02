@@ -172,7 +172,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     }
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 pb-6">
         {logData.sessions.map((session) => (
           <Card key={session.session_id} className="bg-white dark:bg-slate-800 border-0 shadow-lg rounded-lg overflow-hidden">
             <CardHeader 
