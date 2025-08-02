@@ -114,3 +114,30 @@ study_log_20250802_224335_895366.db: Before daily goal update.
 study_log_20250802_232033_312127.db: Before daily summary update.
 study_log_20250802_232455_487464.db: Before daily summary update.
 study_log_20250802_233611_664753.db: Before daily summary update.
+study_log_20250803_002000_789331.db: Before adding a goal to a specific date.
+study_log_20250803_002000_790344.db: Before daily goal update.
+study_log_20250803_002028_015385.db: Before adding a goal to a specific date.
+study_log_20250803_002028_016348.db: Before daily goal update.
+study_log_20250803_003402_890010.db: Before daily goal update.
+study_log_20250803_004853_300096.db: Before adding a goal to a specific date.
+study_log_20250803_004853_301123.db: Before daily goal update.
+study_log_20250803_005340_345224.db: Before daily goal update.
+study_log_20250803_005401_358388.db: Before adding a goal to a specific date.
+study_log_20250803_005401_359774.db: Before daily goal update.
+study_log_20250803_005432_797312.db: Before daily goal update.
+study_log_20250803_005438_070000.db: Before daily goal update.
+study_log_20250803_005558_588422.db: Before adding a goal to a specific date.
+study_log_20250803_005558_589475.db: Before daily goal update.
+study_log_20250803_005624_633093.db: Before daily goal update.
+study_log_20250803_005627_336788.db: Before daily goal update.
+study_log_20250803_010221_171868.db: For Redo
+study_log_20250803_005624_633093.db: Undo operation
+study_log_20250803_010348_382780.db: Before daily goal update.
+study_log_20250803_010359_404936.db: Before adding a goal to a specific date.
+study_log_20250803_010359_405969.db: Before daily goal update.
+study_log_20250803_010541_819406.db: Before adding a goal to a specific date.
+study_log_20250803_010541_820434.db: Before daily goal update.
+study_log_20250803_010623_896922.db: Before daily goal update.
+study_log_20250803_010643_674133.db: Before daily goal update.
+study_log_20250803_011005_718188.db: Before adding a goal to a specific date.
+study_log_20250803_011005_719402.db: Before daily goal update.

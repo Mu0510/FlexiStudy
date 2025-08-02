@@ -13,7 +13,13 @@ export async function POST(request: Request) {
 
     // goalオブジェクトをエスケープ処理したJSON文字列に変換
     const goalJsonString = JSON.stringify(JSON.stringify(goal));
-    const today = new Date().toISOString().split('T')[0];
+    // JSTで今日の日付を取得 (YYYY-MM-DD形式)
+    const today = new Date().toLocaleDateString('ja-JP', {
+      timeZone: 'Asia/Tokyo',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).replace(/\//g, '-');
 
     const pythonScriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
     // 新しいコマンド `add_goal_to_date` を呼び出す
