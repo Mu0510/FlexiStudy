@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
+import { getSubjectStyle } from "@/lib/utils";
 import { SettingsIcon, User, Bell, Palette, Shield, Download, Upload, Trash2, Save } from "lucide-react"
 
 interface SettingsProps {
@@ -70,9 +71,13 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
               {uniqueSubjects.length > 0 ? (
                 uniqueSubjects.map((subject) => (
                   <div key={subject} className="flex items-center justify-between">
-                    <Label htmlFor={`color-${subject}`} className="text-base font-medium text-slate-800 dark:text-slate-200">
+                    <Badge
+                      variant="outline"
+                      className="text-base h-fit truncate"
+                      style={getSubjectStyle(subjectColors[subject])}
+                    >
                       {subject}
-                    </Label>
+                    </Badge>
                     <Input
                       id={`color-${subject}`}
                       type="color"
