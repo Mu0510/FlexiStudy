@@ -400,8 +400,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                       </div>
                     </CardHeader>
                     <CardContent className="p-0 text-sm">
-                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-muted p-2 rounded not-prose max-h-48 overflow-auto">
-                        <div className="text-muted-foreground" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-900 p-2 rounded not-prose max-h-48 overflow-auto">
+                        <div className="text-gray-200" dangerouslySetInnerHTML={{ __html: msg.content }} />
                       </pre>
                     </CardContent>
                   </Card>
