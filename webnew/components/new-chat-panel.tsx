@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils"
-// Import Message interface directly from useChat
 import { useChat } from "@/hooks/useChat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ReactMarkdown from "react-markdown";
@@ -17,10 +16,12 @@ import remarkBreaks from "remark-breaks";
 import { motion, AnimatePresence } from "framer-motion";
 
 interface NewChatPanelProps {
-  isOpen: boolean
-  onClose: () => void
-  isFullScreen: boolean
-  setIsFullScreen: (isFullScreen: boolean) => void
+  showAs?: 'floating' | 'embedded';
+  // --- Floating mode props ---
+  isOpen?: boolean;
+  onClose?: () => void;
+  isFullScreen?: boolean;
+  setIsFullScreen?: (isFullScreen: boolean) => void;
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -57,7 +58,15 @@ const formatFileSize = (bytes: number): string => {
 };
 
 
-export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }: NewChatPanelProps) {
+export function NewChatPanel({ 
+  showAs = 'floating',
+  isOpen, 
+  onClose, 
+  isFullScreen, 
+  setIsFullScreen 
+}: NewChatPanelProps) {
+  const isFloating = showAs === 'floating';
+
   const [input, setInput] = useState("")
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
@@ -294,7 +303,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
 
   // Effect to scroll to bottom on initial open
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen || !isFloating) {
       const container = messagesContainerRef.current;
       if (container) {
           // Force scroll to bottom on initial open
@@ -304,7 +313,7 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
           });
       }
     }
-  }, [isOpen]);
+  }, [isOpen, isFloating]);
 
 
   const panelVariants = {
@@ -320,240 +329,257 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
     }
   };
 
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          className={cn(
-            "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl flex flex-col z-50",
-            isFullScreen 
-              ? "fixed inset-0"
-              : "fixed bottom-4 right-4 w-96 h-[600px]"
-          )}
-          variants={panelVariants}
-          initial="closed"
-          animate="open"
-          exit="closed"
-        >
-          <input
-            type="file"
-            multiple
-            ref={fileInputRef}
-            onChange={handleFileSelect}
-            className="hidden"
-          />
-          <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between">
-            <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Gemini Chat</h2>
-            <div className="flex items-center space-x-2">
-              <Button variant="ghost" size="sm" onClick={() => setIsFullScreen(!isFullScreen)} className="p-2">
-                {isFullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-              </Button>
-              <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
-                <X className="w-4 h-4" />
-              </Button>
+  const ChatContent = (
+    <>
+      <input
+        type="file"
+        multiple
+        ref={fileInputRef}
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+      {isFloating && onClose && setIsFullScreen && (
+        <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Gemini Chat</h2>
+          <div className="flex items-center space-x-2">
+            <Button variant="ghost" size="sm" onClick={() => setIsFullScreen(!isFullScreen)} className="p-2">
+              {isFullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={onClose} className="p-2">
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+        <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
+        {isFetchingHistory && (
+          <div className="flex justify-center items-center py-4">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+          </div>
+        )}
+        {messages.map((msg) => {
+          // Render tool messages
+          if (msg.type === "tool") {
+            return (
+              <Card key={msg.id} className={cn(
+                "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
+                "w-11/12 mx-auto my-1 mb-3",
+                msg.status === "running" && "tool-card--running",
+                msg.status === "finished" && "tool-card--finished border-l-4 border-green-500",
+                msg.status === "error" && "tool-card--error border-l-4 border-red-500"
+              )}>
+                <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="tool-card__icon-text text-xs border border-gray-500 dark:border-gray-400 rounded px-1 py-0.5">
+                      {getToolIconText(msg.icon)}
+                    </span>
+                    <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200">
+                      {msg.label || "Tool Call"}
+                    </CardTitle>
+                  </div>
+                  <div className="tool-card__line-break"></div>
+                  <code className="tool-card__command text-xs text-gray-600 dark:text-gray-400">
+                    {getRelativePath(msg.command)}
+                  </code>
+                  <div className="tool-card__status-indicator">
+                    {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                    {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+                    {msg.status === "running" && (
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0 text-sm">
+                  <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 dark:bg-gray-900 p-2 rounded not-prose max-h-48 overflow-auto">
+                    <div className="text-gray-200 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: msg.content }} />
+                  </pre>
+                </CardContent>
+              </Card>
+            );
+          } else {
+            // Render user/assistant messages
+            return (
+              <div key={msg.id} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
+                {/* File Cards for User Messages */}
+                {msg.role === 'user' && msg.files && msg.files.length > 0 && (
+                  <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
+                    <div className="w-full flex flex-col gap-2 items-end">
+                      {msg.files.map((file, index) => (
+                        <div key={index} className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
+                          <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                          <span className="font-medium text-gray-700 dark:text-gray-300 truncate">{file.name}</span>
+                          <span className="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Message Bubble */}
+                {msg.content && (
+                  <div
+                      className={cn(
+                        "prose prose-sm dark:prose-invert",
+                        msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
+                      )}
+                    >
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm, remarkBreaks]}
+                        rehypePlugins={[rehypeRaw]}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                )}
+              </div>
+            );
+          }
+        })}
+
+        {/* Render activeMessage (thinking bubble or streaming assistant message) */}
+        {activeMessage && (
+          <div className={cn("flex space-x-3", "justify-start")}>
+            <div
+              className={cn(
+                "prose prose-sm dark:prose-invert mx-auto w-[95%]",
+                activeMessage.thoughtMode && "animate-pulse" // Apply pulse for thought mode
+              )}
+            >
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                rehypePlugins={[rehypeRaw]}
+              >
+                {activeMessage.content}
+              </ReactMarkdown>
+              {console.log("Active Message Content:", activeMessage.content)} {/* ここにログを追加 */}
             </div>
           </div>
+        )}
+        <div ref={scrollAnchorRef} />
+        </div>
+      </div>
 
-          <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto"> {/* Added ref and onScroll here */}
-            <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
-            {isFetchingHistory && (
-              <div className="flex justify-center items-center py-4">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
-              </div>
-            )}
-            {messages.map((msg) => {
-              // Render tool messages
-              if (msg.type === "tool") {
-                return (
-                  <Card key={msg.id} className={cn(
-                    "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
-                    "w-11/12 mx-auto my-1 mb-3",
-                    msg.status === "running" && "tool-card--running",
-                    msg.status === "finished" && "tool-card--finished border-l-4 border-green-500",
-                    msg.status === "error" && "tool-card--error border-l-4 border-red-500"
-                  )}>
-                    <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
-                      <div className="flex items-center space-x-2">
-                        <span className="tool-card__icon-text text-xs border border-gray-500 dark:border-gray-400 rounded px-1 py-0.5">
-                          {getToolIconText(msg.icon)}
-                        </span>
-                        <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200">
-                          {msg.label || "Tool Call"}
-                        </CardTitle>
-                      </div>
-                      <div className="tool-card__line-break"></div>
-                      <code className="tool-card__command text-xs text-gray-600 dark:text-gray-400">
-                        {getRelativePath(msg.command)}
-                      </code>
-                      <div className="tool-card__status-indicator">
-                        {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                        {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
-                        {msg.status === "running" && (
-                          <span className="relative flex h-3 w-3">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
-                          </span>
+      <div className="flex-shrink-0 px-4 pt-2 pb-4 flex justify-center">
+        <div className="w-full max-w-prose">
+            <div className="relative w-[95%] mx-auto flex flex-col rounded-2xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-2 transition-colors shadow-lg -mt-10">
+              {/* File Preview Section */}
+              {selectedFiles.length > 0 && (
+                <div className="mb-2 p-2 border-b border-gray-200 dark:border-slate-700">
+                  <div className="flex space-x-2 overflow-x-auto">
+                    {selectedFiles.map((file, index) => (
+                      <div key={index} className={cn(
+                        "flex-shrink-0 bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm relative",
+                        isUploading && "opacity-50"
+                      )}>
+                        <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                        <span className="font-medium text-gray-700 dark:text-gray-300 truncate max-w-[100px]">{file.name}</span>
+                        <span className="text-gray-500 dark:text-gray-400 text-xs">{formatFileSize(file.size)}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 rounded-full disabled:pointer-events-none"
+                          onClick={() => handleRemoveFile(file)}
+                          disabled={isUploading}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                        {isUploading && (
+                          <div className="absolute bottom-0 left-0 right-0 h-1">
+                            <Progress value={uploadProgress} className="h-1" />
+                          </div>
                         )}
                       </div>
-                    </CardHeader>
-                    <CardContent className="p-0 text-sm">
-                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 dark:bg-gray-900 p-2 rounded not-prose max-h-48 overflow-auto">
-                        <div className="text-gray-200 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: msg.content }} />
-                      </pre>
-                    </CardContent>
-                  </Card>
-                );
-              } else {
-                // Render user/assistant messages
-                return (
-                  <div key={msg.id} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
-                    {/* File Cards for User Messages */}
-                    {msg.role === 'user' && msg.files && msg.files.length > 0 && (
-                      <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
-                        <div className="w-full flex flex-col gap-2 items-end">
-                          {msg.files.map((file, index) => (
-                            <div key={index} className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
-                              <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                              <span className="font-medium text-gray-700 dark:text-gray-300 truncate">{file.name}</span>
-                              <span className="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Message Bubble */}
-                    {msg.content && (
-                      <div
-                          className={cn(
-                            "prose prose-sm dark:prose-invert",
-                            msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
-                          )}
-                        >
-                          <ReactMarkdown
-                            remarkPlugins={[remarkGfm, remarkBreaks]}
-                            rehypePlugins={[rehypeRaw]}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
-                        </div>
-                    )}
+                    ))}
                   </div>
-                );
-              }
-            })}
+                </div>
+              )}
 
-            {/* Render activeMessage (thinking bubble or streaming assistant message) */}
-            {activeMessage && (
-              <div className={cn("flex space-x-3", "justify-start")}>
-                <div
-                  className={cn(
-                    "prose prose-sm dark:prose-invert mx-auto w-[95%]",
-                    activeMessage.thoughtMode && "animate-pulse" // Apply pulse for thought mode
-                  )}
-                >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    rehypePlugins={[rehypeRaw]}
+              {/* Upload Error Message */}
+              {uploadError && (
+                <div className="mb-2 px-3 py-2 text-xs text-red-700 bg-red-100 border border-red-300 rounded-md flex items-center justify-between dark:bg-red-900/50 dark:text-red-400 dark:border-red-800">
+                  <span>{uploadError}</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 text-red-700 hover:bg-red-200"
+                    onClick={() => setUploadError(null)}
                   >
-                    {activeMessage.content}
-                  </ReactMarkdown>
-                  {console.log("Active Message Content:", activeMessage.content)} {/* ここにログを追加 */}
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+
+              <Textarea
+                ref={chatInputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="システムと対話... (Alt+Enterで送信)"
+                className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1"
+                rows={1}
+                disabled={isUploading}
+              />
+              <div className="flex items-center justify-between mt-2">
+                <div className="flex items-center gap-0 text-gray-500 dark:text-gray-400">
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading}>
+                        <Plus className="w-5 h-5" />
+                    </Button>
+                    <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-2" disabled={isUploading}>
+                        <SlidersHorizontal className="w-4 h-4" />
+                        <span className="text-sm font-light">ツール</span>
+                    </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400" disabled={isGeneratingResponse || isUploading}>
+                    <Mic className="w-5 h-5" />
+                  </Button>
+                  <Button
+                    onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
+                    disabled={!(isGeneratingResponse || isUploading) && !input.trim() && selectedFiles.length === 0}
+                    className="w-7 h-7 p-0 flex-shrink-0 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-full flex items-center justify-center"
+                  >
+                    {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="currentColor" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
+                  </Button>
                 </div>
               </div>
+            </div>
+        </div>
+      </div>
+    </>
+  );
+
+  if (isFloating) {
+    return (
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            className={cn(
+              "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl flex flex-col z-50",
+              isFullScreen 
+                ? "fixed inset-0"
+                : "fixed bottom-4 right-4 w-96 h-[600px]"
             )}
-            <div ref={scrollAnchorRef} />
-            </div>
-          </div>
+            variants={panelVariants}
+            initial="closed"
+            animate="open"
+            exit="closed"
+          >
+            {ChatContent}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    );
+  }
 
-          <div className="flex-shrink-0 px-4 pt-2 pb-4 flex justify-center">
-            <div className="w-full max-w-prose">
-                <div className="relative w-[95%] mx-auto flex flex-col rounded-2xl border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-800 p-2 transition-colors shadow-lg -mt-10">
-                  {/* File Preview Section */}
-                  {selectedFiles.length > 0 && (
-                    <div className="mb-2 p-2 border-b border-gray-200 dark:border-slate-700">
-                      <div className="flex space-x-2 overflow-x-auto">
-                        {selectedFiles.map((file, index) => (
-                          <div key={index} className={cn(
-                            "flex-shrink-0 bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm relative",
-                            isUploading && "opacity-50"
-                          )}>
-                            <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
-                            <span className="font-medium text-gray-700 dark:text-gray-300 truncate max-w-[100px]">{file.name}</span>
-                            <span className="text-gray-500 dark:text-gray-400 text-xs">{formatFileSize(file.size)}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 rounded-full disabled:pointer-events-none"
-                              onClick={() => handleRemoveFile(file)}
-                              disabled={isUploading}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                            {isUploading && (
-                              <div className="absolute bottom-0 left-0 right-0 h-1">
-                                <Progress value={uploadProgress} className="h-1" />
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Upload Error Message */}
-                  {uploadError && (
-                    <div className="mb-2 px-3 py-2 text-xs text-red-700 bg-red-100 border border-red-300 rounded-md flex items-center justify-between dark:bg-red-900/50 dark:text-red-400 dark:border-red-800">
-                      <span>{uploadError}</span>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-6 w-6 text-red-700 hover:bg-red-200"
-                        onClick={() => setUploadError(null)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  )}
-
-                  <Textarea
-                    ref={chatInputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="システムと対話... (Alt+Enterで送信)"
-                    className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1"
-                    rows={1}
-                    disabled={isUploading}
-                  />
-                  <div className="flex items-center justify-between mt-2">
-                    <div className="flex items-center gap-0 text-gray-500 dark:text-gray-400">
-                        <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading}>
-                            <Plus className="w-5 h-5" />
-                        </Button>
-                        <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-2" disabled={isUploading}>
-                            <SlidersHorizontal className="w-4 h-4" />
-                            <span className="text-sm font-light">ツール</span>
-                        </Button>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400" disabled={isGeneratingResponse || isUploading}>
-                        <Mic className="w-5 h-5" />
-                      </Button>
-                      <Button
-                        onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
-                        disabled={!(isGeneratingResponse || isUploading) && !input.trim() && selectedFiles.length === 0}
-                        className="w-7 h-7 p-0 flex-shrink-0 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-full flex items-center justify-center"
-                      >
-                        {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="currentColor" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  )
+  // Embedded mode
+  return (
+    <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900">
+      {ChatContent}
+    </div>
+  );
 }

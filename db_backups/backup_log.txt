@@ -85,3 +85,9 @@ study_log_20250723_154929_455615.db: Undo operation
 study_log_20250724_074409_398484.db: Before daily goal update.
 study_log_20250724_074458_446742.db: Before daily goal update.
 study_log_20250724_075245_612431.db: Before daily goal update.
+study_log_20250802_100141_703510.db: Daily auto backup before first study session.
+study_log_20250802_100141_704247.db: Before start session.
+study_log_20250802_115245_165083.db: Before break session.
+study_log_20250802_115245_173013.db: Before session summary update.
+study_log_20250802_115425_213951.db: Before session summary update.
+study_log_20250802_123823_813302.db: Before resume session.

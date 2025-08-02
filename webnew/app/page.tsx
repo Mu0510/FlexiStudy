@@ -106,6 +106,8 @@ export default function StudyApp() {
         return <ExamAnalysis />;
       case "settings":
         return <Settings />;
+      case "system-chat":
+        return <NewChatPanel showAs="embedded" />;
       default:
         return <Dashboard />;
     }
@@ -120,7 +122,7 @@ export default function StudyApp() {
         />
       </div>
 
-      <div className="flex">
+      <div className="flex h-screen">
         <div className={isFullScreen ? 'hidden' : ''}>
           <Sidebar
             activeView={activeView}
@@ -133,11 +135,13 @@ export default function StudyApp() {
         </div>
 
         <main
-          className={`flex-1 transition-all duration-300 p-6 pt-20 lg:pt-6 ${
+          className={`flex-1 transition-all duration-300 flex flex-col ${
             sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
           } ${isFullScreen ? 'hidden' : ''}`}
         >
-          <div className="max-w-7xl mx-auto">{renderActiveView()}</div>
+          <div className="flex-1 p-6 pt-20 lg:pt-6 overflow-y-auto">
+            <div className="max-w-7xl mx-auto h-full">{renderActiveView()}</div>
+          </div>
         </main>
 
         {/* Floating Chat Button for Desktop */}
@@ -159,6 +163,7 @@ export default function StudyApp() {
         )}
         
         <NewChatPanel 
+          showAs="floating"
           isOpen={isNewChatOpen} 
           onClose={() => {
             setIsNewChatOpen(false);

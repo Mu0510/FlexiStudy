@@ -11,6 +11,7 @@ import {
   Settings as SettingsIcon,
   ChevronLeft,
   ChevronRight,
+  MessageSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
@@ -26,6 +27,7 @@ interface SidebarProps {
 const menuItems = [
   { id: "dashboard", label: "ダッシュボード", icon: LayoutDashboard },
   { id: "records", label: "学習記録", icon: BookOpen },
+  { id: "system-chat", label: "システムチャット", icon: MessageSquare },
   { id: "analytics", label: "グラフ分析", icon: BarChart3 },
   { id: "exams", label: "模試分析", icon: FileText },
   { id: "settings", label: "設定", icon: SettingsIcon },
