@@ -124,51 +124,73 @@ export function Dashboard({ dashboardData }) {
                   {studyStats.completedGoals}/{studyStats.totalGoals} 完了
                 </Badge>
               </div>
-              <Progress value={(studyStats.completedGoals / studyStats.totalGoals) * 100} className="h-2 mt-2" />
+              <Progress value={studyStats.totalGoals > 0 ? (studyStats.completedGoals / studyStats.totalGoals) * 100 : 0} className="h-2 mt-2" />
             </CardHeader>
             <CardContent className="space-y-3">
-              {todayGoals.map((goal) => (
-                <div
-                  key={goal.id}
-                  className="flex items-center space-x-3 p-3 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors"
-                >
-                  {goal.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-success-700 dark:text-success-500" />
-                  ) : (
-                    <Circle className="w-5 h-5 text-neutral-400 dark:text-neutral-500" />
-                  )}
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <Badge
-                        variant="outline"
-                        className={
-                          goal.subject === "物理"
-                            ? "border-primary-200 text-primary-700 dark:border-primary-900/50 dark:text-primary-400"
-                            : "border-secondary-200 text-secondary-700 dark:border-secondary-900/50 dark:text-secondary-400"
-                        }
+              {todayGoals && todayGoals.length > 0 ? (
+                todayGoals.map((goal, index) => (
+                  <div
+                    key={goal.id || index}
+                    className="flex items-center space-x-3 p-3 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors"
+                  >
+                    {goal.completed ? (
+                      <CheckCircle2 className="w-5 h-5 text-success-700 dark:text-success-500" />
+                    ) : (
+                      <Circle className="w-5 h-5 text-neutral-400 dark:text-neutral-500" />
+                    )}
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-1">
+                        <Badge
+                          variant="outline"
+                          className={
+                            goal.subject === "物理"
+                              ? "border-primary-200 text-primary-700 dark:border-primary-900/50 dark:text-primary-400"
+                              : "border-secondary-200 text-secondary-700 dark:border-secondary-900/50 dark:text-secondary-400"
+                          }
+                        >
+                          {goal.subject}
+                        </Badge>
+                        {goal.tags && goal.tags.map((tag, tagIndex) => (
+                          <Badge key={tagIndex} variant="outline" className="border-neutral-200 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                            {tag}
+                          </Badge>
+                        ))}
+                        {goal.total_problems != null && goal.completed_problems != null && (
+                          <span className="text-sm text-neutral-500 dark:text-neutral-400">
+                            {goal.completed_problems}/{goal.total_problems}問
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`font-medium ${goal.completed ? "text-neutral-500 line-through dark:text-neutral-400" : "text-neutral-800 dark:text-neutral-200"}`}
                       >
-                        {goal.subject}
-                      </Badge>
-                      <span className="text-sm text-neutral-500 dark:text-neutral-400">{goal.problems}問</span>
+                        {goal.task}
+                      </div>
+                      {goal.details && (
+                        <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">{goal.details}</p>
+                      )}
+                      {goal.total_problems != null && goal.completed_problems != null && goal.total_problems > 0 && (
+                        <Progress
+                          value={(goal.completed_problems / goal.total_problems) * 100}
+                          className="h-1.5 mt-2"
+                        />
+                      )}
                     </div>
-                    <div
-                      className={`font-medium ${goal.completed ? "text-neutral-500 line-through dark:text-neutral-400" : "text-neutral-800 dark:text-neutral-200"}`}
-                    >
-                      {goal.task}
-                    </div>
+                    {!goal.completed && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
+                      >
+                        <Play className="w-4 h-4 mr-1" />
+                        開始
+                      </Button>
+                    )}
                   </div>
-                  {!goal.completed && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      開始
-                    </Button>
-                  )}
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-sm text-center text-neutral-500 dark:text-neutral-400 py-4">今日の目標はまだ設定されていません。</p>
+              )}
             </CardContent>
           </Card>
         </div>

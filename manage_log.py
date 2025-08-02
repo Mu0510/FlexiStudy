@@ -7,6 +7,7 @@ import os
 import sys
 import shutil
 import json
+import uuid
 
 # --- 定数 ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -476,24 +477,70 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
     if not date_str:
         date_str = datetime.date.today().strftime('%Y-%m-%d')
     try:
-        # JSON形式の文字列が正しいか検証
-        json.loads(goal_json_str)
+        goals_data = json.loads(goal_json_str)
+        if not isinstance(goals_data, list):
+            raise ValueError("Goal data must be a JSON array.")
+        
+        processed_goals = []
+        for goal_entry in goals_data:
+            # 必須フィールドのチェック
+            if not all(k in goal_entry for k in ["task", "completed", "subject"]):
+                raise ValueError("Each goal entry must contain 'task', 'completed', 'subject'.")
+            
+            # idの生成または保持
+            if "id" not in goal_entry or not goal_entry["id"]:
+                goal_entry["id"] = str(uuid.uuid4())
+            
+            # problemsの型チェックとデフォルト値
+            if "total_problems" in goal_entry and goal_entry["total_problems"] is not None:
+                if not isinstance(goal_entry["total_problems"], (int, type(None))):
+                    raise ValueError("total_problems must be an integer or null.")
+            else:
+                goal_entry["total_problems"] = None
+
+            if "completed_problems" in goal_entry and goal_entry["completed_problems"] is not None:
+                if not isinstance(goal_entry["completed_problems"], (int, type(None))):
+                    raise ValueError("completed_problems must be an integer or null.")
+            else:
+                goal_entry["completed_problems"] = None
+
+            # tagsの型チェックとデフォルト値
+            if "tags" in goal_entry and not isinstance(goal_entry["tags"], list):
+                raise ValueError("Tags must be a list.")
+            elif "tags" not in goal_entry:
+                goal_entry["tags"] = []
+
+            # detailsのデフォルト値
+            if "details" not in goal_entry:
+                goal_entry["details"] = None
+
+            # created_at, updated_atの自動設定
+            now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            if "created_at" not in goal_entry or not goal_entry["created_at"]:
+                goal_entry["created_at"] = now
+            goal_entry["updated_at"] = now
+
+            processed_goals.append(goal_entry)
+
+        new_goal_json_str = json.dumps(processed_goals, ensure_ascii=False)
+
     except json.JSONDecodeError as e:
         print("エラー: 目標は有効なJSON形式である必要があります。{}".format(e))
+        return
+    except ValueError as ve:
+        print("エラー: 目標データの構造が不正です。{}".format(ve))
         return
 
     with get_connection() as conn:
         cursor = conn.cursor()
-        # 既存のsummaryとgoalを取得
         cursor.execute("SELECT summary, goal FROM daily_summaries WHERE date = ?", (date_str,))
         existing_row = cursor.fetchone()
         
         existing_summary = existing_row[0] if existing_row else None
         existing_goal = existing_row[1] if existing_row else None
 
-        # 新しいgoal_json_strを適用し、summaryは既存のものを保持
         new_summary = existing_summary
-        new_goal = goal_json_str
+        new_goal = new_goal_json_str
 
         cursor.execute(
             "INSERT OR REPLACE INTO daily_summaries (date, summary, goal) VALUES (?, ?, ?)",
@@ -670,7 +717,7 @@ def get_dashboard_data(weekly_period_days=None):
                 goals = json.loads(goal_row['goal'])
                 today_goals = goals
                 total_goals = len(goals)
-                completed_goals = sum(1 for g in goals if g.get('completed'))
+                completed_goals = sum(1 for g in goals if g.get('completed', False) or (g.get('total_problems') is not None and g.get('completed_problems') is not None and g['total_problems'] > 0 and g['completed_problems'] >= g['total_problems']))
             except json.JSONDecodeError:
                 pass
 
