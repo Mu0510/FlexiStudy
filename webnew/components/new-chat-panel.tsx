@@ -222,15 +222,18 @@ export function NewChatPanel({
       }
     }
 
-    // Send message with text and file info
-    if (input.trim() || uploadedFiles.length > 0) {
+    // Send message with text, file info, and goal info
+    if (input.trim() || uploadedFiles.length > 0 || selectedGoal) {
       shouldScrollToBottomRef.current = true; // Force scroll to bottom on send
-      sendMessage({ text: input, files: uploadedFiles });
+      sendMessage({ text: input, files: uploadedFiles, goal: selectedGoal });
     }
 
     // Reset inputs
     setInput("");
     setSelectedFiles([]);
+    if (onClearSelectedGoal) {
+      onClearSelectedGoal();
+    }
     if (chatInputRef.current) {
       chatInputRef.current.focus();
     }

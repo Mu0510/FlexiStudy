@@ -10,12 +10,24 @@ interface FileInfo {
   size: number;
 }
 
+interface Goal {
+  id: string | number;
+  completed: boolean;
+  subject: string;
+  task: string;
+  details?: string;
+  tags?: string[];
+  total_problems?: number | null;
+  completed_problems?: number | null;
+}
+
 interface Message {
   id: string;
   ts?: number;
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   files?: FileInfo[];
+  goal?: Goal | null;
   type?: 'text' | 'tool'; // ユーザー/アシスタントは'text'、ツールメッセージは'tool'
   toolCallId?: string; // ツールメッセージ用
   status?: 'running' | 'finished' | 'error'; // ツールメッセージ用
@@ -31,6 +43,13 @@ interface ActiveMessage {
   content: string;
   thoughtMode: boolean; // chat.js の active.thoughtMode に対応
 }
+
+interface SendMessageData {
+  text: string;
+  files?: FileInfo[];
+  goal?: Goal | null;
+}
+
 
 function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): string {
   const patch = Diff.structuredPatch('old','new',oldText,newText,'','',{context:ctx});
@@ -212,6 +231,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             role: message.role,
             content: message.text,
             files: message.files || [],
+            goal: message.goal || null,
           }];
           // ★ 修正点: タイムスタンプでソートする
           newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -527,7 +547,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     };
   }, [ws, subscribe, activeMessage]); // wsとsubscribeを依存配列に追加
 
-  const sendMessage = useCallback((messageData: { text: string; files?: FileInfo[] }) => {
+  const sendMessage = useCallback((messageData: SendMessageData) => {
     if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) { // ws.current から ws に変更
       console.warn("WebSocket is not open or busy, cannot send message.");
       return;
@@ -535,7 +555,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
     setIsGeneratingResponse(true);
 
-    const { text, files } = messageData;
+    const { text, files, goal } = messageData;
 
     const newMessage: Message = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
@@ -543,6 +563,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         role: "user",
         content: text,
         files: files || [],
+        goal: goal || null,
         type: "text",
       };
 
@@ -555,7 +576,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       jsonrpc: '2.0',
       id: reqId,
       method: 'sendUserMessage',
-      params: { chunks: [{ text, files, messageId: newMessage.id }] }
+      params: { chunks: [{ text, files, goal, messageId: newMessage.id }] }
     };
     sendWsMessage(req); // sendWsMessage を使用
   }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
