@@ -31,74 +31,74 @@ export function Dashboard() {
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
       {/* Welcome Section */}
-      <div className="bg-gradient-to-r from-primary-800 to-primary-700 rounded-2xl p-6 text-neutral-100">
+      <div className="bg-gradient-to-r from-primary to-primary/90 rounded-2xl p-6 text-primary-foreground">
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-2xl font-bold mb-2">おかえりなさい！</h2>
-            <p className="text-neutral-200">今日も頑張って学習を続けましょう</p>
+            <p className="text-primary-foreground/80">今日も頑張って学習を続けましょう</p>
           </div>
           <div className="text-right">
             <div className="text-3xl font-bold">{studyStats.streak}</div>
-            <div className="text-neutral-200 text-sm">日連続</div>
+            <div className="text-primary-foreground/80 text-sm">日連続</div>
           </div>
         </div>
       </div>
 
-      {/* Quick Stats - メインカラーパレットのみ使用 */}
+      {/* Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-0 shadow-md bg-gradient-to-br from-neutral-100 to-neutral-200">
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary-100 rounded-lg">
-                <Clock className="w-5 h-5 text-primary-700" />
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Clock className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-primary-800">{studyStats.todayTime}分</div>
-                <div className="text-sm text-primary-700">今日の学習時間</div>
+                <div className="text-2xl font-bold text-foreground">{studyStats.todayTime}分</div>
+                <div className="text-sm text-muted-foreground">今日の学習時間</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-secondary-50 to-secondary-100">
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-secondary-200 rounded-lg">
-                <TrendingUp className="w-5 h-5 text-secondary-700" />
+              <div className="p-2 bg-secondary/20 dark:bg-secondary/30 rounded-lg">
+                <TrendingUp className="w-5 h-5 text-secondary-foreground/80" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-secondary-800">{studyStats.weeklyTime}分</div>
-                <div className="text-sm text-secondary-700">今週の学習時間</div>
+                <div className="text-2xl font-bold text-foreground">{studyStats.weeklyTime}分</div>
+                <div className="text-sm text-muted-foreground">今週の学習時間</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-accent-50 to-accent-100">
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-accent-200 rounded-lg">
-                <Target className="w-5 h-5 text-accent-700" />
+              <div className="p-2 bg-accent/10 rounded-lg">
+                <Target className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-accent-800">
+                <div className="text-2xl font-bold text-foreground">
                   {studyStats.completedGoals}/{studyStats.totalGoals}
                 </div>
-                <div className="text-sm text-accent-700">今日の目標達成</div>
+                <div className="text-sm text-muted-foreground">今日の目標達成</div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-primary-50 to-primary-100">
+        <Card>
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-primary-200 rounded-lg">
-                <Award className="w-5 h-5 text-primary-700" />
+              <div className="p-2 bg-primary/10 rounded-lg">
+                <Award className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-primary-800">{studyStats.streak}</div>
-                <div className="text-sm text-primary-700">連続学習日数</div>
+                <div className="text-2xl font-bold text-foreground">{studyStats.streak}</div>
+                <div className="text-sm text-muted-foreground">連続学習日数</div>
               </div>
             </div>
           </CardContent>
@@ -108,29 +108,29 @@ export function Dashboard() {
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Today's Goals */}
         <div className="lg:col-span-2">
-          <Card className="border-0 shadow-lg bg-white">
+          <Card>
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center space-x-2">
-                  <Target className="w-5 h-5 text-primary-600" />
+                <CardTitle className="flex items-center space-x-2 text-foreground">
+                  <Target className="w-5 h-5 text-primary" />
                   <span>今日の目標</span>
                 </CardTitle>
-                <Badge variant="secondary" className="bg-primary-100 text-primary-700">
+                <Badge variant="secondary">
                   {studyStats.completedGoals}/{studyStats.totalGoals} 完了
                 </Badge>
               </div>
-              <Progress value={(studyStats.completedGoals / studyStats.totalGoals) * 100} className="h-2" />
+              <Progress value={(studyStats.completedGoals / studyStats.totalGoals) * 100} className="h-2 mt-2" />
             </CardHeader>
             <CardContent className="space-y-3">
               {todayGoals.map((goal) => (
                 <div
                   key={goal.id}
-                  className="flex items-center space-x-3 p-3 rounded-lg hover:bg-neutral-100 transition-colors"
+                  className="flex items-center space-x-3 p-3 rounded-lg hover:bg-muted/50 transition-colors"
                 >
                   {goal.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-success-700" />
+                    <CheckCircle2 className="w-5 h-5 text-success-600 dark:text-success-500" />
                   ) : (
-                    <Circle className="w-5 h-5 text-neutral-400" />
+                    <Circle className="w-5 h-5 text-muted-foreground" />
                   )}
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
@@ -138,16 +138,16 @@ export function Dashboard() {
                         variant="outline"
                         className={
                           goal.subject === "物理"
-                            ? "border-primary-200 text-primary-700"
-                            : "border-secondary-200 text-secondary-700"
+                            ? "border-primary/50 text-primary"
+                            : "border-secondary/50 text-secondary-foreground/80"
                         }
                       >
                         {goal.subject}
                       </Badge>
-                      <span className="text-sm text-neutral-500">{goal.problems}問</span>
+                      <span className="text-sm text-muted-foreground">{goal.problems}問</span>
                     </div>
                     <div
-                      className={`font-medium ${goal.completed ? "text-neutral-500 line-through" : "text-neutral-800"}`}
+                      className={`font-medium ${goal.completed ? "text-muted-foreground line-through" : "text-foreground"}`}
                     >
                       {goal.task}
                     </div>
@@ -156,7 +156,6 @@ export function Dashboard() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent"
                     >
                       <Play className="w-4 h-4 mr-1" />
                       開始
@@ -168,54 +167,53 @@ export function Dashboard() {
           </Card>
         </div>
 
-        {/* Recent Activity */}
+        {/* Recent Activity & Quick Actions */}
         <div className="space-y-6">
-          <Card className="border-0 shadow-lg bg-white">
+          <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center space-x-2">
-                <BookOpen className="w-5 h-5 text-secondary-600" />
+              <CardTitle className="flex items-center space-x-2 text-foreground">
+                <BookOpen className="w-5 h-5 text-secondary-foreground/80" />
                 <span>最近の学習</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               {recentSessions.map((session, index) => (
-                <div key={index} className="p-3 bg-neutral-100 rounded-lg">
+                <div key={index} className="p-3 bg-muted/50 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <Badge variant="outline" className="border-primary-200 text-primary-700">
+                    <Badge variant="outline" className="border-primary/50 text-primary">
                       {session.subject}
                     </Badge>
-                    <span className="text-sm font-medium text-neutral-600">{session.duration}分</span>
+                    <span className="text-sm font-medium text-muted-foreground">{session.duration}分</span>
                   </div>
-                  <div className="text-sm text-neutral-600 mb-1">{session.time}</div>
-                  <div className="text-sm text-neutral-800 font-medium">{session.topic}</div>
+                  <div className="text-sm text-muted-foreground mb-1">{session.time}</div>
+                  <div className="text-sm text-foreground font-medium">{session.topic}</div>
                 </div>
               ))}
             </CardContent>
           </Card>
 
-          {/* Quick Actions */}
-          <Card className="border-0 shadow-lg bg-white">
+          <Card>
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center space-x-2">
-                <Zap className="w-5 h-5 text-accent-600" />
+              <CardTitle className="flex items-center space-x-2 text-foreground">
+                <Zap className="w-5 h-5 text-accent" />
                 <span>クイックアクション</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Button className="w-full justify-start bg-gradient-to-r from-primary-800 to-primary-700 hover:from-primary-900 hover:to-primary-800">
+              <Button className="w-full justify-start">
                 <Play className="w-4 h-4 mr-2" />
                 集中モード開始
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-start border-secondary-200 text-secondary-700 hover:bg-secondary-50 bg-transparent"
+                className="w-full justify-start"
               >
                 <Calendar className="w-4 h-4 mr-2" />
                 今日の復習確認
               </Button>
               <Button
                 variant="outline"
-                className="w-full justify-start border-accent-200 text-accent-700 hover:bg-accent-50 bg-transparent"
+                className="w-full justify-start"
               >
                 <TrendingUp className="w-4 h-4 mr-2" />
                 学習分析を見る
