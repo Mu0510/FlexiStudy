@@ -26,6 +26,7 @@ interface Message {
 
 interface ActiveMessage {
   id: string;
+  ts: number; // タイムスタンプを必須プロパティにする
   type: 'thought' | 'assistant';
   content: string;
   thoughtMode: boolean; // chat.js の active.thoughtMode に対応
@@ -113,6 +114,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const { thought } = msg.params;
         setActiveMessage(prev => ({
           id: prev?.id || msg.id || `thought-${Date.now()}`,
+          ts: prev?.ts || Date.now(), // タイムスタンプを維持または新規作成
           type: 'thought',
           content: thought.trim(),
           thoughtMode: true,
@@ -123,6 +125,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
         setActiveMessage(prevActiveMessage => {
             const currentId = prevActiveMessage?.id || msg.id || `assistant-${Date.now()}`;
+            const currentTs = prevActiveMessage?.ts || Date.now(); // 既存のtsを使うか、なければ新規作成
             let newContent = prevActiveMessage?.content || '';
             let newType = prevActiveMessage?.type || 'thought';
             let newThoughtMode = prevActiveMessage?.thoughtMode || false;
@@ -149,6 +152,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
             return {
                 id: currentId,
+                ts: currentTs, // タイムスタンプを維持
                 type: newType as 'thought' | 'assistant',
                 content: newContent,
                 thoughtMode: newThoughtMode,
@@ -163,10 +167,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         if (activeMessage) {
           setMessages(prev => [...prev, {
             id: activeMessage.id,
-            ts: Date.now(), // タイムスタンプを追加
+            ts: activeMessage.ts, // activeMessageのタイムスタンプを利用
             role: 'assistant',
             content: activeMessage.content,
-          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
+          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理
           setActiveMessage(null);
         }
         setIsGeneratingResponse(false);
@@ -458,10 +462,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                 }
                 return [...prevMessages, {
                   id: prevActiveMessage.id,
-                  ts: Date.now(), // タイムスタンプを追加
+                  ts: prevActiveMessage.ts, // activeMessageのタイムスタンプを利用
                   role: 'assistant',
                   content: prevActiveMessage.content,
-                }].sort((a, b) => (a.ts || 0) - (b.ts || 0)); // ソート処理を追加
+                }].sort((a, b) => (a.ts || 0) - (b.ts || 0)); // ソート処理
               });
             }
             // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
