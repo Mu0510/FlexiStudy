@@ -301,7 +301,7 @@ app.prepare().then(() => {
         }
 
         if (msg.method === 'sendUserMessage') {
-            const { text, files, messageId } = msg.params?.chunks?.[0] || {};
+            const { text, files, goal, messageId } = msg.params?.chunks?.[0] || {};
             const inputText = text || '';
 
             if (ongoingText.length > 0) {
@@ -313,8 +313,8 @@ app.prepare().then(() => {
             // ★ 修正点: アシスタントの返信IDをここで生成
             currentAssistantId = `assistant-${Date.now()}`;
 
-            // Save the original message with files to history for the UI
-            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
+            // Save the original message with files and goal to history for the UI
+            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [], goal: goal || null };
             history.push(rec);
             
             // Broadcast the new user message to all clients
@@ -322,11 +322,18 @@ app.prepare().then(() => {
             broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
 
             // Create the message for the AI
-            let messageForAI = inputText;
+            let systemMessages = [];
             if (files && files.length > 0) {
                 const fileNames = files.map(file => `- ${file.name} (${file.path})`).join('\n');
-                const systemMessage = `[System]ユーザーは以下のファイルをアップロードしました：\n${fileNames}`;
-                messageForAI = `${systemMessage}\n\n${inputText}`;
+                systemMessages.push(`[System]ユーザーは以下のファイルをアップロードしました：\n${fileNames}`);
+            }
+            if (goal) {
+                systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- 教科: ${goal.subject}\n- タスク: ${goal.task}${goal.details ? `\n- 詳細: ${goal.details}` : ''}`);
+            }
+
+            let messageForAI = inputText;
+            if (systemMessages.length > 0) {
+                messageForAI = `${systemMessages.join('\n\n')}\n\n${inputText}`;
             }
 
             // Send the potentially modified message to the Gemini process

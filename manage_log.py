@@ -8,6 +8,7 @@ import sys
 import shutil
 import json
 import uuid
+from zoneinfo import ZoneInfo
 
 # --- 定数 ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,6 +20,7 @@ LONG_TERM_BACKUP_DIR = os.path.join(SCRIPT_DIR, 'db_long_term_backups')
 MAX_LONG_TERM_BACKUPS = 30
 REDO_BACKUP_DIR = os.path.join(SCRIPT_DIR, 'db_redo_backups')
 MAX_REDO_BACKUPS = 10
+JST = ZoneInfo("Asia/Tokyo")
 
 # --- データベース接続 ---
 def get_connection():
@@ -133,7 +135,7 @@ def backup_database(description="Regular backup", backup_type="short_term"):
 
     if not os.path.exists(target_dir):
         os.makedirs(target_dir)
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    timestamp = datetime.datetime.now(JST).strftime("%Y%m%d_%H%M%S_%f")
     backup_filename = "study_log_{}.db".format(timestamp)
     backup_path = os.path.join(target_dir, backup_filename)
     try:
@@ -214,7 +216,7 @@ def move_file(source_path, destination_dir):
 
 # --- 学習ログ操作 ---
 def get_now():
-    return datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
 
 def get_last_active_log_id():
     with get_connection() as conn:
@@ -552,7 +554,7 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
                 goal_entry["details"] = None
 
             # created_at, updated_atの自動設定
-            now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
             if "created_at" not in goal_entry or not goal_entry["created_at"]:
                 goal_entry["created_at"] = now
             goal_entry["updated_at"] = now
@@ -596,7 +598,7 @@ def add_goal_to_date(goal_json_str, date_str):
         new_goal['completed'] = False
         if 'completed_problems' in new_goal:
             new_goal['completed_problems'] = 0
-        now = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
         new_goal['created_at'] = now
         new_goal['updated_at'] = now
 
