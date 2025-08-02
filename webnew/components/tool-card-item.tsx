@@ -59,7 +59,7 @@ export function ToolCardItem({ msg, getToolIconText, getRelativePath }: ToolCard
   return (
     <div key={msg.id} className={cn("flex", "justify-start")}>
       <Card className={cn(
-        "tool-card bg-muted text-muted-foreground rounded-lg p-3 shadow-md mx-auto w-[95%]", // AIメッセージと同じ幅と中央揃え
+        "tool-card rounded-lg p-3 shadow-md mx-auto w-[95%]", // AIメッセージと同じ幅と中央揃え
         msg.status === "running" && "tool-card--running", // running クラスを追加
         msg.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
         msg.status === "error" && "tool-card--error border-l-4 border-red-500" // error クラスとボーダー
@@ -91,8 +91,8 @@ export function ToolCardItem({ msg, getToolIconText, getRelativePath }: ToolCard
         </CardHeader>
         <CardContent className="p-0 text-sm text-muted-foreground">
           {/* Removed toolCallConfirmation logic for now, focusing on content */}
-          <pre ref={bodyRef} className="tool-card__body text-xs whitespace-pre-wrap break-words bg-background/50 p-2 rounded not-prose overflow-y-auto" style={{ maxHeight: bodyMaxHeight }}>
-            <div dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
+          <pre ref={bodyRef} className="tool-card__body text-xs whitespace-pre-wrap break-words bg-muted p-2 rounded not-prose overflow-y-auto" style={{ maxHeight: bodyMaxHeight }}>
+            <div className="text-muted-foreground" dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
           </pre>
         </CardContent>
       </Card>

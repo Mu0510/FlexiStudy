@@ -369,11 +369,11 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                 // データソースを msg オブジェクトに一本化
                 return (
                   <Card key={msg.id} className={cn(
-                    "tool-card bg-muted text-muted-foreground rounded-lg p-3 shadow-md",
+                    "tool-card rounded-lg p-3 shadow-md", // bg-mutedとtext-muted-foregroundを削除
                     "w-11/12 mx-auto my-1 mb-3",
-                    msg.status === "running" && "tool-card--running", // running クラスを追加
-                    msg.status === "finished" && "tool-card--finished border-l-4 border-green-500", // finished クラスとボーダー
-                    msg.status === "error" && "tool-card--error border-l-4 border-red-500" // error クラスとボーダー
+                    msg.status === "running" && "tool-card--running",
+                    msg.status === "finished" && "tool-card--finished border-l-4 border-green-500",
+                    msg.status === "error" && "tool-card--error border-l-4 border-red-500"
                   )}>
                     <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
                       <div className="flex items-center space-x-2">
@@ -384,7 +384,6 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                           {msg.label || "Tool Call"}
                         </CardTitle>
                       </div>
-                      {/* chat.js の tool-card__line-break と tool-card__command に相当 */}
                       <div className="tool-card__line-break"></div>
                       <code className="tool-card__command text-xs text-muted-foreground">
                         {getRelativePath(msg.command)}
@@ -401,9 +400,8 @@ export function NewChatPanel({ isOpen, onClose, isFullScreen, setIsFullScreen }:
                       </div>
                     </CardHeader>
                     <CardContent className="p-0 text-sm">
-                      {/* Removed toolCallConfirmation logic for now, focusing on content */}
-                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-background/50 p-2 rounded not-prose max-h-48 overflow-auto">
-                        <div className="text-foreground" dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
+                      <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-muted p-2 rounded not-prose max-h-48 overflow-auto">
+                        <div className="text-muted-foreground" dangerouslySetInnerHTML={{ __html: msg.content }} />
                       </pre>
                     </CardContent>
                   </Card>
