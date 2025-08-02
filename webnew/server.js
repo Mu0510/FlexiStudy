@@ -308,6 +308,7 @@ app.prepare().then(() => {
             history.push(rec);
             
             // Broadcast the new user message to all clients
+            console.log('[Server] Broadcasting addMessage:', JSON.stringify({ jsonrpc: '2.0', method: 'addMessage', params: { message: rec } }, null, 2));
             broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
 
             // Create the message for the AI

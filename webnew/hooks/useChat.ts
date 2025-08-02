@@ -170,7 +170,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             ts: activeMessage.ts, // activeMessageのタイムスタンプを利用
             role: 'assistant',
             content: activeMessage.content,
-          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理
+          }]);
           setActiveMessage(null);
         }
         setIsGeneratingResponse(false);
@@ -189,8 +189,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             content: message.text,
             files: message.files || [],
           }];
-          // タイムスタンプでソート
-          newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
           return newMessages;
         });
         onMessageReceived?.();
@@ -200,7 +198,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           ts: Date.now(), // タイムスタンプを追加
           role: 'assistant',
           content: msg.params.content,
-        }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
+        }]);
         setActiveMessage(null);
         setIsGeneratingResponse(false);
         onMessageReceived?.();
@@ -216,7 +214,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             ts: Date.now(), // タイムスタンプを追加
             role: 'assistant',
             content: activeMessageRef.current.content,
-          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
+          }]);
           setActiveMessage(null); // activeMessage をクリア
         }
 
@@ -234,7 +232,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId,
           toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage,
           toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
-        }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
+        }]);
 
         if (ws) { // ws.current から ws に変更
           sendWsMessage({
@@ -268,7 +266,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             ts: Date.now(), // タイムスタンプを追加
             role: 'assistant',
             content: activeMessageRef.current.content,
-          }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
+          }]);
           setActiveMessage(null); // activeMessage をクリア
         }
 
@@ -286,7 +284,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           toolCallConfirmationId: confirmation?.toolCallConfirmationId,
           toolCallConfirmationMessage: confirmation?.toolCallConfirmationMessage,
           toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
-        }].sort((a, b) => (a.ts || 0) - (b.ts || 0))); // ソート処理を追加
+        }]);
         onMessageReceived?.();
       } else if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
@@ -456,17 +454,17 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           // 関数型アップデートを使い、ref のタイミング問題を起こさずに activeMessage を確定させる
           setActiveMessage(prevActiveMessage => {
             if (prevActiveMessage && prevActiveMessage.type === 'assistant') {
-              setMessages(prevMessages => {
+              setMessages(prev => {
                 // 重複キーエラーを防ぐため、同じIDのメッセージが既に存在しないか確認
-                if (prevMessages.some(m => m.id === prevActiveMessage.id)) {
-                  return prevMessages;
+                if (prev.some(m => m.id === prevActiveMessage.id)) {
+                  return prev;
                 }
-                return [...prevMessages, {
+                return [...prev, {
                   id: prevActiveMessage.id,
                   ts: prevActiveMessage.ts, // activeMessageのタイムスタンプを利用
                   role: 'assistant',
                   content: prevActiveMessage.content,
-                }].sort((a, b) => (a.ts || 0) - (b.ts || 0)); // ソート処理
+                }];
               });
             }
             // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
@@ -506,7 +504,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         type: "text",
       };
 
-    setMessages(prev => [...prev, newMessage].sort((a, b) => (a.ts || 0) - (b.ts || 0)));
+    setMessages(prev => [...prev, newMessage]);
 
     const reqId = requestIdCounter.current++;
     lastSentRequestId.current = reqId;

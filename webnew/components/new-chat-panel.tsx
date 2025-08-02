@@ -400,7 +400,7 @@ export function NewChatPanel({
           // Render tool messages
           if (msg.type === "tool") {
             return (
-              <Card key={msg.id} className={cn(
+              <Card key={`${msg.id}-${msg.ts}`} className={cn(
                 "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
                 "w-11/12 mx-auto my-1 mb-3",
                 msg.status === "running" && "tool-card--running",
@@ -441,7 +441,7 @@ export function NewChatPanel({
           } else {
             // Render user/assistant messages
             return (
-              <div key={msg.id} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
+              <div key={`${msg.id}-${msg.ts}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
                 {/* File Cards for User Messages */}
                 {msg.role === 'user' && msg.files && msg.files.length > 0 && (
                   <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
