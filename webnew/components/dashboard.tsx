@@ -46,7 +46,7 @@ export function Dashboard() {
 
       {/* Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="border-0 shadow-md bg-gradient-to-br from-neutral-100 to-neutral-200 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
+        <Card className="border-0 shadow-md bg-neutral-100 dark:bg-neutral-800">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-primary-100 dark:bg-primary-900/50 rounded-lg">
@@ -60,7 +60,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-secondary-50 to-secondary-100 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
+        <Card className="border-0 shadow-md bg-secondary-50 dark:bg-neutral-800">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-secondary-200 dark:bg-secondary-900/50 rounded-lg">
@@ -74,7 +74,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-accent-50 to-accent-100 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
+        <Card className="border-0 shadow-md bg-accent-50 dark:bg-neutral-800">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-accent-200 dark:bg-accent-900/50 rounded-lg">
@@ -90,7 +90,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-0 shadow-md bg-gradient-to-br from-primary-50 to-primary-100 dark:bg-neutral-800 dark:from-neutral-800 dark:to-neutral-900">
+        <Card className="border-0 shadow-md bg-primary-50 dark:bg-neutral-800">
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-primary-200 dark:bg-primary-900/50 rounded-lg">
