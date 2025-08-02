@@ -1,4 +1,5 @@
 // webnew/context/WebSocketContext.tsx
+"use client"
 import React, { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback, useMemo } from 'react';
 
 interface WebSocketContextType {
