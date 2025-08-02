@@ -253,8 +253,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
         </div>
         <div className="flex items-center space-x-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-muted-foreground w-4 h-4" />
-            <Input placeholder="学習内容を検索..." className="pl-10 w-64 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-400 w-4 h-4" />
+            <Input placeholder="学習内容を検索..." className="pl-10 w-64 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:placeholder:text-slate-400" />
           </div>
           <Button variant="outline" size="sm">
             <Filter className="w-4 h-4 mr-2" />
