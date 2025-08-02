@@ -306,6 +306,9 @@ app.prepare().then(() => {
             // Save the original message with files to history for the UI
             const rec = { id: String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
             history.push(rec);
+            
+            // Broadcast the new user message to all clients
+            broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
 
             // Create the message for the AI
             let messageForAI = inputText;
