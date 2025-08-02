@@ -27,10 +27,10 @@ const history = [];
 let ongoingText = '';
 let isRestartingGemini = false; // 新しいフラグ
 
-function broadcast(wss, json, excludeClient){
+function broadcast(wss, json){
   const str = JSON.stringify(json);
   for (const ws of wss.clients) {
-    if (ws !== excludeClient && ws.readyState === 1) { // WebSocket.OPEN
+    if (ws.readyState === 1) { // WebSocket.OPEN
         ws.send(str);
     }
   }
@@ -292,7 +292,7 @@ app.prepare().then(() => {
         }
 
         if (msg.method === 'sendUserMessage') {
-            const { text, files } = msg.params?.chunks?.[0] || {};
+            const { text, files, messageId } = msg.params?.chunks?.[0] || {};
             const inputText = text || '';
 
             if (ongoingText.length > 0) {
@@ -304,11 +304,11 @@ app.prepare().then(() => {
             
 
             // Save the original message with files to history for the UI
-            const rec = { id: String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
+            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [] };
             history.push(rec);
             
-            // Broadcast the new user message to all clients except the sender
-            broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } }, ws);
+            // Broadcast the new user message to all clients
+            broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
 
             // Create the message for the AI
             let messageForAI = inputText;

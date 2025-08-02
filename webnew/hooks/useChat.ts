@@ -12,6 +12,7 @@ interface FileInfo {
 
 interface Message {
   id: string;
+  ts?: number;
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   files?: FileInfo[];
@@ -176,12 +177,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           if (prev.some(m => m.id === message.id)) {
             return prev;
           }
-          return [...prev, {
+          const newMessages = [...prev, {
             id: message.id,
+            ts: message.ts,
             role: message.role,
             content: message.text,
             files: message.files || [],
           }];
+          // タイムスタンプでソート
+          newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+          return newMessages;
         });
         onMessageReceived?.();
       } else if (msg.method === 'pushMessage') {
@@ -482,13 +487,14 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
     const newMessage: Message = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
+        ts: Date.now(),
         role: "user",
         content: text,
         files: files || [],
         type: "text",
       };
 
-    setMessages(prev => [...prev, newMessage]);
+    setMessages(prev => [...prev, newMessage].sort((a, b) => (a.ts || 0) - (b.ts || 0)));
 
     const reqId = requestIdCounter.current++;
     lastSentRequestId.current = reqId;
@@ -497,7 +503,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       jsonrpc: '2.0',
       id: reqId,
       method: 'sendUserMessage',
-      params: { chunks: [{ text, files }] }
+      params: { chunks: [{ text, files, messageId: newMessage.id }] }
     };
     sendWsMessage(req); // sendWsMessage を使用
   }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
