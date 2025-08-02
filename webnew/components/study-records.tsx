@@ -72,16 +72,58 @@ const RecordsSkeleton = () => (
   </div>
 );
 
-const getContrastColor = (hexcolor: string) => {
-  if (!/^#([A-Fa-f0-9]{3}){1,2}$/.test(hexcolor)) {
-    return '#000000'; // Default to black if invalid hex
-  }
-  const r = parseInt(hexcolor.substr(1, 2), 16);
-  const g = parseInt(hexcolor.substr(3, 2), 16);
-  const b = parseInt(hexcolor.substr(5, 2), 16);
-  const y = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-  return (y >= 128) ? '#000000' : '#FFFFFF';
+const hexToRgb = (hex: string): { r: number; g: number; b: number } | null => {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : null;
 };
+
+const rgbToHex = (r: number, g: number, b: number): string => {
+    return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
+
+const lightenColor = (hex: string, percent: number): string => {
+    const rgb = hexToRgb(hex);
+    if (!rgb) return hex;
+    const p = percent / 100;
+    rgb.r = Math.round(Math.min(255, rgb.r + (255 - rgb.r) * p));
+    rgb.g = Math.round(Math.min(255, rgb.g + (255 - rgb.g) * p));
+    rgb.b = Math.round(Math.min(255, rgb.b + (255 - rgb.b) * p));
+    return rgbToHex(rgb.r, rgb.g, rgb.b);
+};
+
+
+const getSubjectStyle = (color: string | undefined) => {
+  const baseColor = color || '#0ea5e9'; // sky-500 as default
+
+  const rgb = hexToRgb(baseColor);
+
+  if (!rgb) {
+    return {
+      color: '#0284c7', // sky-600
+      backgroundColor: '#f0f9ff', // sky-50
+      borderColor: '#e0f2fe', // sky-100
+    };
+  }
+
+  const backgroundColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`;
+  const borderColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`;
+
+  return {
+    color: baseColor,
+    backgroundColor,
+    borderColor,
+    borderWidth: '1px',
+    borderStyle: 'solid',
+  };
+};
+
+
 
 export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error }: StudyRecordsProps) {
   const [openSessions, setOpenSessions] = useState<Record<number, boolean>>({});
@@ -187,11 +229,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   <Badge
                     variant="outline"
                     className="text-base h-fit truncate"
-                    style={{
-                      backgroundColor: subjectColors[session.subject] || '#E0F2F7', // Default light blue
-                      color: subjectColors[session.subject] ? getContrastColor(subjectColors[session.subject]) : '#000000', // Default black
-                      borderColor: subjectColors[session.subject] || '#B3E5FC', // Default slightly darker blue
-                    }}
+                    style={getSubjectStyle(subjectColors[session.subject])}
                   >
                     {session.subject}
                   </Badge>
