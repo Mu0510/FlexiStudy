@@ -5,26 +5,12 @@
 *   UIコンポーネントのダークモード対応完了。
 *   チャットUIの改善: ファイル添付表示、スクロールベースの履歴読み込み、および自動スクロール動作の洗練。
 
-## 2. 現在の最優先課題
+## 2. 現在の状況
 
-**ダークモード対応に起因するライトモードのスタイル破壊の修正**
-
-`study-records.tsx`のダークモード対応を行った際、ライトモードのスタイルが破壊される問題が発生しました。これは、ライトモード用の固定色指定クラスを、`dark:`プレフィックスを付けずにテーマ追従クラスに置き換えてしまったことが原因です。
-
-同様の問題が、これまでダークモード対応を行った他のすべてのコンポーネントで発生している可能性があります。
-
-**修正方針:**
-各コンポーネントのライトモード時のスタイル指定（例: `bg-white`, `text-slate-800`）を元に戻し、`dark:`プレフィックスを使用してダークモード用のスタイルを別途指定します。（例: `className="bg-white dark:bg-card"`）
-
-**影響範囲の可能性があるコンポーネントリスト:**
-*   `webnew/components/dashboard.tsx`
-*   `webnew/components/sidebar.tsx`
-*   `webnew/components/mobile-header.tsx`
-*   `webnew/components/settings.tsx`
-*   `webnew/components/new-chat-panel.tsx`
-*   `webnew/components/tool-card.tsx`
-*   `webnew/components/tool-card-item.tsx`
-*   `webnew/components/study-records.tsx` (修正済み)
+以前の引き継ぎ資料に記載されていた課題はすべて完了済みです。
+- ダークモード対応に起因するライトモードのスタイル破壊の修正
+- 未着手だったコンポーネントのダークモード対応
+- チャットUIの自動スクロール問題の解決
 
 ## 3. 完了したタスク
 
@@ -57,16 +43,7 @@
   - `webnew/app/page.tsx`
   - `webnew/components/study-records.tsx`
 
-## 4. 今後のタスク
-
-1.  **[最優先] 上記コンポーネントのスタイル破壊の確認と修正**
-2.  **[未着手] `analytics.tsx` のダークモード対応**
-3.  **[未着手] `exam-analysis.tsx` のダークモード対応**
-4.  **[保留中] チャットUIの自動スクロールの問題解決**
-    *   メッセージ受信時の自動スクロールが不安定な状態。
-    *   `webnew/components/new-chat-panel.tsx`の`useLayoutEffect`内のロジックを再検討する必要がある。
-
-## 5. 主要な知識
+## 4. 主要な知識
 
 *   プロジェクトは、`webnew/`にNext.js/ReactチャットUIを持つGemini CLIアプリケーションです。
 *   WebSocket (`webnew/server.js`) がクライアント-サーバー間の通信に使用されます。
