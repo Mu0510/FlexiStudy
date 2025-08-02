@@ -29,6 +29,43 @@ def get_connection():
     conn.text_factory = str
     return conn
 
+def print_help():
+    """ヘルプメッセージを表示する"""
+    help_text = """
+Usage: python manage_log.py <command> [arguments]
+
+A command-line tool to manage your study logs.
+
+Available Commands:
+  start <subject> "<content>"       Start a new study session.
+  break ["<content>"]               Pause the current session.
+  resume ["<content>"]              Resume a paused session.
+  end_session                       End the current study session without a break.
+  
+  summary "<text>" [session_id]     Add or update a summary for a session.
+  daily_summary "<text>" [YYYY-MM-DD] Add or update the summary for a specific day.
+  daily_goal "<json_string>" [YYYY-MM-DD] Add or update the goals for a specific day.
+
+  logs_json_for_date YYYY-MM-DD    Get all logs for a specific day in JSON format.
+  dashboard_json [days]             Get dashboard data in JSON format.
+  unique_subjects                   Get a list of all unique subjects.
+  get_entry <log_id>                Get details for a specific log entry.
+
+  backup                            Create a manual backup of the database.
+  restore <backup_file_path>        Restore the database from a backup file.
+  undo                              Undo the last database operation.
+  redo                              Redo the last undone operation.
+
+Advanced Commands:
+  reconstruct "<json_string>"       Rebuild the database from a JSON string.
+  recalculate_durations             Recalculate the duration for all log entries.
+  consolidate_break                 Merge the last BREAK event into the preceding RESUME event.
+  update_log_end_time <log_id> <end_time>  Manually update the end time of a log entry.
+  update_log_entry_cmd <log_id> <field> <value> Manually update a specific field of a log entry.
+  auto_daily_summary                Automatically generate and update today's summary.
+"""
+    print(help_text)
+
 # --- テーブル作成・更新 ---
 def create_tables():
     """必要なテーブルをすべて作成する"""
@@ -864,10 +901,14 @@ def main():
     add_goal_column_if_not_exists()
 
     if len(sys.argv) < 2:
-        print("エラー: コマンドを指定してください。")
+        print("エラー: コマンドを指定してください。 --help で利用可能なコマンドを確認できます。")
         sys.exit(1)
 
     command = sys.argv[1]
+
+    if command == '--help' or command == '-h':
+        print_help()
+        sys.exit(0)
     
     if command == 'start':
         if len(sys.argv) != 4: print("使用法: start <subject> <content>"); sys.exit(1)
