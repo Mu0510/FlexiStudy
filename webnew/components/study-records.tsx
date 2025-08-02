@@ -193,7 +193,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                     <p className="pl-6 text-slate-700 text-sm">
                       <MessageSquare className="mr-2 -ml-6 inline-block h-4 w-4 align-middle text-slate-400" />
                       <span className="align-middle">
-                        {session.summary.startsWith(`${session.subject}：`) ? session.summary.substring(session.subject.length + 1) : session.summary}
+                        {session.summary && (session.summary.startsWith(`${session.subject}：`) ? session.summary.substring(session.subject.length + 1) : session.summary)}
                       </span>
                     </p>
                   </div>
