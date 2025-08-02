@@ -267,26 +267,58 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
       <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
         <CardContent className="p-4 sm:p-6">
           <div className="flex items-center justify-between">
-            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('prev', e)} disabled={isLoading} className="dark:text-slate-200">
+            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('prev', e)} disabled={isLoading} className="dark:text-slate-200 w-24 justify-start">
               <ChevronLeft className="w-4 h-4 mr-1" />
               前日
             </Button>
-            <Popover open={isDatePickerOpen} onOpenChange={setDatePickerOpen}>
-              <PopoverTrigger asChild>
-                  <Button variant="ghost" className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100" disabled={isLoading}>
-                  {formatDate(selectedDate)}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="center">
-                <Calendar
-                  mode="single"
-                  selected={new Date(selectedDate)}
-                  onSelect={handleDateSelect}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
-            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('next', e)} disabled={isLoading} className="dark:text-slate-200">
+            <div className="text-center">
+              <Popover open={isDatePickerOpen} onOpenChange={setDatePickerOpen}>
+                <PopoverTrigger asChild>
+                    <Button variant="ghost" className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100" disabled={isLoading}>
+                    {formatDate(selectedDate)}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="center">
+                  <Calendar
+                    mode="single"
+                    selected={new Date(selectedDate)}
+                    onSelect={handleDateSelect}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <div className="flex items-center justify-center space-x-6 mt-2 h-5">
+                {isLoading ? (
+                  <>
+                    <Skeleton className="h-4 w-32 rounded" />
+                    <Skeleton className="h-4 w-24 rounded" />
+                  </>
+                ) : logData ? (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-4 h-4 text-blue-600" />
+                      <span className="text-sm text-slate-600 dark:text-slate-400">{!isMobile && '総学習時間: '}{formatDuration(logData.daily_summary.total_duration)}</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <BookOpen className="w-4 h-4 text-green-600" />
+                      <span className="text-sm text-slate-600 dark:text-slate-400">{!isMobile && 'セッション数: '}{logData.sessions.length}</span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center space-x-2">
+                      <Clock className="w-4 h-4 text-slate-400" />
+                      <span className="text-sm text-slate-500 dark:text-slate-400">{!isMobile && '総学習時間: '}--</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <BookOpen className="w-4 h-4 text-slate-400" />
+                      <span className="text-sm text-slate-500 dark:text-slate-400">{!isMobile && 'セッション数: '}--</span>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('next', e)} disabled={isLoading} className="dark:text-slate-200 w-24 justify-end">
               翌日
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
