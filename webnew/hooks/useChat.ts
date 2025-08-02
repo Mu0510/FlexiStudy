@@ -1,7 +1,8 @@
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { marked } from 'marked';
+import { marked } from 'markdown';
 import * as Diff from 'diff'; // jsdiff ライブラリをインポート
+import { useWebSocket } from '@/context/WebSocketContext'; // WebSocketContextからuseWebSocketをインポート
 
 interface FileInfo {
   name: string;
@@ -28,8 +29,6 @@ interface ActiveMessage {
   content: string;
   thoughtMode: boolean; // chat.js の active.thoughtMode に対応
 }
-
-// ToolCardData インターフェースは不要になったため削除
 
 function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): string {
   const patch = Diff.structuredPatch('old','new',oldText,newText,'','',{context:ctx});
@@ -78,8 +77,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const [activeMessage, setActiveMessage] = useState<ActiveMessage | null>(null);
   const activeMessageRef = useRef<ActiveMessage | null>(null);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
-  const ws = useRef<WebSocket | null>(null);
-  const isConnecting = useRef(false); // 接続処理中フラグ
+  const { ws, isConnected, subscribe, sendMessage: sendWsMessage } = useWebSocket(); // WebSocketContextから取得
   const requestIdCounter = useRef<number>(1);
   const lastSentRequestId = useRef<number | null>(null);
 
@@ -97,31 +95,18 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   });
 
   useEffect(() => {
-    // 既に接続済み、または接続処理中の場合は何もしない
-    if (ws.current || isConnecting.current) return;
+    if (!ws) return; // WebSocketインスタンスがまだ利用可能でない場合は何もしない
 
-    isConnecting.current = true;
-    console.log('Attempting to connect WebSocket...');
-
-    const socket = new WebSocket(`wss://${window.location.hostname}:443/ws`);
-    ws.current = socket;
-
-    socket.onopen = () => {
-      console.log('WebSocket connected');
-      isConnecting.current = false;
-      requestHistory(true);
-      setIsGeneratingResponse(false);
-    };
-
-    socket.onmessage = (event) => {
-      console.log('[DEBUG] Received WebSocket message:', event.data);
-      let msg;
-      try {
-        msg = JSON.parse(event.data);
-      } catch (err) {
-        console.error('❌ JSON parse error on chunk:', err, event.data);
-        return;
-      }
+    // WebSocketからのメッセージ処理ロジックをsubscribeで登録
+    const unsubscribe = subscribe((msg: any) => {
+      console.log('[DEBUG] Received WebSocket message:', msg);
+      // let msg; // JSON.parseはWebSocketContextで行われるため不要
+      // try {
+      //   msg = JSON.parse(event.data);
+      // } catch (err) {
+      //   console.error('❌ JSON parse error on chunk:', err, event.data);
+      //   return;
+      // }
 
       if (msg.method === 'streamAssistantThoughtChunk') {
         const { thought } = msg.params;
@@ -169,8 +154,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             };
         });
 
-        if (msg.id !== undefined && ws.current) {
-          ws.current.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
+        if (msg.id !== undefined && ws) { // ws.current から ws に変更
+          sendWsMessage({ jsonrpc: '2.0', id: msg.id, result: null }); // sendWsMessage を使用
         }
         onMessageReceived?.();
       } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
@@ -223,12 +208,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
         }]);
 
-        if (ws.current) {
-          ws.current.send(JSON.stringify({
+        if (ws) { // ws.current から ws に変更
+          sendWsMessage({
             jsonrpc: '2.0',
             id: msg.id,
             result: { id: toolId }
-          }));
+          });
         }
         onMessageReceived?.();
       } else if (msg.method === 'requestToolCallConfirmation') {
@@ -237,12 +222,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const command = confirmation?.command ?? '';
 
         // 常に許可するため、すぐに許可の応答を返す
-        if (ws.current) {
-          ws.current.send(JSON.stringify({
+        if (ws) { // ws.current から ws に変更
+          sendWsMessage({
             jsonrpc: '2.0',
             id: msg.id, // 受け取ったメッセージのIDをそのまま使う
             result: { id: toolId, outcome: 'allow' }
-          }));
+          });
         }
 
         // UIには通常のツール呼び出しとして表示
@@ -459,35 +444,19 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           setIsGeneratingResponse(false);
         }
       }
-    };
+    }); // subscribeの閉じ括弧
 
-    socket.onclose = (event) => {
-      console.log(`WebSocket disconnected: Code=${event.code}, Reason=${event.reason}, WasClean=${event.wasClean}`);
-      isConnecting.current = false;
-      ws.current = null;
-    };
-
-    socket.onerror = (event) => {
-      // The event object itself is often generic. More detailed errors are usually in the browser console.
-      console.error('WebSocket error occurred. See browser console for details.', event);
-      isConnecting.current = false;
-    };
-
+    // クリーンアップ関数は、ws インスタンスが変更されたり、コンポーネントがアンマウントされたりする際に実行される
     return () => {
-      console.log('Cleaning up WebSocket connection.');
-      // Only close if the socket is in a connecting or open state.
-      if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
-        socket.close(1000, "Component unmounting"); // 1000 is a normal closure
-      }
-      // If the cleanup is for the current active socket, clear the ref.
-      if (ws.current === socket) {
-        ws.current = null;
-      }
+      // ここでは ws.close() を直接呼ばない
+      // WebSocketProvider が接続のライフサイクルを管理するため
+      console.log('Cleaning up useChat WebSocket listeners.');
+      unsubscribe(); // subscribeで返されたunsubscribe関数を呼び出す
     };
-  }, []);
+  }, [ws, subscribe, activeMessage]); // wsとsubscribeを依存配列に追加
 
   const sendMessage = useCallback((messageData: { text: string; files?: FileInfo[] }) => {
-    if (!ws.current || ws.current.readyState !== WebSocket.OPEN || isGeneratingResponse) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) { // ws.current から ws に変更
       console.warn("WebSocket is not open or busy, cannot send message.");
       return;
     }
@@ -515,11 +484,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       method: 'sendUserMessage',
       params: { chunks: [{ text, files }] }
     };
-    ws.current.send(JSON.stringify(req));
-  }, [isGeneratingResponse]);
+    sendWsMessage(req); // sendWsMessage を使用
+  }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
 
   const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
-    if (!ws.current) return;
+    if (!ws) return; // ws.current から ws に変更
 
     const req = {
       jsonrpc: '2.0',
@@ -527,7 +496,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       method: 'confirmToolCall',
       params: { toolCallId, result }
     };
-    ws.current.send(JSON.stringify(req));
+    sendWsMessage(req); // sendWsMessage を使用
 
     // 確認後はツールメッセージのステータスを更新
     setMessages(prev => prev.map(m => {
@@ -537,7 +506,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       return m;
     }));
 
-  }, []);
+  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
 
   const requestHistory = useCallback((isInitialLoad = false) => {
     if (historyState.current.isFetchingHistory || historyState.current.finished) return;
@@ -547,21 +516,21 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     historyState.current.pendingHistory.add(id);
     const limit = isInitialLoad ? 30 : 20;
 
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({
+    if (ws && ws.readyState === WebSocket.OPEN) { // ws.current から ws に変更
+      sendWsMessage({
         jsonrpc: '2.0',
         id,
         method: 'fetchHistory',
         params: { limit: limit, before: historyState.current.oldestTs }
-      }));
+      });
     } else {
       console.warn("WebSocket is not open, cannot fetch history.");
       historyState.current.isFetchingHistory = false;
     }
-  }, []);
+  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
 
   const cancelSendMessage = useCallback(() => {
-    if (!ws.current || !lastSentRequestId.current) return;
+    if (!ws || !lastSentRequestId.current) return; // ws.current から ws に変更
 
     const req = {
       jsonrpc: '20',
@@ -569,9 +538,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       method: 'cancelSendMessage',
       params: {}
     };
-    ws.current.send(JSON.stringify(req));
+    sendWsMessage(req); // sendWsMessage を使用
     setIsGeneratingResponse(false); // UIを即座にリセット
-  }, []);
+  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -585,14 +554,14 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       histReqId: 10000,
     };
     // サーバーにもクリアを通知するWebSocketメッセージを送信
-    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-      ws.current.send(JSON.stringify({
+    if (ws && ws.readyState === WebSocket.OPEN) { // ws.current から ws に変更
+      sendWsMessage({
         jsonrpc: '2.0',
         method: 'clearHistory',
         params: {}
-      }));
+      });
     }
-  }, []);
+  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
 
   return {
     messages,

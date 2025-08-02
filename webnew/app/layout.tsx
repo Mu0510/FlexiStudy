@@ -35,7 +35,9 @@ html {
           disableTransitionOnChange
         >
           <ViewportController />
-          {children}
+          <WebSocketProvider>
+            {children}
+          </WebSocketProvider>
         </ThemeProvider>
       </body>
     </html>
