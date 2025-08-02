@@ -121,7 +121,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
       });
 
       // 今日の日付のデータを再読み込み
-      const todayStr = new Date().toISOString().split('T')[0];
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       onDateChange(todayStr);
 
     } catch (error: any) {
@@ -142,7 +143,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     const button = e.currentTarget;
     const currentDate = new Date(selectedDate);
     currentDate.setDate(currentDate.getDate() + (direction === 'prev' ? -1 : 1));
-    onDateChange(currentDate.toISOString().split('T')[0]);
+    const newDateStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+    onDateChange(newDateStr);
     setTimeout(() => button.blur(), 0);
   };
 
