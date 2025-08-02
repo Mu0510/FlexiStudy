@@ -509,6 +509,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
 
   const requestHistory = useCallback((isInitialLoad = false) => {
+    console.log('[useChat DEBUG] requestHistory called. isFetchingHistory:', historyState.current.isFetchingHistory, 'finished:', historyState.current.finished); // 追加
     if (historyState.current.isFetchingHistory || historyState.current.finished) return;
 
     historyState.current.isFetchingHistory = true;
@@ -516,7 +517,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     historyState.current.pendingHistory.add(id);
     const limit = isInitialLoad ? 30 : 20;
 
-    if (ws && ws.readyState === WebSocket.OPEN) { // ws.current から ws に変更
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      console.log('[useChat DEBUG] Sending fetchHistory request with id:', id, 'limit:', limit, 'before:', historyState.current.oldestTs); // 追加
       sendWsMessage({
         jsonrpc: '2.0',
         id,
@@ -563,6 +565,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     }
   }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
 
+  useEffect(() => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      console.log('[useChat DEBUG] WebSocket is open. Requesting initial history.'); // 追加
+      requestHistory(true);
+    }
+  }, [ws, requestHistory]); // wsとrequestHistoryを依存配列に追加
+
   return {
     messages,
     activeMessage,
@@ -575,4 +584,3 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     sendToolConfirmation,
     clearMessages, // clearMessages をエクスポートに追加
   };
-};

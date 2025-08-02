@@ -73,8 +73,14 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
     };
 
     socket.onmessage = (event) => {
-      // 受信したメッセージをEventEmitter経由でブロードキャスト
-      eventEmitter.emit('message', JSON.parse(event.data));
+      console.log('[Provider DEBUG] Raw WebSocket message received:', event.data); // 追加
+      try {
+        const parsedMessage = JSON.parse(event.data);
+        console.log('[Provider DEBUG] Parsed WebSocket message:', parsedMessage); // 追加
+        eventEmitter.emit('message', parsedMessage);
+      } catch (e) {
+        console.error('[Provider ERROR] Failed to parse WebSocket message:', e, event.data); // 追加
+      }
     };
 
     socket.onclose = (event) => {
@@ -85,9 +91,12 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
 
       // 異常終了の場合のみ再接続を試みる
       if (!event.wasClean && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        console.log(`[Provider DEBUG] Attempting reconnect due to unclean close. WasClean: ${event.wasClean}`); // 追加
         reconnectAttempts.current++;
         console.log(`Attempting to reconnect in ${RECONNECT_INTERVAL_MS / 1000} seconds (attempt ${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})...`);
         setTimeout(connectWebSocket, RECONNECT_INTERVAL_MS);
+      } else if (event.wasClean) {
+        console.log('[Provider DEBUG] Clean WebSocket close. No reconnect attempt.'); // 追加
       }
     };
 
