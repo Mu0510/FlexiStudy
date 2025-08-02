@@ -318,7 +318,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 )}
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('next', e)} disabled={isLoading}>
+            <Button variant="ghost" size="sm" onClick={(e) => handleDateChange('next', e)} disabled={isLoading} className="dark:text-slate-200">
               翌日
               <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
