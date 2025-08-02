@@ -186,6 +186,7 @@ export default function StudyApp() {
       default:
         return <Dashboard />;
     }
+  }
 
   return (
     <div className={`min-h-screen bg-background ${isFullScreen && activeView !== 'system-chat' ? 'overflow-hidden' : ''}`}>
