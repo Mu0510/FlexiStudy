@@ -400,6 +400,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                 if (m.role === 'user' || m.role === 'assistant') {
                    return {
                     id: m.id,
+                    ts: m.ts, // タイムスタンプを正しく渡す
                     role: m.role,
                     content: m.text || '',
                     files: m.files || [],
