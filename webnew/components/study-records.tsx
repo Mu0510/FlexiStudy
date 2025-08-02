@@ -48,6 +48,7 @@ interface StudyRecordsProps {
   selectedDate: string;
   isLoading: boolean;
   error: string | null;
+  subjectColors: Record<string, string>;
 }
 
 const RecordsSkeleton = () => (
@@ -125,20 +126,10 @@ const getSubjectStyle = (color: string | undefined) => {
 
 
 
-export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error }: StudyRecordsProps) {
+export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors }: StudyRecordsProps) {
   const [openSessions, setOpenSessions] = useState<Record<number, boolean>>({});
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
-  const [subjectColors, setSubjectColors] = useState<Record<string, string>>({});
   const isMobile = useIsMobile();
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const savedColors = localStorage.getItem('subjectColors');
-      if (savedColors) {
-        setSubjectColors(JSON.parse(savedColors));
-      }
-    }
-  }, []);
 
   const toggleSession = (sessionId: number) => {
     setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));

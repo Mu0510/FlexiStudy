@@ -8,37 +8,34 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
+import { toast } from "sonner"
 import { SettingsIcon, User, Bell, Palette, Shield, Download, Upload, Trash2, Save } from "lucide-react"
 
-export function Settings({ uniqueSubjects }: { uniqueSubjects: string[] }) {
+interface SettingsProps {
+  uniqueSubjects: string[];
+  subjectColors: Record<string, string>;
+  onColorChange: (subject: string, color: string) => void;
+  onSaveColors: () => Promise<void>;
+}
+
+export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveColors }: SettingsProps) {
   const { theme, setTheme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = useState(false)
   const [notifications, setNotifications] = useState(true)
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
-  const [subjectColors, setSubjectColors] = useState<Record<string, string>>(() => {
-    if (typeof window !== 'undefined') {
-      const savedColors = localStorage.getItem('subjectColors');
-      return savedColors ? JSON.parse(savedColors) : {};
-    }
-    return {};
-  });
-
+  
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  useEffect(() => {
-    if (mounted) {
-      localStorage.setItem('subjectColors', JSON.stringify(subjectColors));
+  const handleSave = async () => {
+    try {
+      await onSaveColors();
+      toast.success("色の設定を保存しました。");
+    } catch (error) {
+      toast.error("色の設定の保存に失敗しました。");
     }
-  }, [subjectColors, mounted]);
-
-  const handleColorChange = (subject: string, color: string) => {
-    setSubjectColors(prevColors => ({
-      ...prevColors,
-      [subject]: color,
-    }));
   };
 
   if (!mounted) {
@@ -59,11 +56,15 @@ export function Settings({ uniqueSubjects }: { uniqueSubjects: string[] }) {
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
                 <Palette className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                 <span>教科ごとの色設定</span>
               </CardTitle>
+              <Button onClick={handleSave} size="sm" className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                <Save className="w-4 h-4 mr-2" />
+                保存
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
               {uniqueSubjects.length > 0 ? (
@@ -75,10 +76,10 @@ export function Settings({ uniqueSubjects }: { uniqueSubjects: string[] }) {
                     <Input
                       id={`color-${subject}`}
                       type="color"
-                      value={subjectColors[subject] || '#000000'} // Default to black if no color is set
-                      onChange={(e) => handleColorChange(subject, e.target.value)}
+                      value={subjectColors[subject] || '#000000'}
+                      onChange={(e) => onColorChange(subject, e.target.value)}
                       className="w-12 h-12 p-1 rounded-md border-none cursor-pointer"
-                      style={{ backgroundColor: subjectColors[subject] || '#000000' }} // Show selected color in input
+                      style={{ backgroundColor: subjectColors[subject] || '#000000' }}
                     />
                   </div>
                 ))

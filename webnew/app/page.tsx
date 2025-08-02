@@ -33,6 +33,7 @@ export default function StudyApp() {
     return date.toISOString().split('T')[0];
   });
   const [uniqueSubjects, setUniqueSubjects] = useState<string[]>([]);
+  const [subjectColors, setSubjectColors] = useState<Record<string, string>>({});
 
   const chatStateBeforeSystemView = useRef(false);
 
@@ -100,23 +101,60 @@ export default function StudyApp() {
   }, [selectedDate]);
 
   useEffect(() => {
-    const fetchUniqueSubjects = async () => {
+    const fetchInitialData = async () => {
       try {
-        const response = await fetch('/api/subjects');
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+        // Fetch unique subjects
+        const subjectsResponse = await fetch('/api/subjects');
+        if (!subjectsResponse.ok) {
+          throw new Error(`HTTP error! status: ${subjectsResponse.status}`);
         }
-        const subjects = await response.json();
+        const subjects = await subjectsResponse.json();
         setUniqueSubjects(subjects);
+
+        // Fetch subject colors
+        const colorsResponse = await fetch('/api/colors');
+        if (!colorsResponse.ok) {
+          throw new Error(`HTTP error! status: ${colorsResponse.status}`);
+        }
+        const colors = await colorsResponse.json();
+        setSubjectColors(colors);
+
       } catch (e) {
-        console.error("Failed to fetch unique subjects:", e);
+        console.error("Failed to fetch initial data:", e);
+        // Handle error appropriately in a real app
       }
     };
-    fetchUniqueSubjects();
+    fetchInitialData();
   }, []);
 
   const handleDateChange = (newDate: string) => {
     setSelectedDate(newDate);
+  };
+
+  const handleColorChange = (subject: string, color: string) => {
+    setSubjectColors(prevColors => ({
+      ...prevColors,
+      [subject]: color,
+    }));
+  };
+
+  const handleSaveColors = async () => {
+    try {
+      const response = await fetch('/api/colors', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(subjectColors),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save color settings');
+      }
+    } catch (error) {
+      console.error(error);
+      throw error; // Re-throw to be caught in the Settings component
+    }
   };
 
   const renderActiveView = () => {
@@ -129,20 +167,25 @@ export default function StudyApp() {
                   onDateChange={handleDateChange} 
                   selectedDate={selectedDate}
                   isLoading={isLoading}
-                  error={error} 
+                  error={error}
+                  subjectColors={subjectColors}
                />;
       case "analytics":
         return <Analytics />;
       case "exams":
         return <ExamAnalysis />;
       case "settings":
-        return <Settings uniqueSubjects={uniqueSubjects} />;
+        return <Settings 
+                  uniqueSubjects={uniqueSubjects} 
+                  subjectColors={subjectColors}
+                  onColorChange={handleColorChange}
+                  onSaveColors={handleSaveColors}
+                />;
       case "system-chat":
         return <NewChatPanel showAs="embedded" />;
       default:
         return <Dashboard />;
     }
-  };
 
   return (
     <div className={`min-h-screen bg-background ${isFullScreen && activeView !== 'system-chat' ? 'overflow-hidden' : ''}`}>
