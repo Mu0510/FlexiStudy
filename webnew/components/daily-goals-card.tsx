@@ -29,9 +29,10 @@ interface DailyGoalsCardProps {
   title?: string;
   className?: string;
   isToday?: boolean;
+  onMoveGoal?: (goal: Goal) => void;
 }
 
-export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true }: DailyGoalsCardProps) {
+export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal }: DailyGoalsCardProps) {
   if (!goals || goals.length === 0) {
     return (
       <Card className={className}>
@@ -128,6 +129,7 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
                   size="sm"
                   variant="outline"
                   className="text-sky-600 border-sky-200 hover:bg-sky-50 bg-transparent dark:text-sky-400 dark:border-sky-900/50 dark:hover:bg-sky-900/50 dark:bg-transparent"
+                  onClick={() => onMoveGoal?.(goal)}
                 >
                   <ArrowRightToLine className="w-4 h-4 mr-1" />
                   今日に移動

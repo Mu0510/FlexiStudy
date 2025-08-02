@@ -97,6 +97,11 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
 
   const isToday = new Date(selectedDate).toDateString() === new Date().toDateString();
 
+  const handleMoveGoal = async (goal: Goal) => {
+    // TODO: APIを実装する
+    alert(`「${goal.task}」を今日の目標に移動します。（機能は未実装です）`);
+  };
+
   const toggleSession = (sessionId: number) => {
     setOpenSessions(prev => ({ ...prev, [sessionId]: !prev[sessionId] }));
   };
@@ -369,6 +374,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                     totalGoals: logData.daily_summary.goals?.length ?? 0,
                   }}
                   isToday={isToday}
+                  onMoveGoal={handleMoveGoal}
                 />
               </div>
             </>
