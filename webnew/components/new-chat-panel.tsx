@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"
+import { FixedSizeList } from 'react-window';
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
@@ -148,7 +149,23 @@ export function NewChatPanel({
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
 
-  const [isUploading, setIsUploading] = useState(false);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      const resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+          setContainerSize({
+            width: entry.contentRect.width,
+            height: entry.contentRect.height,
+          });
+        }
+      });
+      resizeObserver.observe(container);
+      return () => resizeObserver.disconnect();
+    }
+  }, []);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   // useChatフックの呼び出しを削除
@@ -401,13 +418,12 @@ export function NewChatPanel({
 
   }, [isFetchingHistory, historyFinished, requestHistory]);
 
+  const listRef = useRef<FixedSizeList>(null);
+
   // Effect to scroll to bottom when messages change
   useLayoutEffect(() => {
-    const container = messagesContainerRef.current;
-    if (container && shouldScrollToBottomRef.current) {
-        requestAnimationFrame(() => {
-            container.scrollTop = container.scrollHeight;
-        });
+    if (shouldScrollToBottomRef.current && messages.length > 0) {
+      listRef.current?.scrollToItem(messages.length - 1, "end");
     }
   }, [messages, activeMessage]); // Dependency on messages and activeMessage
 
@@ -447,6 +463,109 @@ export function NewChatPanel({
     }
   };
 
+  const Row = ({ index, style }) => {
+    const msg = messages[index];
+    // Render tool messages
+    if (msg.type === "tool") {
+      return (
+        <div style={style}>
+          <Card key={`${msg.id}-${msg.ts}`} className={cn(
+            "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
+            "w-11/12 mx-auto my-1 mb-3",
+            msg.status === "running" && "tool-card--running",
+            msg.status === "finished" && "tool-card--finished border-l-4 border-green-500",
+            msg.status === "error" && "tool-card--error border-l-4 border-red-500"
+          )}>
+            <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
+              <div className="flex items-center space-x-2 flex-shrink min-w-0">
+                <span className="tool-card__icon-text text-xs border border-gray-500 dark:border-gray-400 rounded px-1 py-0.5">
+                  {getToolIconText(msg.icon)}
+                </span>
+                <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                  {msg.label || "Tool Call"}
+                </CardTitle>
+              </div>
+              <div className="tool-card__line-break"></div>
+              <code className="tool-card__command text-xs text-gray-600 dark:text-gray-400 truncate flex-shrink min-w-0">
+                {getRelativePath(msg.command)}
+              </code>
+              <div className="tool-card__status-indicator">
+                {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+                {msg.status === "running" && (
+                  <span className="relative flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
+                  </span>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="p-0 text-sm">
+              <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 dark:bg-gray-900 p-2 rounded not-prose max-h-48 overflow-auto">
+                <div className="text-gray-200 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: msg.content }} />
+              </pre>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    } else {
+      // Render user/assistant messages
+      return (
+        <div style={style}>
+          <div key={`${msg.id}-${msg.ts}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
+            {/* File Cards for User Messages */}
+            {msg.role === 'user' && msg.goal && (
+              <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
+                <div className="bg-gray-100 dark:bg-slate-700 rounded-xl p-3 flex items-center space-x-2 text-sm w-auto max-w-full">
+                  <Play className="h-5 w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.goal.task}>
+                      {msg.goal.task}
+                    </p>
+                    <p className="text-gray-500 dark:text-gray-400 text-xs">
+                      {msg.goal.subject}
+                      {msg.goal.tags && msg.goal.tags.length > 0 && ` - ${msg.goal.tags.join(', ')}`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {msg.role === 'user' && msg.files && msg.files.length > 0 && (
+              <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
+                <div className="w-full flex flex-col gap-2 items-end">
+                  {msg.files.map((file, index) => (
+                    <div key={index} className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
+                      <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
+                      <span className="font-medium text-gray-700 dark:text-gray-300 truncate">{file.name}</span>
+                      <span className="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Message Bubble */}
+            {msg.content && (
+              <div
+                  className={cn(
+                    "prose prose-sm dark:prose-invert",
+                    msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
+                  )}
+                >
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
+                    rehypePlugins={[rehypeRaw]}
+                  >
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+  };
+
   const ChatContent = (
     <>
       <input
@@ -477,103 +596,16 @@ export function NewChatPanel({
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
           </div>
         )}
-        {messages && messages.map((msg) => {
-          // Render tool messages
-          if (msg.type === "tool") {
-            return (
-              <Card key={`${msg.id}-${msg.ts}`} className={cn(
-                "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
-                "w-11/12 mx-auto my-1 mb-3",
-                msg.status === "running" && "tool-card--running",
-                msg.status === "finished" && "tool-card--finished border-l-4 border-green-500",
-                msg.status === "error" && "tool-card--error border-l-4 border-red-500"
-              )}>
-                <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
-                  <div className="flex items-center space-x-2 flex-shrink min-w-0">
-                    <span className="tool-card__icon-text text-xs border border-gray-500 dark:border-gray-400 rounded px-1 py-0.5">
-                      {getToolIconText(msg.icon)}
-                    </span>
-                    <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-                      {msg.label || "Tool Call"}
-                    </CardTitle>
-                  </div>
-                  <div className="tool-card__line-break"></div>
-                  <code className="tool-card__command text-xs text-gray-600 dark:text-gray-400 truncate flex-shrink min-w-0">
-                    {getRelativePath(msg.command)}
-                  </code>
-                  <div className="tool-card__status-indicator">
-                    {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
-                    {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
-                    {msg.status === "running" && (
-                      <span className="relative flex h-3 w-3">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
-                      </span>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="p-0 text-sm">
-                  <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 dark:bg-gray-900 p-2 rounded not-prose max-h-48 overflow-auto">
-                    <div className="text-gray-200 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: msg.content }} />
-                  </pre>
-                </CardContent>
-              </Card>
-            );
-          } else {
-            // Render user/assistant messages
-            return (
-              <div key={`${msg.id}-${msg.ts}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
-                {/* File Cards for User Messages */}
-                {msg.role === 'user' && msg.goal && (
-                  <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
-                    <div className="bg-gray-100 dark:bg-slate-700 rounded-xl p-3 flex items-center space-x-2 text-sm w-auto max-w-full">
-                      <Play className="h-5 w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.goal.task}>
-                          {msg.goal.task}
-                        </p>
-                        <p className="text-gray-500 dark:text-gray-400 text-xs">
-                          {msg.goal.subject}
-                          {msg.goal.tags && msg.goal.tags.length > 0 && ` - ${msg.goal.tags.join(', ')}`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {msg.role === 'user' && msg.files && msg.files.length > 0 && (
-                  <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
-                    <div className="w-full flex flex-col gap-2 items-end">
-                      {msg.files.map((file, index) => (
-                        <div key={index} className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
-                          <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                          <span className="font-medium text-gray-700 dark:text-gray-300 truncate">{file.name}</span>
-                          <span className="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Message Bubble */}
-                {msg.content && (
-                  <div
-                      className={cn(
-                        "prose prose-sm dark:prose-invert",
-                        msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
-                      )}
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkBreaks]}
-                        rehypePlugins={[rehypeRaw]}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                )}
-              </div>
-            );
-          }
-        })}
+        <FixedSizeList
+          ref={listRef}
+          height={containerSize.height}
+          itemCount={messages.length}
+          itemSize={150} // 仮のアイテムサイズ。後で調整します。
+          width={containerSize.width}
+          onScroll={handleScroll}
+        >
+          {Row}
+        </FixedSizeList>
 
         {/* Render activeMessage (thinking bubble or streaming assistant message) */}
         {activeMessage && (
