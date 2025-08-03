@@ -160,10 +160,9 @@ def backup_database(description="Regular backup", backup_type="short_term"):
     try:
         shutil.copy2(DB_PATH, backup_path)
         print("データベースをバックアップしました: {}".format(backup_path))
-        with open(BACKUP_LOG_PATH, "a") as f:
-            log_entry = "{}: {}
-".format(backup_filename, description)
-            f.write(log_entry.decode('utf-8') if isinstance(log_entry, bytes) else log_entry)
+        with open(BACKUP_LOG_PATH, "a", encoding="utf-8") as f:
+            log_entry = "{}: {}".format(backup_filename, description)
+            f.write(log_entry + "\n")
         if backup_type == "long_term":
             manage_long_term_backups()
         elif backup_type == "redo":
@@ -215,10 +214,9 @@ def restore_database(backup_file_path, description="Restored from backup"):
     try:
         shutil.copy2(backup_file_path, DB_PATH)
         print("データベースを復元しました: {} から".format(backup_file_path))
-        with open(BACKUP_LOG_PATH, "a") as f:
-            log_entry = "{}: {}
-".format(os.path.basename(backup_file_path), description)
-            f.write(log_entry.decode('utf-8') if isinstance(log_entry, bytes) else log_entry)
+        with open(BACKUP_LOG_PATH, "a", encoding="utf-8") as f:
+            log_entry = "{}: {}".format(os.path.basename(backup_file_path), description)
+            f.write(log_entry + "\n")
     except Exception as e:
         print("データベースの復元中にエラーが発生しました: {}".format(e))
 
@@ -629,7 +627,7 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
                     (goal_entry["id"], date_str, goal_entry["task"], 1 if goal_entry["completed"] else 0,
                      goal_entry["subject"], goal_entry["total_problems"], goal_entry["completed_problems"],
                      json.dumps(goal_entry["tags"], ensure_ascii=False), goal_entry["details"],
-                     goal_entry["created_at"], goal_entry["updated_at"])
+                     goal_entry["created_at"], goal_entry["updated_at"]))
             conn.commit()
         print(f"日付 {date_str} の目標を更新しました。")
 
@@ -681,7 +679,7 @@ def add_goal_to_date(goal_json_str, date_str):
                 (new_goal["id"], date_str, new_goal["task"], 1 if new_goal["completed"] else 0,
                  new_goal["subject"], new_goal["total_problems"], new_goal["completed_problems"],
                  json.dumps(new_goal["tags"], ensure_ascii=False), new_goal["details"],
-                 new_goal["created_at"], new_goal["updated_at"])
+                 new_goal["created_at"], new_goal["updated_at"]))
             conn.commit()
 
         print(f"日付 {date_str} に目標「{new_goal.get('task', '')}」を追加しました。")
