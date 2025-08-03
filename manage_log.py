@@ -360,7 +360,7 @@ def update_log_entry(log_id, event_type=None, subject=None, content=None, start_
             # Check if the goal exists
             cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
             if cursor.fetchone() is None:
-                print(f"エラー: 目標ID {goal_id} が見つかりません。")
+                print("エラー: 目標ID {} が見つかりません。".format(goal_id))
                 return
 
             set_clause = ""
@@ -412,9 +412,9 @@ def update_log_entry(log_id, event_type=None, subject=None, content=None, start_
         cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
         if cursor.rowcount > 0:
             conn.commit()
-            print(f"目標ID {goal_id} を削除しました。")
+            print("目標ID {} を削除しました。".format(goal_id))
         else:
-            print(f"エラー: 目標ID {goal_id} が見つかりません。")
+            print("エラー: 目標ID {} が見つかりません。".format(goal_id))
 
     with get_connection() as conn:
         cursor = conn.cursor()
