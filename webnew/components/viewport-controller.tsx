@@ -17,7 +17,7 @@ export function ViewportController() {
 
     const updateViewport = () => {
       if (window.innerWidth < MOBILE_BREAKPOINT) {
-        viewportMeta.setAttribute('content', `width=device-width, initial-scale=0.7`);
+        viewportMeta.setAttribute('content', `width=device-width, initial-scale=1.0`);
       } else {
         // Restore to the original or a default for desktop
         viewportMeta.setAttribute('content', originalContent || 'width=device-width, initial-scale=1.0');

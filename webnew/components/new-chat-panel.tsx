@@ -681,7 +681,7 @@ export function NewChatPanel({
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 placeholder="システムと対話... (Alt+Enterで送信)"
-                className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1"
+                className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1 text-base"
                 rows={1}
                 disabled={isUploading}
               />
