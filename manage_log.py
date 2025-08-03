@@ -86,7 +86,7 @@ def create_tables():
                 summary TEXT
             )
         """)
-        # 日ごとの概要テーブル (goalカラム削除後の新しいスキーマ)
+        # 日ごとの概要テーブル
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS daily_summaries (
                 date TEXT PRIMARY KEY,
@@ -109,92 +109,6 @@ def create_tables():
                 updated_at TEXT NOT NULL
             )
         """)
-
-        # daily_summariesテーブルからgoalカラムを削除する（存在する場合のみ）
-        cursor.execute("PRAGMA table_info(daily_summaries)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if 'goal' in columns:
-            print("daily_summariesテーブルからgoalカラムを削除し、データをgoalsテーブルに移行します。")
-            # 既存の目標データをgoalsテーブルに移行
-            cursor.execute("SELECT date, goal FROM daily_summaries WHERE goal IS NOT NULL AND goal != ''")
-            rows_with_goals = cursor.fetchall()
-
-            for date_str, goal_json_str in rows_with_goals:
-                try:
-                    goals_data = json.loads(goal_json_str)
-                    if not isinstance(goals_data, list):
-                        raise ValueError("Goal data must be a JSON array.")
-
-                    for goal_entry in goals_data:
-                        # 必須フィールドのチェック
-                        if not all(k in goal_entry for k in ["task", "completed", "subject"]):
-                            raise ValueError("Each goal entry must contain 'task', 'completed', 'subject'.")
-                        
-                        # idの生成または保持
-                        if "id" not in goal_entry or not goal_entry["id"]:
-                            goal_entry["id"] = str(uuid.uuid4())
-                        
-                        # problemsの型チェックとデフォルト値
-                        if "total_problems" in goal_entry and goal_entry["total_problems"] is not None:
-                            if not isinstance(goal_entry["total_problems"], (int, type(None))):
-                                raise ValueError("total_problems must be an integer or null.")
-                        else:
-                            goal_entry["total_problems"] = None
-
-                        if "completed_problems" in goal_entry and goal_entry["completed_problems"] is not None:
-                            if not isinstance(goal_entry["completed_problems"], (int, type(None))):
-                                raise ValueError("completed_problems must be an integer or null.")
-                        else:
-                            goal_entry["completed_problems"] = None
-
-                        # tagsの型チェックとデフォルト値
-                        if "tags" in goal_entry and not isinstance(goal_entry["tags"], list):
-                            raise ValueError("Tags must be a list.")
-                        elif "tags" not in goal_entry:
-                            goal_entry["tags"] = []
-
-                        # detailsのデフォルト値
-                        if "details" not in goal_entry:
-                            goal_entry["details"] = None
-
-                        # created_at, updated_atの自動設定
-                        now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-                        if "created_at" not in goal_entry or not goal_entry["created_at"]:
-                            goal_entry["created_at"] = now
-                        goal_entry["updated_at"] = now
-
-                        # goalsテーブルに挿入または更新
-                        cursor.execute(
-                            """
-                            INSERT OR REPLACE INTO goals (id, date, task, completed, subject, total_problems, completed_problems, tags, details, created_at, updated_at)
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (goal_entry["id"], date_str, goal_entry["task"], 1 if goal_entry["completed"] else 0,
-                             goal_entry["subject"], goal_entry["total_problems"], goal_entry["completed_problems"],
-                             json.dumps(goal_entry["tags"], ensure_ascii=False), goal_entry["details"],
-                             goal_entry["created_at"], goal_entry["updated_at"])
-                        )
-                except (json.JSONDecodeError, ValueError) as e:
-                    print(f"警告: 日付 {date_str} の目標データの解析または移行中にエラーが発生しました: {e}")
-                    continue # 次の行に進む
-
-            # 一時テーブルを作成し、データをコピー
-            cursor.execute("""
-                CREATE TEMPORARY TABLE daily_summaries_backup (
-                    date TEXT PRIMARY KEY,
-                    summary TEXT
-                )
-            """)
-            cursor.execute("""
-                INSERT INTO daily_summaries_backup (date, summary)
-                SELECT date, summary FROM daily_summaries
-            """)
-            # 元のテーブルを削除
-            cursor.execute("DROP TABLE daily_summaries")
-            # 一時テーブルをリネーム
-            cursor.execute("ALTER TABLE daily_summaries_backup RENAME TO daily_summaries")
-            print("daily_summariesテーブルからgoalカラムを削除しました。")
-        
         conn.commit()
 
 def add_summary_column_if_not_exists():
