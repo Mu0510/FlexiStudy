@@ -470,7 +470,7 @@ export function NewChatPanel({
         </div>
       )}
 
-      <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+      <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto max-w-full overflow-x-hidden">
         <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
         {isFetchingHistory && (
           <div className="flex justify-center items-center py-4">
@@ -739,7 +739,7 @@ export function NewChatPanel({
 
   // Embedded mode
   return (
-    <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900">
+    <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 max-w-full overflow-x-hidden">
       {ChatContent}
     </div>
   );

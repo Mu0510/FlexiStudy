@@ -295,11 +295,11 @@ export default function StudyApp() {
         </div>
 
         <main
-          className={`flex-1 transition-all duration-300 flex flex-col ${
+          className={`flex-1 transition-all duration-300 flex flex-col max-w-[100vw] ${
             sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
           } ${isFullScreen && activeView !== 'system-chat' ? 'hidden' : ''}`}
         >
-          <div className="flex-1 p-6 pt-20 lg:pt-6 overflow-y-auto">
+          <div className="flex-1 p-6 pt-20 lg:pt-6 overflow-y-auto overflow-x-hidden">
             <div className="max-w-7xl mx-auto h-full">{renderActiveView()}</div>
           </div>
         </main>
