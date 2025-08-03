@@ -413,7 +413,7 @@ def update_log_entry(log_id, event_type=None, subject=None, content=None, start_
     def delete_goal_by_id_global(goal_id):
         backup_database("Before deleting goal by global ID.")
         with get_connection() as conn:
-        cursor = conn.cursor()
+            cursor = conn.cursor()
         cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
         if cursor.rowcount > 0:
             conn.commit()
