@@ -225,7 +225,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   <Badge
                     variant="outline"
                     className="text-base h-fit truncate"
-                    style={getSubjectStyle(subjectColors[session.subject])}
+                    style={getSubjectStyle(session.subject, subjectColors)}
                   >
                     {session.subject}
                   </Badge>
@@ -388,7 +388,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       <div className="flex flex-wrap gap-2 justify-center">
                         {logData.daily_summary.subjects.length > 0 ? (
                           logData.daily_summary.subjects.map((subject, index) => (
-                            <Badge key={index} variant="outline" className="text-base h-fit truncate" style={getSubjectStyle(subjectColors[subject])}>{subject}</Badge>
+                            <Badge key={index} variant="outline" className="text-base h-fit truncate" style={getSubjectStyle(subject, subjectColors)}>{subject}</Badge>
                           ))
                         ) : (
                           <p className="text-sm text-slate-500 dark:text-slate-400">記録がありません</p>
@@ -410,6 +410,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   isToday={isToday}
                   onMoveGoal={handleMoveGoal}
                   onStartGoal={onStartGoal}
+                  subjectColors={subjectColors}
                 />
               </div>
             </>

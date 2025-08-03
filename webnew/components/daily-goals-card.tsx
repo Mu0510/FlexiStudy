@@ -32,9 +32,10 @@ interface DailyGoalsCardProps {
   isToday?: boolean;
   onMoveGoal?: (goal: Goal) => void;
   onStartGoal?: (goal: Goal) => void;
+  subjectColors?: Record<string, string>;
 }
 
-export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal, onStartGoal }: DailyGoalsCardProps) {
+export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal, onStartGoal, subjectColors = {} }: DailyGoalsCardProps) {
   if (!goals || goals.length === 0) {
     return (
       <Card className={className}>
@@ -82,7 +83,7 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
               <div className="flex items-center space-x-2 mb-1 flex-wrap">
                 <Badge
                   variant="outline"
-                  style={getSubjectStyle(goal.subject)}
+                  style={getSubjectStyle(goal.subject, subjectColors)}
                 >
                   {goal.subject}
                 </Badge>

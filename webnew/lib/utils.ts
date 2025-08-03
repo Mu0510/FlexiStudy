@@ -23,8 +23,8 @@ export const SUBJECT_COLOR_MAP: { [key: string]: string } = {
   // 必要に応じて他の教科と色を追加
 };
 
-export const getSubjectStyle = (subject: string | undefined) => {
-  const baseColor = subject ? SUBJECT_COLOR_MAP[subject] || '#0ea5e9' : '#0ea5e9'; // sky-500 as default
+export const getSubjectStyle = (subject: string | undefined, subjectColors: Record<string, string> = {}) => {
+  const baseColor = subject ? subjectColors[subject] || SUBJECT_COLOR_MAP[subject] || '#0ea5e9' : '#0ea5e9'; // sky-500 as default
 
   const rgb = hexToRgb(baseColor);
 
