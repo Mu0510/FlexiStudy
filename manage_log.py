@@ -86,14 +86,52 @@ def create_tables():
                 summary TEXT
             )
         """)
-        # 日ごとの概要テーブル
+        # 日ごとの概要テーブル (goalカラム削除後の新しいスキーマ)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS daily_summaries (
                 date TEXT PRIMARY KEY,
-                summary TEXT,
-                goal TEXT
+                summary TEXT
             )
         """)
+        # goalsテーブル
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS goals (
+                id TEXT PRIMARY KEY,
+                date TEXT NOT NULL,
+                task TEXT NOT NULL,
+                completed INTEGER NOT NULL,
+                subject TEXT,
+                total_problems INTEGER,
+                completed_problems INTEGER,
+                tags TEXT,
+                details TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
+        # daily_summariesテーブルからgoalカラムを削除する（存在する場合のみ）
+        cursor.execute("PRAGMA table_info(daily_summaries)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'goal' in columns:
+            print("daily_summariesテーブルからgoalカラムを削除します。")
+            # 一時テーブルを作成し、データをコピー
+            cursor.execute("""
+                CREATE TEMPORARY TABLE daily_summaries_backup (
+                    date TEXT PRIMARY KEY,
+                    summary TEXT
+                )
+            """)
+            cursor.execute("""
+                INSERT INTO daily_summaries_backup (date, summary)
+                SELECT date, summary FROM daily_summaries
+            """)
+            # 元のテーブルを削除
+            cursor.execute("DROP TABLE daily_summaries")
+            # 一時テーブルをリネーム
+            cursor.execute("ALTER TABLE daily_summaries_backup RENAME TO daily_summaries")
+            print("daily_summariesテーブルからgoalカラムを削除しました。")
+        
         conn.commit()
 
 def add_summary_column_if_not_exists():
@@ -107,20 +145,6 @@ def add_summary_column_if_not_exists():
                 cursor.execute("ALTER TABLE study_logs ADD COLUMN summary TEXT")
                 conn.commit()
                 print("データベースに 'summary' カラムを追加しました。")
-    except Exception as e:
-        print("カラムの追加中にエラーが発生しました: {}".format(e))
-
-def add_goal_column_if_not_exists():
-    """daily_summariesテーブルにgoalカラムが存在しない場合に追加する"""
-    try:
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("PRAGMA table_info(daily_summaries)")
-            columns = [row[1] for row in cursor.fetchall()]
-            if 'goal' not in columns:
-                cursor.execute("ALTER TABLE daily_summaries ADD COLUMN goal TEXT")
-                conn.commit()
-                print("データベースに 'goal' カラムを追加しました。")
     except Exception as e:
         print("カラムの追加中にエラーが発生しました: {}".format(e))
 
@@ -1037,7 +1061,6 @@ def main():
     """コマンドライン引数に応じて各関数を呼び出す"""
     create_tables()
     add_summary_column_if_not_exists()
-    add_goal_column_if_not_exists()
 
     if len(sys.argv) < 2:
         print("エラー: コマンドを指定してください。 --help で利用可能なコマンドを確認できます。")
