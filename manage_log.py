@@ -619,21 +619,20 @@ def add_or_update_daily_summary(summary_text, date_str=None):
         date_str = datetime.date.today().strftime('%Y-%m-%d')
     with get_connection() as conn:
         cursor = conn.cursor()
-        # 既存のsummaryとgoalを取得
-        cursor.execute("SELECT summary, goal FROM daily_summaries WHERE date = ?", (date_str,))
-        existing_row = cursor.fetchone()
-        
-        existing_summary = existing_row[0] if existing_row else None
-        existing_goal = existing_row[1] if existing_row else None
-
-        # 新しいsummary_textを適用し、goalは既存のものを保持
-        new_summary = summary_text
-        new_goal = existing_goal
-
-        cursor.execute(
-            "INSERT OR REPLACE INTO daily_summaries (date, summary, goal) VALUES (?, ?, ?)",
-            (date_str, new_summary, new_goal)
-        )
+        # 既存のレコードがあるか確認
+        cursor.execute("SELECT date FROM daily_summaries WHERE date = ?", (date_str,))
+        if cursor.fetchone():
+            # あればUPDATE
+            cursor.execute(
+                "UPDATE daily_summaries SET summary = ? WHERE date = ?",
+                (summary_text, date_str)
+            )
+        else:
+            # なければINSERT
+            cursor.execute(
+                "INSERT INTO daily_summaries (date, summary) VALUES (?, ?)",
+                (date_str, summary_text)
+            )
         conn.commit()
     print("日付 {} の概要を更新しました。".format(date_str))
 
