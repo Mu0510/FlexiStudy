@@ -67,8 +67,6 @@
   - `webnew/components/new-chat-panel.tsx`
   - `webnew/hooks/useChat.ts`
 
-## 4. 完了したタスク
-
 ### g. `/clear` コマンドの動作修正とESRCHエラーハンドリング
 - **内容:**
   - `webnew/server.js`の`_startNewGeminiProcess`関数と`geminiProcess.on('close')`イベントハンドラに詳細なログ出力を追加しました。
@@ -91,8 +89,42 @@
   - `webnew/app/page.tsx`
   - `webnew/components/new-chat-panel.tsx`
 
+### j. 目標パネルの教科バッジの色を他と揃える
+- **内容:**
+  - `webnew/lib/utils.ts`の`getSubjectStyle`関数を修正し、`subjectColors`マップを受け取り、ユーザー定義の色を優先するようにしました。
+  - `webnew/components/study-records.tsx`で`DailyGoalsCard`に`subjectColors`プロップを渡すようにしました。
+  - `webnew/components/daily-goals-card.tsx`を更新し、`subjectColors`プロップを受け取り、バッジのスタイリングに使用するようにしました。
+- **影響範囲:**
+  - `webnew/components/daily-goals-card.tsx`
+  - `webnew/components/study-records.tsx`
+  - `webnew/lib/utils.ts`
 
-## 5. 主要な知識
+### k. 入力欄の状態をシステムチャットとフローティングチャットで同期する
+- **内容:**
+  - `chatInput`、`selectedFiles`、`selectedGoal`の各ステートを`page.tsx`で管理し、`NewChatPanel`にプロップとして渡すようにリファクタリングしました。
+  - `webnew/components/new-chat-panel.tsx`で`isFloating`の再宣言エラーを修正しました。
+- **影響範囲:**
+  - `webnew/app/page.tsx`
+  - `webnew/components/new-chat-panel.tsx`
+
+### l. スマホの表示の最適化
+- **内容:**
+  - モバイルでの入力欄ズーム問題を解決するため、`viewport`メタタグに`maximum-scale=1`を追加しました。
+  - 入力欄のフォントサイズを`text-base` (16px) に戻し、視覚的な不整合とモバイルズームの問題を解消しました。
+  - チャットパネルの横方向のオーバーフローを解決するため、`webnew/app/page.tsx`のメインコンテンツ領域に`max-w-[100vw]`を追加しました。
+  - `new-chat-panel.tsx`のメッセージコンテナに`overflow-x-hidden`を追加し、横方向のオーバーフローを隠すようにしました。
+- **影響範囲:**
+  - `webnew/components/viewport-controller.tsx`
+  - `webnew/components/new-chat-panel.tsx`
+  - `webnew/app/page.tsx`
+
+### m. `activeMessageRef.current` null エラーの修正
+- **内容:**
+  - `useChat.ts`の`pushToolCall`および`requestToolCallConfirmation`ブロック内で、`setMessages`呼び出しの前に`activeMessageRef.current`を一時変数に保存することで、競合状態を防ぎました。
+- **影響範囲:**
+  - `webnew/hooks/useChat.ts`
+
+## 4. 主要な知識
 
 *   プロジェクトは、`webnew/`にNext.js/ReactチャットUIを持つGemini CLIアプリケーションです。
 *   WebSocket (`webnew/server.js`) がクライアント-サーバー間の通信に使用されます。
@@ -102,13 +134,20 @@
 *   ファイル添付情報は`[System]`メッセージを介してAIに伝えられます。
 *   履歴読み込みは、初回30メッセージ、以降20メッセージずつロードされます。
 
-## 6. 今後のタスク
+## 5. 今後のタスク
 
-*   目標パネルの教科バッジの色を他と揃える
-*   入力欄の状態をシステムチャットとフローティングチャットで同期する
-*   スマホの表示の最適化
+*   目標カードの「今日に移動」や「開始」ボタンの下まで進捗線を表示
+*   各目標に「選択」ボタンを設置 「開始」ボタンは廃止
 
-## 7. ファイルシステムの状態
+### 運用上の注意点
+
+*   `webnew/server.js` の変更を反映するには、サーバーの再起動が必要です。（ユーザーに再起動を仰いでください）
+
+
+*   目標カードの「今日に移動」や「開始」ボタンの下まで進捗線を表示
+*   各目標に「選択」ボタンを設置 「開始」ボタンは廃止
+
+## 6. ファイルシステムの状態
 
 *   **MODIFIED: `manage_log.py`**
     *   `show_logs_json_for_date`関数が`daily_summary.subjects`と`daily_summary.total_duration`を正しく設定するように修正済み。
@@ -131,4 +170,3 @@
     *   フロントエンドの日付処理のタイムゾーン修正済み。
 *   **MODIFIED: `webnew/app/page.tsx`**
     *   フロントエンドの日付処理のタイムゾーン修正済み。
-
