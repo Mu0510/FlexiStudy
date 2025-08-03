@@ -1,6 +1,6 @@
 "use client"
 
-import { Flag, CheckCircle2, Circle, Play, ArrowRightToLine } from "lucide-react"
+import { Flag, CheckCircle2, Circle, Play, ArrowRightToLine, Target } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -31,11 +31,11 @@ interface DailyGoalsCardProps {
   className?: string;
   isToday?: boolean;
   onMoveGoal?: (goal: Goal) => void;
-  onStartGoal?: (goal: Goal) => void;
+  onSelectGoal?: (goal: Goal) => void; // onStartGoal を onSelectGoal に変更
   subjectColors?: Record<string, string>;
 }
 
-export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal, onStartGoal, subjectColors = {} }: DailyGoalsCardProps) {
+export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal, onSelectGoal, subjectColors = {} }: DailyGoalsCardProps) {
   if (!goals || goals.length === 0) {
     return (
       <Card className={className}>
@@ -79,33 +79,58 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
             ) : (
               <Circle className="w-5 h-5 text-neutral-400 dark:text-neutral-500" />
             )}
-            <div className="flex-1">
-              <div className="flex items-center space-x-2 mb-1 flex-wrap">
-                <Badge
-                  variant="outline"
-                  style={getSubjectStyle(goal.subject, subjectColors)}
-                >
-                  {goal.subject}
-                </Badge>
-                {goal.tags && goal.tags.map((tag, tagIndex) => (
-                  <Badge key={tagIndex} variant="outline" className="border-neutral-200 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
-                    {tag}
-                  </Badge>
-                ))}
-                {goal.total_problems != null && goal.completed_problems != null && (
-                  <span className="text-sm text-neutral-500 dark:text-neutral-400">
-                    {goal.completed_problems}/{goal.total_problems}問
-                  </span>
-                )}
+            <div className="flex-1 flex flex-col">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-1 flex-wrap">
+                    <Badge
+                      variant="outline"
+                      style={getSubjectStyle(goal.subject, subjectColors)}
+                    >
+                      {goal.subject}
+                    </Badge>
+                    {goal.tags && goal.tags.map((tag, tagIndex) => (
+                      <Badge key={tagIndex} variant="outline" className="border-neutral-200 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
+                        {tag}
+                      </Badge>
+                    ))}
+                    {goal.total_problems != null && goal.completed_problems != null && (
+                      <span className="text-sm text-neutral-500 dark:text-neutral-400">
+                        {goal.completed_problems}/{goal.total_problems}問
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    className={`font-medium ${goal.completed ? "text-neutral-500 line-through dark:text-neutral-400" : "text-neutral-800 dark:text-neutral-200"}`}
+                  >
+                    {goal.task}
+                  </div>
+                  {goal.details && (
+                    <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">{goal.details}</p>
+                  )}
+                </div>
+                <div className="flex space-x-2">
+                  {!goal.completed && !isToday && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-sky-600 border-sky-200 hover:bg-sky-50 bg-transparent dark:text-sky-400 dark:border-sky-900/50 dark:hover:bg-sky-900/50 dark:bg-transparent"
+                      onClick={() => onMoveGoal?.(goal)}
+                    >
+                      <ArrowRightToLine className="w-4 h-4 mr-1" />
+                      今日に移動
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
+                    onClick={() => onSelectGoal?.(goal)}
+                  >
+                    選択
+                  </Button>
+                </div>
               </div>
-              <div
-                className={`font-medium ${goal.completed ? "text-neutral-500 line-through dark:text-neutral-400" : "text-neutral-800 dark:text-neutral-200"}`}
-              >
-                {goal.task}
-              </div>
-              {goal.details && (
-                <p className="text-xs text-neutral-600 dark:text-neutral-400 mt-1">{goal.details}</p>
-              )}
               {goal.total_problems != null && goal.completed_problems != null && goal.total_problems > 0 && (
                 <Progress
                   value={(goal.completed_problems / goal.total_problems) * 100}
@@ -113,29 +138,6 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
                 />
               )}
             </div>
-            {!goal.completed && (
-              isToday ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-primary-600 border-primary-200 hover:bg-primary-50 bg-transparent dark:text-primary-400 dark:border-primary-900/50 dark:hover:bg-primary-900/50 dark:bg-transparent"
-                  onClick={() => onStartGoal?.(goal)}
-                >
-                  <Play className="w-4 h-4 mr-1" />
-                  開始
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-sky-600 border-sky-200 hover:bg-sky-50 bg-transparent dark:text-sky-400 dark:border-sky-900/50 dark:hover:bg-sky-900/50 dark:bg-transparent"
-                  onClick={() => onMoveGoal?.(goal)}
-                >
-                  <ArrowRightToLine className="w-4 h-4 mr-1" />
-                  今日に移動
-                </Button>
-              )
-            )}
           </div>
         ))}
       </CardContent>

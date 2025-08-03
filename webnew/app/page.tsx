@@ -214,7 +214,7 @@ export default function StudyApp() {
     }
   };
 
-  const handleStartGoal = (goal: Goal) => {
+  const handleSelectGoal = (goal: Goal) => {
     setSelectedGoalForChat(goal);
     setIsNewChatOpen(true);
   };
@@ -236,7 +236,7 @@ export default function StudyApp() {
                   isLoading={isLoading}
                   error={error}
                   subjectColors={subjectColors}
-                  onStartGoal={handleStartGoal}
+                  onSelectGoal={handleSelectGoal}
                />;
       case "analytics":
         return <Analytics />;
