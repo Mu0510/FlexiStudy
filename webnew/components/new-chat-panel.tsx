@@ -7,7 +7,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils"
-import { useChat } from "@/hooks/useChat";
+import { useChat } from '@/hooks/useChat';
+import { Play } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -463,6 +464,22 @@ export function NewChatPanel({
             return (
               <div key={`${msg.id}-${msg.ts}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
                 {/* File Cards for User Messages */}
+                {msg.role === 'user' && msg.goal && (
+                  <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
+                    <div className="bg-gray-100 dark:bg-slate-700 rounded-xl p-3 flex items-center space-x-2 text-sm w-auto max-w-full">
+                      <Play className="h-5 w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.goal.task}>
+                          {msg.goal.task}
+                        </p>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs">
+                          {msg.goal.subject}
+                          {msg.goal.tags && msg.goal.tags.length > 0 && ` - ${msg.goal.tags.join(', ')}`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
                 {msg.role === 'user' && msg.files && msg.files.length > 0 && (
                   <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
                     <div className="w-full flex flex-col gap-2 items-end">

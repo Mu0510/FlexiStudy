@@ -468,6 +468,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                     role: m.role,
                     content: m.text || '',
                     files: m.files || [],
+                    goal: m.goal || null,
                   };
                 } else if (m.role === 'tool') {
                     // マージ済みのツールオブジェクトをそのまま返す
