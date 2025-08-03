@@ -339,76 +339,70 @@ def update_end_time(log_id, end_time):
             (end_time, duration_minutes, log_id)
         )
 
-def update_log_entry(log_id, event_type=None, subject=None, content=None, start_time=None, end_time=None, duration_minutes=None, summary=None):
-    backup_database("Before updating log entry.")
+def get_goal_by_id_global(goal_id):
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM goals WHERE id = ?", (goal_id,))
+        return cursor.fetchone()
 
+def update_goal_by_id_global(goal_id, field, value):
+    backup_database("Before updating goal by global ID.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        
+        # Check if the goal exists
+        cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
+        if cursor.fetchone() is None:
+            print("エラー: 目標ID {} が見つかりません。".format(goal_id))
+            return
 
+        set_clause = ""
+        param_value = value
 
-
-    def get_goal_by_id_global(goal_id):
-        with get_connection() as conn:
-            conn.row_factory = sqlite3.Row
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM goals WHERE id = ?", (goal_id,))
-            return cursor.fetchone()
-
-    def update_goal_by_id_global(goal_id, field, value):
-        backup_database("Before updating goal by global ID.")
-        with get_connection() as conn:
-            cursor = conn.cursor()
-            
-            # Check if the goal exists
-            cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
-            if cursor.fetchone() is None:
-                print("エラー: 目標ID {} が見つかりません。".format(goal_id))
+        if field == "completed":
+            param_value = 1 if value.lower() == "true" else 0
+            set_clause = "completed = ?"
+        elif field in ["total_problems", "completed_problems"]:
+            try:
+                param_value = int(value)
+                set_clause = f"{field} = ?"
+            except ValueError:
+                print(f"エラー: {field} は整数である必要があります。")
                 return
-
-            set_clause = ""
+        elif field == "tags":
+            try:
+                json.loads(value) # Validate if it's a valid JSON string
+                param_value = value
+                set_clause = "tags = ?"
+            except json.JSONDecodeError:
+                print(f"エラー: tags は有効なJSON文字列である必要があります。")
+                return
+        elif field == "details":
             param_value = value
+            set_clause = "details = ?"
+        elif field == "task":
+            param_value = value
+            set_clause = "task = ?"
+        elif field == "subject":
+            param_value = value
+            set_clause = "subject = ?"
+        else:
+            print(f"エラー: 無効なフィールド名 '{field}' です。")
+            return
 
-            if field == "completed":
-                param_value = 1 if value.lower() == "true" else 0
-                set_clause = "completed = ?"
-            elif field in ["total_problems", "completed_problems"]:
-                try:
-                    param_value = int(value)
-                    set_clause = f"{field} = ?"
-                except ValueError:
-                    print(f"エラー: {field} は整数である必要があります。")
-                    return
-            elif field == "tags":
-                try:
-                    json.loads(value) # Validate if it's a valid JSON string
-                    param_value = value
-                    set_clause = "tags = ?"
-                except json.JSONDecodeError:
-                    print(f"エラー: tags は有効なJSON文字列である必要があります。")
-                    return
-            elif field == "details":
-                param_value = value
-                set_clause = "details = ?"
-            elif field == "task":
-                param_value = value
-                set_clause = "task = ?"
-            elif field == "subject":
-                param_value = value
-                set_clause = "subject = ?"
-            else:
-                print(f"エラー: 無効なフィールド名 '{field}' です。")
-                return
+        now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute(
+            f"UPDATE goals SET {set_clause}, updated_at = ? WHERE id = ?",
+            (param_value, now, goal_id)
+        )
+        conn.commit()
+    print(f"目標ID {goal_id} の {field} を更新しました。")
 
-            now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-            cursor.execute(
-                f"UPDATE goals SET {set_clause}, updated_at = ? WHERE id = ?",
-                (param_value, now, goal_id)
-            )
-            conn.commit()
-        print(f"目標ID {goal_id} の {field} を更新しました。")
-
-    def delete_goal_by_id_global(goal_id):
-        backup_database("Before deleting goal by global ID.")
-        with get_connection() as conn:
-            cursor = conn.cursor()
+def delete_goal_by_id_global(goal_id):
+    backup_database("Before deleting goal by global ID.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
         cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
         if cursor.rowcount > 0:
             conn.commit()
@@ -416,6 +410,8 @@ def update_log_entry(log_id, event_type=None, subject=None, content=None, start_
         else:
             print("エラー: 目標ID {} が見つかりません。".format(goal_id))
 
+def update_log_entry(log_id, event_type=None, subject=None, content=None, start_time=None, end_time=None, duration_minutes=None, summary=None):
+    backup_database("Before updating log entry.")
     with get_connection() as conn:
         cursor = conn.cursor()
         set_clauses = []
