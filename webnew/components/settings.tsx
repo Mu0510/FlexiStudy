@@ -87,7 +87,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                     <Badge
                       variant="outline"
                       className="text-base h-fit truncate"
-                      style={getSubjectStyle(subjectColors[subject])}
+                      style={getSubjectStyle(subject, subjectColors)}
                     >
                       {subject}
                     </Badge>
