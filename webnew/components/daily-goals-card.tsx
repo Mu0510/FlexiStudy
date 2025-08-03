@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+import { getSubjectStyle } from "@/lib/utils"
 
 // 型定義
 interface Goal {
@@ -81,11 +82,7 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
               <div className="flex items-center space-x-2 mb-1 flex-wrap">
                 <Badge
                   variant="outline"
-                  className={
-                    goal.subject === "物理"
-                      ? "border-primary-200 text-primary-700 dark:border-primary-900/50 dark:text-primary-400"
-                      : "border-secondary-200 text-secondary-700 dark:border-secondary-900/50 dark:text-secondary-400"
-                  }
+                  style={getSubjectStyle(goal.subject)}
                 >
                   {goal.subject}
                 </Badge>

@@ -77,6 +77,12 @@ interface NewChatPanelProps {
   isFetchingHistory: boolean;
   historyFinished: boolean;
   clearMessages: () => void;
+  // --- Input related props ---
+  input: string;
+  setInput: (input: string) => void;
+  // --- File related props ---
+  selectedFiles: File[];
+  setSelectedFiles: (files: File[]) => void;
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -133,11 +139,15 @@ export function NewChatPanel({
   isFetchingHistory,
   historyFinished,
   clearMessages,
+  // --- Input related props ---
+  input,
+  setInput,
+  // --- File related props ---
+  selectedFiles,
+  setSelectedFiles,
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
 
-  const [input, setInput] = useState("")
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -178,6 +188,16 @@ export function NewChatPanel({
       }
     }
   }, [input]);
+
+  useEffect(() => {
+    if (selectedGoal) {
+      // 目標が選択されたら、入力欄に目標情報を表示
+      setInput(`目標: ${selectedGoal.task} (${selectedGoal.subject})`);
+    } else {
+      // 目標がクリアされたら、入力欄をクリア
+      setInput("");
+    }
+  }, [selectedGoal, setInput]);
 
   const handleSendMessage = async () => {
     if (!input.trim() && selectedFiles.length === 0) return;

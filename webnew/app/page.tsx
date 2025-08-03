@@ -36,6 +36,7 @@ export default function StudyApp() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   
   const [isNewChatOpen, setIsNewChatOpen] = useState(false)
+  const [chatInput, setChatInput] = useState("")
   const [isFullScreen, setIsFullScreen] = useState(false);
   
   const [logData, setLogData] = useState(null);
@@ -52,6 +53,7 @@ export default function StudyApp() {
   const [subjectColors, setSubjectColors] = useState<Record<string, string>>({});
   const [dashboardData, setDashboardData] = useState(null);
   const [selectedGoalForChat, setSelectedGoalForChat] = useState<Goal | null>(null);
+  const [selectedFilesForChat, setSelectedFilesForChat] = useState<File[]>([]);
 
   const chatStateBeforeSystemView = useRef(false);
 
@@ -219,6 +221,7 @@ export default function StudyApp() {
 
   const handleClearSelectedGoal = () => {
     setSelectedGoalForChat(null);
+    setSelectedFilesForChat([]);
   };
 
   const renderActiveView = () => {
@@ -258,6 +261,10 @@ export default function StudyApp() {
                   isFetchingHistory={isFetchingHistory}
                   historyFinished={historyFinished}
                   clearMessages={clearMessages}
+                  input={chatInput}
+                  setInput={setChatInput}
+                  selectedFiles={selectedFilesForChat}
+                  setSelectedFiles={setSelectedFilesForChat}
                 />;
       default:
         return <Dashboard />;
@@ -337,6 +344,10 @@ export default function StudyApp() {
             isFetchingHistory={isFetchingHistory}
             historyFinished={historyFinished}
             clearMessages={clearMessages}
+            input={chatInput}
+            setInput={setChatInput}
+            selectedFiles={selectedFilesForChat}
+            setSelectedFiles={setSelectedFilesForChat}
           />
         )}
       </div>
