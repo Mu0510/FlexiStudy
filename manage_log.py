@@ -36,35 +36,53 @@ def print_help():
     help_text = """
 Usage: python manage_log.py <command> [arguments]
 
-A command-line tool to manage your study logs.
+Gemini CLIのための学習ログ管理ツール。
+コマンドは目的別に分類されています。危険なコマンドには警告が付いています。
 
-Available Commands:
-  start <subject> "<content>"       Start a new study session.
-  break ["<content>"]               Pause the current session.
-  resume ["<content>"]              Resume a paused session.
-  end_session                       End the current study session without a break.
-  
-  summary "<text>" [session_id]     Add or update a summary for a session.
-  daily_summary "<text>" [YYYY-MM-DD] Add or update the summary for a specific day.
-  daily_goal "<json_string>" [YYYY-MM-DD] Add or update the goals for a specific day.
+--- 📖 日常的な記録コマンド (安全) ---
+毎日使う、基本的な学習記録用のコマンドです。
 
-  logs_json_for_date YYYY-MM-DD    Get all logs for a specific day in JSON format.
-  dashboard_json [days]             Get dashboard data in JSON format.
-  unique_subjects                   Get a list of all unique subjects.
-  get_entry <log_id>                Get details for a specific log entry.
+  start <subject> "<content>"       新しい学習セッションを開始します。
+  break ["<content>"]               現在のセッションを一時停止します。
+  resume ["<content>"]              一時停止したセッションを再開します。
+  end_session                       現在の学習セッションを休憩なしで終了します。
 
-  backup                            Create a manual backup of the database.
-  restore <backup_file_path>        Restore the database from a backup file.
-  undo                              Undo the last database operation.
-  redo                              Redo the last undone operation.
+--- 📊 データの確認・要約コマンド (安全) ---
+記録した学習内容を確認・要約するためのコマンドです。
 
-Advanced Commands:
-  reconstruct "<json_string>"       Rebuild the database from a JSON string.
-  recalculate_durations             Recalculate the duration for all log entries.
-  consolidate_break                 Merge the last BREAK event into the preceding RESUME event.
-  update_log_end_time <log_id> <end_time>  Manually update the end time of a log entry.
-  update_log_entry_cmd <log_id> <field> <value> Manually update a specific field of a log entry.
-  auto_daily_summary                Automatically generate and update today's summary.
+  summary "<text>" [session_id]     セッションの概要を追加・更新します。
+  daily_summary "<text>" [YYYY-MM-DD] 特定の日の概要を追加・更新します。
+  logs_json_for_date YYYY-MM-DD    特定の日の全ログをJSON形式で取得します。
+  dashboard_json [days]             Webダッシュボード用のデータをJSON形式で取得します。
+  unique_subjects                   記録されている全ての教科名をリスト表示します。
+  get_entry <log_id>                特定のログエントリの詳細を取得します。
+
+  --- 🎯 目標管理コマンド (安全) ---
+  daily_goal "<json_string>" [YYYY-MM-DD] 特定の日の目標をJSONで一括設定・更新します。
+  add_goal_to_date "<json>" <YYYY-MM-DD> 特定の日に新しい目標を1つ追加します。
+  get_goal <goal_id>                IDで指定した目標の詳細を取得します。
+  update_goal <id> <field> <value>  IDで指定した目標の特定フィールドを更新します。
+  delete_goal <goal_id>             IDで指定した目標を削除します。
+
+--- ⚠️ データベース保守・復旧コマンド (注意/危険) ---
+データベースのバックアップや復元、修正を行います。データの損失に繋がる可能性があるため、慎重に使用してください。
+
+  backup                            手動でデータベースのバックアップを作成します。
+  undo                              直前のデータベース操作を取り消します。(バックアップから復元)
+  redo                              直前の'undo'操作をやり直します。
+
+  consolidate_break                 [状況による] 最後のBREAKを直前のRESUMEに統合します。
+                                    (手動でのログ修正が面倒な場合に使用)
+  recalculate_durations             [状況による] 全てのログのdurationを再計算します。
+                                    (時間計算に不整合が起きた場合に使用)
+
+  ⚠️ restore <backup_file_path>      [危険] 指定したバックアップファイルからデータベースを復元します。
+                                    現在のデータは上書きされます。'undo'の方が安全です。
+
+  ⚠️ reconstruct "<json_string>"       [極めて危険] JSONデータからデータベースを完全に再構築します。
+                                    >> 全ての既存データ(ログ,概要,目標)が削除されます <<
+                                    >> 'undo'では元に戻せません <<
+                                    データベースが破損した際の最終手段です。
 """
     print(help_text)
 
