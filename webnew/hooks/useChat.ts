@@ -1,5 +1,6 @@
 // webnew/hooks/useChat.ts
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { marked } from 'marked';
 import * as Diff from 'diff'; // jsdiff ライブラリをインポート
 import { useWebSocket } from '@/context/WebSocketContext'; // WebSocketContextからuseWebSocketをインポート
@@ -257,30 +258,27 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const { icon, label, locations } = msg.params;
         const command = locations?.[0]?.path ?? '';
 
-        // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
-        if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
-          const currentActiveMessage = activeMessageRef.current; // 一時変数に保存
-          setMessages(prev => {
-            // 重複防止
-            if (prev.some(m => m.id === currentActiveMessage.id)) {
-              return prev;
-            }
-            const newMessages = [...prev, {
-              id: currentActiveMessage.id,
-              ts: currentActiveMessage.ts, // activeMessageのタイムスタンプを利用
-              role: 'assistant',
-              content: currentActiveMessage.content,
-            }];
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-            return newMessages;
-          });
-          setActiveMessage(null); // activeMessage をクリア
-        }
-
         setMessages(prev => {
-          const newMessages = [...prev, {
+          const newMessages = [...prev];
+
+          // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
+          if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+            const currentActiveMessage = activeMessageRef.current;
+            // 重複防止
+            if (!newMessages.some(m => m.id === currentActiveMessage.id)) {
+              newMessages.push({
+                id: currentActiveMessage.id,
+                ts: currentActiveMessage.ts,
+                role: 'assistant',
+                content: currentActiveMessage.content,
+              });
+            }
+          }
+
+          // 新しいツールメッセージを追加
+          newMessages.push({
             id: toolId,
-            ts: Date.now(), // タイムスタンプを追加
+            ts: Date.now(),
             role: 'tool',
             type: 'tool',
             toolCallId: toolId,
@@ -292,10 +290,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId,
             toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage,
             toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
-          }];
+          });
+
           newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
           return newMessages;
         });
+        // 状態更新後、activeMessageをクリア
+        setActiveMessage(null);
 
         if (ws) { // ws.current から ws に変更
           sendWsMessage({
@@ -319,33 +320,27 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           });
         }
 
-        // UIには通常のツール呼び出しとして表示
-        // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
-
-        // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
-        if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
-          const currentActiveMessage = activeMessageRef.current; // 一時変数に保存
-          setMessages(prev => {
-            // 重複防止
-            if (prev.some(m => m.id === currentActiveMessage.id)) {
-              return prev;
-            }
-            const newMessages = [...prev, {
-              id: currentActiveMessage.id,
-              ts: currentActiveMessage.ts, // activeMessageのタイムスタンプを利用
-              role: 'assistant',
-              content: currentActiveMessage.content,
-            }];
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-            return newMessages;
-          });
-          setActiveMessage(null); // activeMessage をクリア
-        }
-
         setMessages(prev => {
-          const newMessages = [...prev, {
+          const newMessages = [...prev];
+
+          // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
+          if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+            const currentActiveMessage = activeMessageRef.current;
+            // 重複防止
+            if (!newMessages.some(m => m.id === currentActiveMessage.id)) {
+              newMessages.push({
+                id: currentActiveMessage.id,
+                ts: currentActiveMessage.ts,
+                role: 'assistant',
+                content: currentActiveMessage.content,
+              });
+            }
+          }
+
+          // 新しいツールメッセージを追加
+          newMessages.push({
             id: toolId,
-            ts: Date.now(), // タイムスタンプを追加
+            ts: Date.now(),
             role: 'tool',
             type: 'tool',
             toolCallId: toolId,
@@ -357,10 +352,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             toolCallConfirmationId: confirmation?.toolCallConfirmationId,
             toolCallConfirmationMessage: confirmation?.toolCallConfirmationMessage,
             toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
-          }];
+          });
+
           newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
           return newMessages;
         });
+        // 状態更新後、activeMessageをクリア
+        setActiveMessage(null);
         onMessageReceived?.();
       } else if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
