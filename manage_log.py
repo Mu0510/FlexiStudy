@@ -351,15 +351,15 @@ def update_log_entry(log_id, event_type=None, subject=None, content=None, start_
 
 
     def get_goal_by_id_global(goal_id):
-    with get_connection() as conn:
+        with get_connection() as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM goals WHERE id = ?", (goal_id,))
         return cursor.fetchone()
 
-def update_goal_by_id_global(goal_id, field, value):
-    backup_database("Before updating goal by global ID.")
-    with get_connection() as conn:
+    def update_goal_by_id_global(goal_id, field, value):
+        backup_database("Before updating goal by global ID.")
+        with get_connection() as conn:
         cursor = conn.cursor()
         
         # Check if the goal exists
@@ -410,9 +410,9 @@ def update_goal_by_id_global(goal_id, field, value):
         conn.commit()
         print(f"目標ID {goal_id} の {field} を更新しました。")
 
-def delete_goal_by_id_global(goal_id):
-    backup_database("Before deleting goal by global ID.")
-    with get_connection() as conn:
+    def delete_goal_by_id_global(goal_id):
+        backup_database("Before deleting goal by global ID.")
+        with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
         if cursor.rowcount > 0:
