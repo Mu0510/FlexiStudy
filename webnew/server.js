@@ -344,7 +344,7 @@ app.prepare().then(() => {
                 systemMessages.push(`[System]ユーザーは以下のファイルをアップロードしました：\n${fileNames}`);
             }
             if (goal) {
-                systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- 教科: ${goal.subject}\n- タスク: ${goal.task}${goal.details ? `\n- 詳細: ${goal.details}` : ''}`);
+                systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- ID: ${goal.id}\n- 教科: ${goal.subject}\n- タスク: ${goal.task}${goal.details ? `\n- 詳細: ${goal.details}` : ''}`);
             }
 
             let messageForAI = inputText;

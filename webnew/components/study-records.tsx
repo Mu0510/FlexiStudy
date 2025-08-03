@@ -63,7 +63,7 @@ interface StudyRecordsProps {
   isLoading: boolean;
   error: string | null;
   subjectColors: Record<string, string>;
-  onStartGoal?: (goal: Goal) => void;
+  onSelectGoal?: (goal: Goal) => void;
 }
 
 const RecordsSkeleton = () => (
@@ -92,7 +92,7 @@ import { getSubjectStyle } from "@/lib/utils";
 
 
 
-export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors, onStartGoal }: StudyRecordsProps) {
+export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors, onSelectGoal }: StudyRecordsProps) {
   const { toast } = useToast();
   const [openSessions, setOpenSessions] = useState<Record<number, boolean>>({});
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
@@ -409,7 +409,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   }}
                   isToday={isToday}
                   onMoveGoal={handleMoveGoal}
-                  onStartGoal={onStartGoal}
+                  onSelectGoal={onSelectGoal}
                   subjectColors={subjectColors}
                 />
               </div>
