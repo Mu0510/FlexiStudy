@@ -259,12 +259,17 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
         // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
         if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+          const currentActiveMessage = activeMessageRef.current; // 一時変数に保存
           setMessages(prev => {
+            // 重複防止
+            if (prev.some(m => m.id === currentActiveMessage.id)) {
+              return prev;
+            }
             const newMessages = [...prev, {
-              id: activeMessageRef.current.id,
-              ts: Date.now(), // タイムスタンプを追加
+              id: currentActiveMessage.id,
+              ts: currentActiveMessage.ts, // activeMessageのタイムスタンプを利用
               role: 'assistant',
-              content: activeMessageRef.current.content,
+              content: currentActiveMessage.content,
             }];
             newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
@@ -319,12 +324,17 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
         // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
         if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
+          const currentActiveMessage = activeMessageRef.current; // 一時変数に保存
           setMessages(prev => {
+            // 重複防止
+            if (prev.some(m => m.id === currentActiveMessage.id)) {
+              return prev;
+            }
             const newMessages = [...prev, {
-              id: activeMessageRef.current.id,
-              ts: Date.now(), // タイムスタンプを追加
+              id: currentActiveMessage.id,
+              ts: currentActiveMessage.ts, // activeMessageのタイムスタンプを利用
               role: 'assistant',
-              content: activeMessageRef.current.content,
+              content: currentActiveMessage.content,
             }];
             newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
