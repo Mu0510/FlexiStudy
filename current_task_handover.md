@@ -66,15 +66,12 @@
   - `webnew/components/new-chat-panel.tsx`
   - `webnew/hooks/useChat.ts`
 
-## 4. 進行中のタスク
+## 4. 完了したタスク
 
-### a. `/clear` コマンドの動作修正
-- **問題点:**
-  - `/clear` コマンドを実行すると、チャット履歴はクリアされるものの、Geminiプロセスのコンテキストがリセットされず、新しい会話でも以前のコンテキストを引き継いでしまう問題が発生しています。
-  - `webnew/server.js`では`clearHistory`メッセージ受信時に`startGemini(wss)`を呼び出し、Geminiプロセスの再起動を試みていますが、これが期待通りに機能していない可能性があります。
-- **現在の調査状況:**
-  - `webnew/server.js`にGeminiプロセスの起動・終了に関する詳細なログを追加しました。サーバー再起動後、`/clear`コマンド実行時のログを確認し、プロセスの再起動状況とPIDの変化を検証する必要があります。
-  - **追加対応:** `geminiProcess.kill('SIGTERM')`を`process.kill(-geminiProcess.pid, 'SIGTERM')`に変更し、プロセスグループ全体にシグナルを送ることで、`sudo`を介して起動された子プロセスも確実に終了させることを試みました。
+### g. `/clear` コマンドの動作修正とESRCHエラーハンドリング
+- **内容:**
+  - `/clear` コマンド実行時のGeminiプロセスの再起動ロジックを修正し、`unhandledrejection: Error: kill ESRCH` エラーが発生しないように`try-catch`ブロックを追加しました。
+  - `SIGKILL`をプロセスグループではなく個別のプロセスに送るように変更しました。
 - **影響範囲:**
   - `webnew/server.js`
 
