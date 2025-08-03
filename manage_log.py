@@ -422,9 +422,9 @@ def update_log_entry(log_id, event_type=None, subject=None, content=None, start_
             print(f"エラー: 目標ID {goal_id} が見つかりません。")
 
     with get_connection() as conn:
-            cursor = conn.cursor()
-            set_clauses = []
-            params = []
+        cursor = conn.cursor()
+        set_clauses = []
+        params = []
         if event_type is not None:
             set_clauses.append("event_type = ?")
             params.append(event_type)

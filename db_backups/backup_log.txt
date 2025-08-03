@@ -153,3 +153,5 @@ study_log_20250803_123431_905546.db: Before adding a goal to a specific date.
 study_log_20250803_123431_906857.db: Before daily goal update.
 study_log_20250803_123432_199914.db: Before adding a goal to a specific date.
 study_log_20250803_123432_201178.db: Before daily goal update.
+study_log_20250802_223636_642417.db: Restored from backup
+study_log_20250803_142645_237736.db: Before daily summary update.
