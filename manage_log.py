@@ -360,54 +360,54 @@ def update_log_entry(log_id, event_type=None, subject=None, content=None, start_
     def update_goal_by_id_global(goal_id, field, value):
         backup_database("Before updating goal by global ID.")
         with get_connection() as conn:
-        cursor = conn.cursor()
-        
-        # Check if the goal exists
-        cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
-        if cursor.fetchone() is None:
-            print(f"エラー: 目標ID {goal_id} が見つかりません。")
-            return
-
-        set_clause = ""
-        param_value = value
-
-        if field == "completed":
-            param_value = 1 if value.lower() == "true" else 0
-            set_clause = "completed = ?"
-        elif field in ["total_problems", "completed_problems"]:
-            try:
-                param_value = int(value)
-                set_clause = f"{field} = ?"
-            except ValueError:
-                print(f"エラー: {field} は整数である必要があります。")
+            cursor = conn.cursor()
+            
+            # Check if the goal exists
+            cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
+            if cursor.fetchone() is None:
+                print(f"エラー: 目標ID {goal_id} が見つかりません。")
                 return
-        elif field == "tags":
-            try:
-                json.loads(value) # Validate if it's a valid JSON string
+
+            set_clause = ""
+            param_value = value
+
+            if field == "completed":
+                param_value = 1 if value.lower() == "true" else 0
+                set_clause = "completed = ?"
+            elif field in ["total_problems", "completed_problems"]:
+                try:
+                    param_value = int(value)
+                    set_clause = f"{field} = ?"
+                except ValueError:
+                    print(f"エラー: {field} は整数である必要があります。")
+                    return
+            elif field == "tags":
+                try:
+                    json.loads(value) # Validate if it's a valid JSON string
+                    param_value = value
+                    set_clause = "tags = ?"
+                except json.JSONDecodeError:
+                    print(f"エラー: tags は有効なJSON文字列である必要があります。")
+                    return
+            elif field == "details":
                 param_value = value
-                set_clause = "tags = ?"
-            except json.JSONDecodeError:
-                print(f"エラー: tags は有効なJSON文字列である必要があります。")
+                set_clause = "details = ?"
+            elif field == "task":
+                param_value = value
+                set_clause = "task = ?"
+            elif field == "subject":
+                param_value = value
+                set_clause = "subject = ?"
+            else:
+                print(f"エラー: 無効なフィールド名 '{field}' です。")
                 return
-        elif field == "details":
-            param_value = value
-            set_clause = "details = ?"
-        elif field == "task":
-            param_value = value
-            set_clause = "task = ?"
-        elif field == "subject":
-            param_value = value
-            set_clause = "subject = ?"
-        else:
-            print(f"エラー: 無効なフィールド名 '{field}' です。")
-            return
 
-        now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-        cursor.execute(
-            f"UPDATE goals SET {set_clause}, updated_at = ? WHERE id = ?",
-            (param_value, now, goal_id)
-        )
-        conn.commit()
+            now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+            cursor.execute(
+                f"UPDATE goals SET {set_clause}, updated_at = ? WHERE id = ?",
+                (param_value, now, goal_id)
+            )
+            conn.commit()
         print(f"目標ID {goal_id} の {field} を更新しました。")
 
     def delete_goal_by_id_global(goal_id):
