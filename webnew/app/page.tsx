@@ -227,7 +227,7 @@ export default function StudyApp() {
   const renderActiveView = () => {
     switch (activeView) {
       case "dashboard":
-        return <Dashboard dashboardData={dashboardData} />;
+        return <Dashboard dashboardData={dashboardData} subjectColors={subjectColors} />;
       case "records":
         return <StudyRecords 
                   logData={logData} 
