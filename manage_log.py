@@ -745,6 +745,8 @@ def show_logs_json_for_date(date_str):
         subjects = sorted(list(set(s['subject'] for s in output_data['sessions'])))
         output_data['total_day_study_minutes'] = total_minutes
         output_data['subjects_studied'] = subjects
+        output_data['daily_summary']['total_duration'] = total_minutes
+        output_data['daily_summary']['subjects'] = subjects
 
     print(json.dumps(output_data, indent=2, ensure_ascii=False))
 
