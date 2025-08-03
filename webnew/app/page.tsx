@@ -265,6 +265,8 @@ export default function StudyApp() {
                   setInput={setChatInput}
                   selectedFiles={selectedFilesForChat}
                   setSelectedFiles={setSelectedFilesForChat}
+                  selectedGoal={selectedGoalForChat}
+                  onClearSelectedGoal={handleClearSelectedGoal}
                 />;
       default:
         return <Dashboard />;

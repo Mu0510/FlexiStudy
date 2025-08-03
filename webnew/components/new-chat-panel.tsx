@@ -189,16 +189,6 @@ export function NewChatPanel({
     }
   }, [input]);
 
-  useEffect(() => {
-    if (selectedGoal) {
-      // 目標が選択されたら、入力欄に目標情報を表示
-      setInput(`目標: ${selectedGoal.task} (${selectedGoal.subject})`);
-    } else {
-      // 目標がクリアされたら、入力欄をクリア
-      setInput("");
-    }
-  }, [selectedGoal, setInput]);
-
   const handleSendMessage = async () => {
     if (!input.trim() && selectedFiles.length === 0) return;
 
