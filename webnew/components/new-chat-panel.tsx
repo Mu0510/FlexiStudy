@@ -564,7 +564,6 @@ export function NewChatPanel({
                     >
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm, remarkBreaks]}
-                        rehypePlugins={[rehypeRaw]}
                       >
                         {msg.content}
                       </ReactMarkdown>
@@ -586,7 +585,6 @@ export function NewChatPanel({
             >
               <ReactMarkdown
                 remarkPlugins={[remarkGfm, remarkBreaks]}
-                rehypePlugins={[rehypeRaw]}
               >
                 {activeMessage.content}
               </ReactMarkdown>
