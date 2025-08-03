@@ -38,7 +38,7 @@ function broadcast(wss, json){
 }
 
 function _startNewGeminiProcess(wss) { // Pass wss to broadcast
-  console.log(`Attempting to start Gemini process with command: sudo -u geminicli gemini ${GEMINI_ARGS.join(' ')}`);
+  console.log(`[Gemini Process] Attempting to start new Gemini process... (Called from: ${new Error().stack.split('\n')[2].trim()})`);
   geminiProcess = spawn('sudo', ['-u', 'geminicli', 'gemini', ...GEMINI_ARGS], { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
 
   const init = {
@@ -53,7 +53,7 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
     console.error('[Gemini SPAWN ERROR]', err);
   });
 
-  console.log(`Gemini process started with PID: ${geminiProcess.pid}`);
+  console.log(`[Gemini Process] New Gemini process started with PID: ${geminiProcess.pid}`);
 
   let buf = '';
   let braceLevel = 0;
@@ -84,7 +84,8 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
             inString = true;
           } else if (char === '{') {
             braceLevel++;
-          } else if (char === '}') {
+          }
+          else if (char === '}') {
             braceLevel--;
             if (braceLevel === 0) {
               const jsonString = buf.substring(jsonStart, cursor + 1);
@@ -181,7 +182,7 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
   });
 
   geminiProcess.on('close', (code, signal) => {
-    console.log(`Gemini exited with code ${code} and signal ${signal}`);
+    console.log(`[Gemini Process] Gemini process (PID: ${this.pid}) exited with code ${code} and signal ${signal}. (Called from: ${new Error().stack.split('\n')[2].trim()})`);
     if (geminiProcess && geminiProcess.pid === this.pid) {
         history.length = 0;
         broadcast(wss, { jsonrpc:'2.0', method:'historyCleared', params:{ reason: 'gemini-exit' } });
@@ -192,34 +193,49 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
 
 function startGemini(wss) {
   if (isRestartingGemini) {
-    console.log('Gemini process is already restarting. Skipping new request.');
+    console.log('[Gemini Process] Gemini process is already restarting. Skipping new request.');
     return;
   }
 
   if (geminiProcess) {
-    console.log('Killing existing Gemini process for restart...');
+    console.log(`[Gemini Process] Killing existing Gemini process (PID: ${geminiProcess.pid}) for restart...`);
     isRestartingGemini = true; // 再起動中フラグを立てる
     
     // 'close'イベントリスナーを一度だけ設定
     geminiProcess.once('close', (code, signal) => {
-      console.log(`Old Gemini process (PID: ${geminiProcess.pid}) exited with code ${code}, signal ${signal}. Starting new one.`);
+      console.log(`[Gemini Process] Old Gemini process (PID: ${geminiProcess.pid}) close event received. Code: ${code}, Signal: ${signal}. Starting new one.`);
       geminiProcess = null; // 参照を完全にクリア
       _startNewGeminiProcess(wss);
       isRestartingGemini = false; // 再起動完了
     });
 
     // プロセスを終了させる
-    geminiProcess.kill('SIGTERM'); // まずは穏便に終了を試みる
+    try {
+      console.log(`[Gemini Process] Attempting to kill process with PID: ${geminiProcess.pid}`);
+      process.kill(-geminiProcess.pid, 'SIGTERM'); // プロセスグループ全体にSIGTERMを送る
+    } catch (err) {
+      console.error(`[Gemini Process ERROR] Failed to kill process with PID: ${geminiProcess.pid}. Error: ${err.message}`);
+      // エラーが発生した場合でも、新しいプロセスを開始する試みは続ける
+      geminiProcess = null; // エラーが発生した場合は参照をクリアして、新しいプロセスを開始できるようにする
+      _startNewGeminiProcess(wss);
+      isRestartingGemini = false;
+      return; // エラー処理後、ここで終了
+    }
 
     // タイムアウトを設定して、強制終了
     setTimeout(() => {
       if (geminiProcess && !geminiProcess.killed) {
-        console.warn(`Gemini process (PID: ${geminiProcess.pid}) did not exit gracefully. Forcing SIGKILL.`);
-        geminiProcess.kill('SIGKILL');
+        console.warn(`[Gemini Process] Gemini process (PID: ${geminiProcess.pid}) did not exit gracefully. Forcing SIGKILL.`);
+        try {
+          process.kill(geminiProcess.pid, 'SIGKILL'); // SIGKILLはプロセスグループではなく個別のプロセスに送る
+        } catch (err) {
+          console.error(`[Gemini Process ERROR] Failed to SIGKILL process with PID: ${geminiProcess.pid}. Error: ${err.message}`);
+        }
       }
     }, 3000); // 3秒待っても終了しない場合
 
   } else {
+    console.log('[Gemini Process] No existing Gemini process. Starting a new one.');
     _startNewGeminiProcess(wss);
   }
 }

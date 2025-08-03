@@ -14,6 +14,13 @@
 
 ## 3. 完了したタスク
 
+### f. Geminiプロセスログの追加とフラグのリセット位置修正
+- **内容:**
+  - `webnew/server.js`の`_startNewGeminiProcess`関数と`geminiProcess.on('close')`イベントハンドラに詳細なログ出力を追加しました。
+  - `isRestartingGemini`フラグのリセット位置を、新しいGeminiプロセスが完全に起動するまで`true`を維持するように修正しました。
+- **影響範囲:**
+  - `webnew/server.js`
+
 ### a. 目標開始機能とチャット連携 (c5591ea, 57549fb)
 - **内容:**
   - 「今日の目標」カードの「開始」ボタンをクリックすると、フローティングチャットパネルが開き、選択された目標の情報（タスク名、教科など）がチャット入力欄の上に表示されるようになりました。
@@ -43,7 +50,35 @@
   - `webnew/app/page.tsx`
   - `webnew/components/study-records.tsx`
 
-## 4. 主要な知識
+### d. 学習記録パネルの表示バグ修正 (fbe83c5)
+- **内容:**
+  - `manage_log.py`の`show_logs_json_for_date`関数が、`daily_summary`オブジェクト内の`subjects`と`total_duration`フィールドを正しく設定していなかった問題を修正しました。
+  - これにより、フロントエンドで「記録がありません」と表示されたり、総学習時間が誤って表示されたりする問題が解消されました。
+- **影響範囲:**
+  - `manage_log.py`
+
+### e. チャットメッセージへの目標情報表示機能追加 (06e18f6)
+- **内容:**
+  - ユーザーのチャットメッセージに目標情報を直接表示する機能を追加しました。
+  - `webnew/components/new-chat-panel.tsx`で`Play`アイコンをインポートし、`msg.goal`データ（タスク、教科、タグ）を表示するUIを実装しました。
+  - `webnew/hooks/useChat.ts`の`Message`および`SendMessageData`インターフェースに`goal`プロパティを追加し、`sendMessage`および`fetchHistory`ロジックが`goal`データを正しく処理するように修正しました。
+- **影響範囲:**
+  - `webnew/components/new-chat-panel.tsx`
+  - `webnew/hooks/useChat.ts`
+
+## 4. 進行中のタスク
+
+### a. `/clear` コマンドの動作修正
+- **問題点:**
+  - `/clear` コマンドを実行すると、チャット履歴はクリアされるものの、Geminiプロセスのコンテキストがリセットされず、新しい会話でも以前のコンテキストを引き継いでしまう問題が発生しています。
+  - `webnew/server.js`では`clearHistory`メッセージ受信時に`startGemini(wss)`を呼び出し、Geminiプロセスの再起動を試みていますが、これが期待通りに機能していない可能性があります。
+- **現在の調査状況:**
+  - `webnew/server.js`にGeminiプロセスの起動・終了に関する詳細なログを追加しました。サーバー再起動後、`/clear`コマンド実行時のログを確認し、プロセスの再起動状況とPIDの変化を検証する必要があります。
+  - **追加対応:** `geminiProcess.kill('SIGTERM')`を`process.kill(-geminiProcess.pid, 'SIGTERM')`に変更し、プロセスグループ全体にシグナルを送ることで、`sudo`を介して起動された子プロセスも確実に終了させることを試みました。
+- **影響範囲:**
+  - `webnew/server.js`
+
+## 5. 主要な知識
 
 *   プロジェクトは、`webnew/`にNext.js/ReactチャットUIを持つGemini CLIアプリケーションです。
 *   WebSocket (`webnew/server.js`) がクライアント-サーバー間の通信に使用されます。
@@ -55,16 +90,25 @@
 
 ## 6. ファイルシステムの状態
 
-*   **MODIFIED: `webnew/components/study-records.tsx`**
+*   **MODIFIED: `manage_log.py`**
+    *   `show_logs_json_for_date`関数が`daily_summary.subjects`と`daily_summary.total_duration`を正しく設定するように修正済み。
+*   **MODIFIED: `webnew/components/new-chat-panel.tsx`**
     *   ダークモード対応時のスタイル破壊を修正済み (`0e0cb96`)。
-*   **MODIFIED: `webnew/components/new-chat-panel.tsx`, `tool-card.tsx`, `tool-card-item.tsx`**
-    *   ダークモード対応済みだが、ライトモードのスタイルが破壊されている可能性があるため要確認。
+    *   チャットメッセージに目標情報を表示するUIを追加済み。
 *   **MODIFIED: `webnew/hooks/useChat.ts`**
     *   `Message`インターフェースを`files`を含むように拡張し、`sendMessage`がファイルデータを処理するように更新。
     *   `isFetchingHistory`と`historyFinished`をUI状態管理のためにエクスポート。
     *   `activeMessage`の処理ロジックを修正済み。
+    *   `Message`および`SendMessageData`インターフェースに`goal`プロパティを追加済み。
 *   **MODIFIED: `webnew/server.js`**
     *   `sendUserMessage`がAI向けにファイル詳細を含む`[System]`メッセージを構築するように変更。
     *   `thought`メッセージが`streamAssistantMessageChunk`によって上書きされるバグを修正。
+    *   Geminiプロセスの起動・終了に関する詳細なログを追加済み。
 *   **MODIFIED: `webnew/app/api/upload/route.ts`**
     *   アップロードAPIの応答を、アップロードされた各ファイルの`name`、`path`、`size`を含む`files`配列を含むように変更。
+*   **MODIFIED: `webnew/components/study-records.tsx`**
+    *   ダークモード対応時のスタイル破壊を修正済み (`0e0cb96`)。
+    *   フロントエンドの日付処理のタイムゾーン修正済み。
+*   **MODIFIED: `webnew/app/page.tsx`**
+    *   フロントエンドの日付処理のタイムゾーン修正済み。
+
