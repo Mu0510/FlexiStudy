@@ -71,10 +71,26 @@
 
 ### g. `/clear` コマンドの動作修正とESRCHエラーハンドリング
 - **内容:**
-  - `/clear` コマンド実行時のGeminiプロセスの再起動ロジックを修正し、`unhandledrejection: Error: kill ESRCH` エラーが発生しないように`try-catch`ブロックを追加しました。
-  - `SIGKILL`をプロセスグループではなく個別のプロセスに送るように変更しました。
+  - `webnew/server.js`の`_startNewGeminiProcess`関数と`geminiProcess.on('close')`イベントハンドラに詳細なログ出力を追加しました。
+  - `isRestartingGemini`フラグのリセット位置を、新しいGeminiプロセスが完全に起動するまで`true`を維持するように修正しました。
 - **影響範囲:**
   - `webnew/server.js`
+
+### h. 教科バッジの色の調整
+- **内容:**
+  - `webnew/lib/utils.ts`の`getSubjectStyle`関数を修正し、教科バッジの背景色をより薄く（透明度0.035）、枠線をより濃く（透明度0.4）調整しました。
+- **影響範囲:**
+  - `webnew/lib/utils.ts`
+
+### i. チャット履歴読み込みの最適化
+- **内容:**
+  - `useChat`フックを`webnew/components/new-chat-panel.tsx`から`webnew/app/page.tsx`に移動し、チャットの状態管理を一元化しました。
+  - `NewChatPanel`には必要なプロパティを`page.tsx`から渡すように変更しました。
+  - これにより、チャットパネルの表示・非表示による履歴の再読み込みが解消されました。
+- **影響範囲:**
+  - `webnew/app/page.tsx`
+  - `webnew/components/new-chat-panel.tsx`
+
 
 ## 5. 主要な知識
 
@@ -86,7 +102,13 @@
 *   ファイル添付情報は`[System]`メッセージを介してAIに伝えられます。
 *   履歴読み込みは、初回30メッセージ、以降20メッセージずつロードされます。
 
-## 6. ファイルシステムの状態
+## 6. 今後のタスク
+
+*   目標パネルの教科バッジの色を他と揃える
+*   入力欄の状態をシステムチャットとフローティングチャットで同期する
+*   スマホの表示の最適化
+
+## 7. ファイルシステムの状態
 
 *   **MODIFIED: `manage_log.py`**
     *   `show_logs_json_for_date`関数が`daily_summary.subjects`と`daily_summary.total_duration`を正しく設定するように修正済み。
