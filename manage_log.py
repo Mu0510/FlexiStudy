@@ -50,8 +50,8 @@ Gemini CLIのための学習ログ管理ツール。
 --- 📊 データの確認・要約コマンド (安全) ---
 記録した学習内容を確認・要約するためのコマンドです。
 
-  summary "<text>" [session_id]     セッションの概要を追加・更新します。
-  daily_summary "<text>" [YYYY-MM-DD] 特定の日の概要を追加・更新します。
+  summary "<text>" [session_id]     セッションの概要を追加・更新します。(Geminiが内容を生成)
+  daily_summary "<text>" [YYYY-MM-DD] 特定の日の概要を追加・更新します。(Geminiが内容を生成)
   logs_json_for_date YYYY-MM-DD    特定の日の全ログをJSON形式で取得します。
   dashboard_json [days]             Webダッシュボード用のデータをJSON形式で取得します。
   unique_subjects                   記録されている全ての教科名をリスト表示します。
@@ -161,7 +161,8 @@ def backup_database(description="Regular backup", backup_type="short_term"):
         shutil.copy2(DB_PATH, backup_path)
         print("データベースをバックアップしました: {}".format(backup_path))
         with open(BACKUP_LOG_PATH, "a") as f:
-            log_entry = "{}: {}\n".format(backup_filename, description)
+            log_entry = "{}: {}
+".format(backup_filename, description)
             f.write(log_entry.decode('utf-8') if isinstance(log_entry, bytes) else log_entry)
         if backup_type == "long_term":
             manage_long_term_backups()
@@ -215,7 +216,8 @@ def restore_database(backup_file_path, description="Restored from backup"):
         shutil.copy2(backup_file_path, DB_PATH)
         print("データベースを復元しました: {} から".format(backup_file_path))
         with open(BACKUP_LOG_PATH, "a") as f:
-            log_entry = "{}: {}\n".format(os.path.basename(backup_file_path), description)
+            log_entry = "{}: {}
+".format(os.path.basename(backup_file_path), description)
             f.write(log_entry.decode('utf-8') if isinstance(log_entry, bytes) else log_entry)
     except Exception as e:
         print("データベースの復元中にエラーが発生しました: {}".format(e))
@@ -566,43 +568,7 @@ def add_or_update_daily_summary(summary_text, date_str=None):
                 (date_str, summary_text)
             )
         conn.commit()
-    print("日付 {} の概要を更新しました。".format(date_str))
-
-def auto_update_daily_summary():
-    today_date_str = datetime.date.today().strftime('%Y-%m-%d')
-    with get_connection() as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT subject, content, duration_minutes FROM study_logs WHERE DATE(start_time) = ? AND event_type IN ('START', 'RESUME') ORDER BY start_time",
-            (today_date_str,)
-        )
-        logs = cursor.fetchall()
-
-    if not logs:
-        add_or_update_daily_summary("まだ学習記録はありません。", today_date_str)
-        return
-
-    total_minutes = 0
-    subject_summary = {}
-    for log in logs:
-        total_minutes += log['duration_minutes'] if log['duration_minutes'] else 0
-        subject = log['subject'] if log['subject'] else "不明な教科"
-        content = log['content'] if log['content'] else "内容不明"
-        if subject not in subject_summary:
-            subject_summary[subject] = []
-        subject_summary[subject].append(content)
-
-    summary_parts = []
-    for subject, contents in subject_summary.items():
-        summary_parts.append("{0} ({1}セッション)".format(subject, len(contents)))
-
-    total_hours = total_minutes // 60
-    remaining_minutes = total_minutes % 60
-
-    summary_text = "本日、これまでに{0}時間{1}分学習しました。主な学習内容: {2}。".format(total_hours, remaining_minutes, ', '.join(summary_parts))
-    add_or_update_daily_summary(summary_text, today_date_str)
-
+    print(f"Geminiの分析に基づき、日付 {date_str} の概要を更新しました。")
 
 def add_or_update_daily_goal(goal_json_str, date_str=None):
     backup_database("Before daily goal update.")
@@ -664,7 +630,6 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
                      goal_entry["subject"], goal_entry["total_problems"], goal_entry["completed_problems"],
                      json.dumps(goal_entry["tags"], ensure_ascii=False), goal_entry["details"],
                      goal_entry["created_at"], goal_entry["updated_at"])
-                )
             conn.commit()
         print(f"日付 {date_str} の目標を更新しました。")
 
@@ -717,7 +682,6 @@ def add_goal_to_date(goal_json_str, date_str):
                  new_goal["subject"], new_goal["total_problems"], new_goal["completed_problems"],
                  json.dumps(new_goal["tags"], ensure_ascii=False), new_goal["details"],
                  new_goal["created_at"], new_goal["updated_at"])
-            )
             conn.commit()
 
         print(f"日付 {date_str} に目標「{new_goal.get('task', '')}」を追加しました。")
@@ -933,7 +897,7 @@ def get_dashboard_data(weekly_period_days=None):
             WHERE event_type IN ('START', 'RESUME')
             ORDER BY start_time DESC 
             LIMIT 2
-        """)
+        """,)
         recent_sessions_raw = cursor.fetchall()
         recent_sessions = []
         for row in recent_sessions_raw:
@@ -1161,8 +1125,6 @@ def main():
         get_dashboard_data(weekly_period_days)
     elif command == 'recalculate_durations':
         recalculate_all_durations()
-    elif command == 'auto_daily_summary':
-        auto_update_daily_summary()
     else:
         print("エラー: 不明なコマンド '{}'".format(command))
         sys.exit(1)
