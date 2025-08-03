@@ -321,6 +321,95 @@ def update_end_time(log_id, end_time):
         )
 
 def update_log_entry(log_id, event_type=None, subject=None, content=None, start_time=None, end_time=None, duration_minutes=None, summary=None):
+    backup_database("Before updating log entry.")
+
+def get_goal_by_id(date_str, goal_id):
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
+        existing_row = cursor.fetchone()
+        
+        if existing_row and existing_row[0]:
+            try:
+                goals = json.loads(existing_row[0])
+                for goal in goals:
+                    if goal.get("id") == goal_id:
+                        return goal
+            except json.JSONDecodeError:
+                pass
+    return None
+
+def update_goal_by_id(date_str, goal_id, field, value):
+    backup_database("Before updating goal by ID.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
+        existing_row = cursor.fetchone()
+        
+        goals = []
+        if existing_row and existing_row[0]:
+            try:
+                goals = json.loads(existing_row[0])
+            except json.JSONDecodeError:
+                pass
+
+        found = False
+        for goal in goals:
+            if goal.get("id") == goal_id:
+                if field == "completed":
+                    goal[field] = (value.lower() == "true")
+                elif field in ["total_problems", "completed_problems"]:
+                    try:
+                        goal[field] = int(value)
+                    except ValueError:
+                        print("エラー: {} は整数である必要があります。".format(field))
+                        return
+                else:
+                    goal[field] = value
+                goal["updated_at"] = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+                found = True
+                break
+        
+        if found:
+            updated_goals_json_str = json.dumps(goals, ensure_ascii=False)
+            cursor.execute(
+                "INSERT OR REPLACE INTO daily_summaries (date, summary, goal) VALUES (?, (SELECT summary FROM daily_summaries WHERE date = ?), ?)",
+                (date_str, date_str, updated_goals_json_str)
+            )
+            conn.commit()
+            print("日付 {} の目標ID {} の {} を更新しました。".format(date_str, goal_id, field))
+        else:
+            print("エラー: 日付 {} に目標ID {} が見つかりません。".format(date_str, goal_id))
+
+def delete_goal_by_id(date_str, goal_id):
+    backup_database("Before deleting goal by ID.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
+        existing_row = cursor.fetchone()
+        
+        goals = []
+        if existing_row and existing_row[0]:
+            try:
+                goals = json.loads(existing_row[0])
+            except json.JSONDecodeError:
+                pass
+
+        original_len = len(goals)
+        goals = [goal for goal in goals if goal.get("id") != goal_id]
+        
+        if len(goals) < original_len:
+            updated_goals_json_str = json.dumps(goals, ensure_ascii=False)
+            cursor.execute(
+                "INSERT OR REPLACE INTO daily_summaries (date, summary, goal) VALUES (?, (SELECT summary FROM daily_summaries WHERE date = ?), ?)",
+                (date_str, date_str, updated_goals_json_str)
+            )
+            conn.commit()
+            print("日付 {} の目標ID {} を削除しました。".format(date_str, goal_id))
+        else:
+            print("エラー: 日付 {} に目標ID {} が見つかりません。".format(date_str, goal_id))
+
+
     with get_connection() as conn:
         cursor = conn.cursor()
         set_clauses = []
