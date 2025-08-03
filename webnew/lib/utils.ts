@@ -30,8 +30,8 @@ export const getSubjectStyle = (color: string | undefined) => {
     };
   }
 
-  const backgroundColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.1)`;
-  const borderColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.2)`;
+  const backgroundColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.035)`;
+  const borderColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`;
 
   return {
     color: baseColor,
