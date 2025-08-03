@@ -645,8 +645,11 @@ def add_goal_to_date(goal_json_str, date_str):
         # 新しい目標のIDを再生成し、未完了状態にする
         new_goal['id'] = str(uuid.uuid4())
         new_goal['completed'] = False
-        if 'completed_problems' in new_goal:
-            new_goal['completed_problems'] = 0
+        # total_problemsとcompleted_problemsのデフォルト値を設定
+        if 'total_problems' not in new_goal:
+            new_goal['total_problems'] = None
+        if 'completed_problems' not in new_goal:
+            new_goal['completed_problems'] = None
         now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
         new_goal['created_at'] = now
         new_goal['updated_at'] = now
