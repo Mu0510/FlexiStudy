@@ -347,92 +347,79 @@ def update_end_time(log_id, end_time):
 def update_log_entry(log_id, event_type=None, subject=None, content=None, start_time=None, end_time=None, duration_minutes=None, summary=None):
     backup_database("Before updating log entry.")
 
-def get_goal_by_id(date_str, goal_id):
+
+
+
+    def get_goal_by_id_global(goal_id):
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM goals WHERE id = ?", (goal_id,))
+        return cursor.fetchone()
+
+def update_goal_by_id_global(goal_id, field, value):
+    backup_database("Before updating goal by global ID.")
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
-        existing_row = cursor.fetchone()
         
-        if existing_row and existing_row[0]:
-            try:
-                goals = json.loads(existing_row[0])
-                for goal in goals:
-                    if goal.get("id") == goal_id:
-                        return goal
-            except json.JSONDecodeError:
-                pass
-    return None
+        # Check if the goal exists
+        cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
+        if cursor.fetchone() is None:
+            print(f"エラー: 目標ID {goal_id} が見つかりません。")
+            return
 
-def update_goal_by_id(date_str, goal_id, field, value):
-    backup_database("Before updating goal by ID.")
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
-        existing_row = cursor.fetchone()
-        
-        goals = []
-        if existing_row and existing_row[0]:
-            try:
-                goals = json.loads(existing_row[0])
-            except json.JSONDecodeError:
-                pass
+        set_clause = ""
+        param_value = value
 
-        found = False
-        for goal in goals:
-            if goal.get("id") == goal_id:
-                if field == "completed":
-                    goal[field] = (value.lower() == "true")
-                elif field in ["total_problems", "completed_problems"]:
-                    try:
-                        goal[field] = int(value)
-                    except ValueError:
-                        print("エラー: {} は整数である必要があります。".format(field))
-                        return
-                else:
-                    goal[field] = value
-                goal["updated_at"] = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-                found = True
-                break
-        
-        if found:
-            updated_goals_json_str = json.dumps(goals, ensure_ascii=False)
-            cursor.execute(
-                "INSERT OR REPLACE INTO daily_summaries (date, summary, goal) VALUES (?, (SELECT summary FROM daily_summaries WHERE date = ?), ?)",
-                (date_str, date_str, updated_goals_json_str)
-            )
-            conn.commit()
-            print("日付 {} の目標ID {} の {} を更新しました。".format(date_str, goal_id, field))
+        if field == "completed":
+            param_value = 1 if value.lower() == "true" else 0
+            set_clause = "completed = ?"
+        elif field in ["total_problems", "completed_problems"]:
+            try:
+                param_value = int(value)
+                set_clause = f"{field} = ?"
+            except ValueError:
+                print(f"エラー: {field} は整数である必要があります。")
+                return
+        elif field == "tags":
+            try:
+                json.loads(value) # Validate if it's a valid JSON string
+                param_value = value
+                set_clause = "tags = ?"
+            except json.JSONDecodeError:
+                print(f"エラー: tags は有効なJSON文字列である必要があります。")
+                return
+        elif field == "details":
+            param_value = value
+            set_clause = "details = ?"
+        elif field == "task":
+            param_value = value
+            set_clause = "task = ?"
+        elif field == "subject":
+            param_value = value
+            set_clause = "subject = ?"
         else:
-            print("エラー: 日付 {} に目標ID {} が見つかりません。".format(date_str, goal_id))
+            print(f"エラー: 無効なフィールド名 '{field}' です。")
+            return
 
-def delete_goal_by_id(date_str, goal_id):
-    backup_database("Before deleting goal by ID.")
+        now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+        cursor.execute(
+            f"UPDATE goals SET {set_clause}, updated_at = ? WHERE id = ?",
+            (param_value, now, goal_id)
+        )
+        conn.commit()
+        print(f"目標ID {goal_id} の {field} を更新しました。")
+
+def delete_goal_by_id_global(goal_id):
+    backup_database("Before deleting goal by global ID.")
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
-        existing_row = cursor.fetchone()
-        
-        goals = []
-        if existing_row and existing_row[0]:
-            try:
-                goals = json.loads(existing_row[0])
-            except json.JSONDecodeError:
-                pass
-
-        original_len = len(goals)
-        goals = [goal for goal in goals if goal.get("id") != goal_id]
-        
-        if len(goals) < original_len:
-            updated_goals_json_str = json.dumps(goals, ensure_ascii=False)
-            cursor.execute(
-                "INSERT OR REPLACE INTO daily_summaries (date, summary, goal) VALUES (?, (SELECT summary FROM daily_summaries WHERE date = ?), ?)",
-                (date_str, date_str, updated_goals_json_str)
-            )
+        cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
+        if cursor.rowcount > 0:
             conn.commit()
-            print("日付 {} の目標ID {} を削除しました。".format(date_str, goal_id))
+            print(f"目標ID {goal_id} を削除しました。")
         else:
-            print("エラー: 日付 {} に目標ID {} が見つかりません。".format(date_str, goal_id))
-
+            print(f"エラー: 目標ID {goal_id} が見つかりません。")
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -633,73 +620,69 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
         if not isinstance(goals_data, list):
             raise ValueError("Goal data must be a JSON array.")
         
-        processed_goals = []
-        for goal_entry in goals_data:
-            # 必須フィールドのチェック
-            if not all(k in goal_entry for k in ["task", "completed", "subject"]):
-                raise ValueError("Each goal entry must contain 'task', 'completed', 'subject'.")
-            
-            # idの生成または保持
-            if "id" not in goal_entry or not goal_entry["id"]:
-                goal_entry["id"] = str(uuid.uuid4())
-            
-            # problemsの型チェックとデフォルト値
-            if "total_problems" in goal_entry and goal_entry["total_problems"] is not None:
-                if not isinstance(goal_entry["total_problems"], (int, type(None))):
-                    raise ValueError("total_problems must be an integer or null.")
-            else:
-                goal_entry["total_problems"] = None
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            for goal_entry in goals_data:
+                # 必須フィールドのチェック
+                if not all(k in goal_entry for k in ["task", "completed", "subject"]):
+                    raise ValueError("Each goal entry must contain 'task', 'completed', 'subject'.")
+                
+                # idの生成または保持
+                if "id" not in goal_entry or not goal_entry["id"]:
+                    goal_entry["id"] = str(uuid.uuid4())
+                
+                # problemsの型チェックとデフォルト値
+                if "total_problems" in goal_entry and goal_entry["total_problems"] is not None:
+                    if not isinstance(goal_entry["total_problems"], (int, type(None))):
+                        raise ValueError("total_problems must be an integer or null.")
+                else:
+                    goal_entry["total_problems"] = None
 
-            if "completed_problems" in goal_entry and goal_entry["completed_problems"] is not None:
-                if not isinstance(goal_entry["completed_problems"], (int, type(None))):
-                    raise ValueError("completed_problems must be an integer or null.")
-            else:
-                goal_entry["completed_problems"] = None
+                if "completed_problems" in goal_entry and goal_entry["completed_problems"] is not None:
+                    if not isinstance(goal_entry["completed_problems"], (int, type(None))):
+                        raise ValueError("completed_problems must be an integer or null.")
+                else:
+                    goal_entry["completed_problems"] = None
 
-            # tagsの型チェックとデフォルト値
-            if "tags" in goal_entry and not isinstance(goal_entry["tags"], list):
-                raise ValueError("Tags must be a list.")
-            elif "tags" not in goal_entry:
-                goal_entry["tags"] = []
+                # tagsの型チェックとデフォルト値
+                if "tags" in goal_entry and not isinstance(goal_entry["tags"], list):
+                    raise ValueError("Tags must be a list.")
+                elif "tags" not in goal_entry:
+                    goal_entry["tags"] = []
 
-            # detailsのデフォルト値
-            if "details" not in goal_entry:
-                goal_entry["details"] = None
+                # detailsのデフォルト値
+                if "details" not in goal_entry:
+                    goal_entry["details"] = None
 
-            # created_at, updated_atの自動設定
-            now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-            if "created_at" not in goal_entry or not goal_entry["created_at"]:
-                goal_entry["created_at"] = now
-            goal_entry["updated_at"] = now
+                # created_at, updated_atの自動設定
+                now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
+                if "created_at" not in goal_entry or not goal_entry["created_at"]:
+                    goal_entry["created_at"] = now
+                goal_entry["updated_at"] = now
 
-            processed_goals.append(goal_entry)
-
-        new_goal_json_str = json.dumps(processed_goals, ensure_ascii=False)
+                # goalsテーブルに挿入または更新
+                cursor.execute(
+                    """
+                    INSERT OR REPLACE INTO goals (id, date, task, completed, subject, total_problems, completed_problems, tags, details, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (goal_entry["id"], date_str, goal_entry["task"], 1 if goal_entry["completed"] else 0,
+                     goal_entry["subject"], goal_entry["total_problems"], goal_entry["completed_problems"],
+                     json.dumps(goal_entry["tags"], ensure_ascii=False), goal_entry["details"],
+                     goal_entry["created_at"], goal_entry["updated_at"])
+                )
+            conn.commit()
+        print(f"日付 {date_str} の目標を更新しました。")
 
     except json.JSONDecodeError as e:
-        print("エラー: 目標は有効なJSON形式である必要があります。{}".format(e))
+        print(f"エラー: 目標は有効なJSON形式である必要があります。{e}")
         return
     except ValueError as ve:
-        print("エラー: 目標データの構造が不正です。{}".format(ve))
+        print(f"エラー: 目標データの構造が不正です。{ve}")
         return
-
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT summary, goal FROM daily_summaries WHERE date = ?", (date_str,))
-        existing_row = cursor.fetchone()
-        
-        existing_summary = existing_row[0] if existing_row else None
-        existing_goal = existing_row[1] if existing_row else None
-
-        new_summary = existing_summary
-        new_goal = new_goal_json_str
-
-        cursor.execute(
-            "INSERT OR REPLACE INTO daily_summaries (date, summary, goal) VALUES (?, ?, ?)",
-            (date_str, new_summary, new_goal)
-        )
-        conn.commit()
-    print("日付 {} の目標を更新しました。".format(date_str))
+    except Exception as e:
+        print(f"エラー: 目標の更新中に予期せぬエラーが発生しました。{e}")
+        return
 
 def add_goal_to_date(goal_json_str, date_str):
     """指定された日付に新しい目標を1つ追加する"""
@@ -715,36 +698,45 @@ def add_goal_to_date(goal_json_str, date_str):
         new_goal['created_at'] = now
         new_goal['updated_at'] = now
 
+        # 必須フィールドのチェック
+        if not all(k in new_goal for k in ["task", "completed", "subject"]):
+            raise ValueError("Each goal entry must contain 'task', 'completed', 'subject'.")
+
+        # tagsの型チェックとデフォルト値
+        if "tags" in new_goal and not isinstance(new_goal["tags"], list):
+            raise ValueError("Tags must be a list.")
+        elif "tags" not in new_goal:
+            new_goal["tags"] = []
+
+        # detailsのデフォルト値
+        if "details" not in new_goal:
+            new_goal["details"] = None
+
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO goals (id, date, task, completed, subject, total_problems, completed_problems, tags, details, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (new_goal["id"], date_str, new_goal["task"], 1 if new_goal["completed"] else 0,
+                 new_goal["subject"], new_goal["total_problems"], new_goal["completed_problems"],
+                 json.dumps(new_goal["tags"], ensure_ascii=False), new_goal["details"],
+                 new_goal["created_at"], new_goal["updated_at"])
+            )
+            conn.commit()
+
+        print(f"日付 {date_str} に目標「{new_goal.get('task', '')}」を追加しました。")
+
     except json.JSONDecodeError as e:
-        print("エラー: 追加する目標データが有効なJSON形式ではありません。{}".format(e))
+        print(f"エラー: 追加する目標データが有効なJSON形式ではありません。{e}")
+        return
+    except ValueError as ve:
+        print(f"エラー: 目標データの構造が不正です。{ve}")
         return
     except Exception as e:
-        print("エラー: 目標データの処理中にエラーが発生しました。{}".format(e))
+        print(f"エラー: 目標データの処理中にエラーが発生しました。{e}")
         return
-
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        # 指定日の既存の目標を取得
-        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (date_str,))
-        existing_row = cursor.fetchone()
-        
-        existing_goals = []
-        if existing_row and existing_row[0]:
-            try:
-                existing_goals = json.loads(existing_row[0])
-                if not isinstance(existing_goals, list):
-                    existing_goals = []
-            except json.JSONDecodeError:
-                existing_goals = [] # パースできなければ空リストから開始
-
-        # 新しい目標を追加
-        existing_goals.append(new_goal)
-        
-        # 更新された目標リストをJSON文字列として保存
-        updated_goals_json_str = json.dumps(existing_goals, ensure_ascii=False)
-        add_or_update_daily_goal(updated_goals_json_str, date_str)
-
-    print("日付 {} に目標「{}」を追加しました。".format(date_str, new_goal.get('task', '')))
 
 
 def add_or_update_session_summary(summary_text, session_id=None):
@@ -807,16 +799,25 @@ def show_logs_json_for_date(date_str):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         
-        cursor.execute("SELECT summary, goal FROM daily_summaries WHERE date = ?", (date_str,))
+        cursor.execute("SELECT summary FROM daily_summaries WHERE date = ?", (date_str,))
         daily_row = cursor.fetchone()
         if daily_row:
             output_data["daily_summary"]["summary"] = daily_row["summary"]
-            if daily_row["goal"]:
+
+        # goalsテーブルから目標を取得
+        cursor.execute("SELECT * FROM goals WHERE date = ? ORDER BY created_at", (date_str,))
+        goals_raw = cursor.fetchall()
+        goals_list = []
+        for goal_row in goals_raw:
+            goal_dict = dict(goal_row)
+            # tagsはJSON文字列として保存されているのでパースする
+            if goal_dict['tags']:
                 try:
-                    output_data["daily_summary"]["goals"] = json.loads(daily_row["goal"])
+                    goal_dict['tags'] = json.loads(goal_dict['tags'])
                 except json.JSONDecodeError:
-                    # パースできない場合は空のリストのままにするか、エラーとして扱う
-                    output_data["daily_summary"]["goals"] = []
+                    goal_dict['tags'] = []
+            goals_list.append(goal_dict)
+        output_data["daily_summary"]["goals"] = goals_list
 
         cursor.execute("""
             SELECT id, event_type, subject, content, start_time, end_time, summary
@@ -913,19 +914,23 @@ def get_dashboard_data(weekly_period_days=None):
                     current_date -= datetime.timedelta(days=1)
 
         # 今日の目標
-        cursor.execute("SELECT goal FROM daily_summaries WHERE date = ?", (today_str,))
-        goal_row = cursor.fetchone()
+        cursor.execute("SELECT * FROM goals WHERE date = ?", (today_str,))
+        today_goals_raw = cursor.fetchall()
         today_goals = []
         completed_goals = 0
-        total_goals = 0
-        if goal_row and goal_row['goal']:
-            try:
-                goals = json.loads(goal_row['goal'])
-                today_goals = goals
-                total_goals = len(goals)
-                completed_goals = sum(1 for g in goals if g.get('completed', False) or (g.get('total_problems') is not None and g.get('completed_problems') is not None and g['total_problems'] > 0 and g['completed_problems'] >= g['total_problems']))
-            except json.JSONDecodeError:
-                pass
+        total_goals = len(today_goals_raw)
+        for goal_row in today_goals_raw:
+            goal_dict = dict(goal_row)
+            if goal_dict['tags']:
+                try:
+                    goal_dict['tags'] = json.loads(goal_dict['tags'])
+                except json.JSONDecodeError:
+                    goal_dict['tags'] = []
+            today_goals.append(goal_dict)
+            if goal_dict.get('completed', False) or \
+               (goal_dict.get('total_problems') is not None and goal_dict.get('completed_problems') is not None and \
+                goal_dict['total_problems'] > 0 and goal_dict['completed_problems'] >= goal_dict['total_problems']):
+                completed_goals += 1
 
         # 最近の学習セッション (直近2件)
         cursor.execute("""
@@ -1107,6 +1112,25 @@ def main():
             print("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
             sys.exit(1)
         add_goal_to_date(sys.argv[2], sys.argv[3])
+    elif command == 'get_goal':
+        if len(sys.argv) != 3:
+            print("使用法: get_goal <goal_id>")
+            sys.exit(1)
+        goal_entry = get_goal_by_id_global(sys.argv[2])
+        if goal_entry:
+            print(json.dumps(dict(goal_entry), indent=2, ensure_ascii=False))
+        else:
+            print(f"目標ID {sys.argv[2]} が見つかりません。")
+    elif command == 'update_goal':
+        if len(sys.argv) != 5:
+            print("使用法: update_goal <goal_id> <field_name> <new_value>")
+            sys.exit(1)
+        update_goal_by_id_global(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif command == 'delete_goal':
+        if len(sys.argv) != 3:
+            print("使用法: delete_goal <goal_id>")
+            sys.exit(1)
+        delete_goal_by_id_global(sys.argv[2])
     elif command == 'backup':
         backup_now()
     elif command == 'undo':
@@ -1149,10 +1173,4 @@ def main():
         sys.exit(1)
 
 if __name__ == '__main__':
-    # main()関数の呼び出し前に他のコマンドのロジックを完全にする必要がある
-    # このスクリプトは直接実行せず、main()をリファクタリングして使用する
-    # 簡易的なコマンドディスパッチ
-    if len(sys.argv) > 1:
-        main()
-    else:
-        print("コマンドを指定してください。")
+    main()
