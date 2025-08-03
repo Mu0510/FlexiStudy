@@ -980,8 +980,9 @@ def reconstruct_from_json(json_data_str):
         # 既存のデータをクリア
         cursor.execute("DELETE FROM study_logs")
         cursor.execute("DELETE FROM daily_summaries")
+        cursor.execute("DELETE FROM goals")
         conn.commit()
-        print("既存の学習ログと日次概要をクリアしました。")
+        print("既存の学習ログ、日次概要、目標をクリアしました。")
 
         today_date_str = datetime.date.today().strftime('%Y-%m-%d')
 
