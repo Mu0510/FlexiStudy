@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils"
-import { useChat } from '@/hooks/useChat';
+// import { useChat } from '@/hooks/useChat'; // useChatは親コンポーネントで管理
 import { Play } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import ReactMarkdown from "react-markdown";
@@ -15,6 +15,12 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import { motion, AnimatePresence } from "framer-motion";
+
+interface FileInfo {
+  name: string;
+  path: string;
+  size: number;
+}
 
 interface Goal {
   id: string | number;
@@ -27,6 +33,29 @@ interface Goal {
   completed_problems?: number | null;
 }
 
+interface Message {
+  id: string;
+  ts?: number;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  content: string;
+  files?: FileInfo[];
+  goal?: Goal | null;
+  type?: 'text' | 'tool';
+  toolCallId?: string;
+  status?: 'running' | 'finished' | 'error';
+  icon?: string;
+  label?: string;
+  command?: string;
+}
+
+interface ActiveMessage {
+  id: string;
+  ts: number;
+  type: 'thought' | 'assistant';
+  content: string;
+  thoughtMode: boolean;
+}
+
 interface NewChatPanelProps {
   showAs?: 'floating' | 'embedded';
   // --- Floating mode props ---
@@ -34,10 +63,20 @@ interface NewChatPanelProps {
   onClose?: () => void;
   isFullScreen?: boolean;
   setIsFullScreen?: (isFullScreen: boolean) => void;
-  onMaximizeClick?: () => void; // New prop
+  onMaximizeClick?: () => void;
   // --- Goal related props ---
   selectedGoal?: Goal | null;
   onClearSelectedGoal?: () => void;
+  // --- useChat related props ---
+  messages: Message[];
+  activeMessage: ActiveMessage | null;
+  isGeneratingResponse: boolean;
+  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; }) => void;
+  cancelSendMessage: () => void;
+  requestHistory: (isInitialLoad?: boolean) => void;
+  isFetchingHistory: boolean;
+  historyFinished: boolean;
+  clearMessages: () => void;
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -83,7 +122,17 @@ export function NewChatPanel({
   setIsFullScreen,
   onMaximizeClick,
   selectedGoal,
-  onClearSelectedGoal
+  onClearSelectedGoal,
+  // --- useChat related props ---
+  messages,
+  activeMessage,
+  isGeneratingResponse,
+  sendMessage,
+  cancelSendMessage,
+  requestHistory,
+  isFetchingHistory,
+  historyFinished,
+  clearMessages,
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
 
@@ -92,18 +141,19 @@ export function NewChatPanel({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
-  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
-    onMessageReceived: () => {
-      const container = messagesContainerRef.current;
-      if (container) {
-        const { scrollHeight, scrollTop, clientHeight } = container;
-        const isAtBottom = scrollHeight - scrollTop <= clientHeight + 5; // 5pxの許容範囲
-        if (isAtBottom) {
-          shouldScrollToBottomRef.current = true;
-        }
-      }
-    },
-  });
+  // useChatフックの呼び出しを削除
+  // const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
+  //   onMessageReceived: () => {
+  //     const container = messagesContainerRef.current;
+  //     if (container) {
+  //       const { scrollHeight, scrollTop, clientHeight } = container;
+  //       const isAtBottom = scrollHeight - scrollTop <= clientHeight + 5; // 5pxの許容範囲
+  //       if (isAtBottom) {
+  //         shouldScrollToBottomRef.current = true;
+  //       }
+  //     }
+  //   },
+  // });
 
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -197,7 +247,7 @@ export function NewChatPanel({
 
           xhr.onerror = () => {
             controllerSignal.removeEventListener('abort', abortHandler);
-            console.error("An error occurred during file upload.");
+            console.error("An error occurred during file upload.", xhr.statusText);
             reject(new Error("Network error"));
           };
 
@@ -417,7 +467,7 @@ export function NewChatPanel({
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
           </div>
         )}
-        {messages.map((msg) => {
+        {messages && messages.map((msg) => {
           // Render tool messages
           if (msg.type === "tool") {
             return (

@@ -6,6 +6,7 @@ import { Dashboard } from "@/components/dashboard"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
+import { useChat } from '@/hooks/useChat';
 
 const StudyRecords = dynamic(() => import("@/components/study-records").then(mod => mod.StudyRecords), {
   ssr: false,
@@ -53,6 +54,13 @@ export default function StudyApp() {
   const [selectedGoalForChat, setSelectedGoalForChat] = useState<Goal | null>(null);
 
   const chatStateBeforeSystemView = useRef(false);
+
+  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
+    onMessageReceived: () => {
+      // messagesContainerRef は NewChatPanel 内にあるため、ここでは直接操作できない
+      // NewChatPanel 内でスクロールロジックを維持する
+    },
+  });
 
   const handleViewChange = (view: string) => {
     if (view === 'system-chat') {
@@ -239,7 +247,18 @@ export default function StudyApp() {
                   onSaveColors={handleSaveColors}
                 />;
       case "system-chat":
-        return <NewChatPanel showAs="embedded" />;
+        return <NewChatPanel 
+                  showAs="embedded"
+                  messages={messages}
+                  activeMessage={activeMessage}
+                  isGeneratingResponse={isGeneratingResponse}
+                  sendMessage={sendMessage}
+                  cancelSendMessage={cancelSendMessage}
+                  requestHistory={requestHistory}
+                  isFetchingHistory={isFetchingHistory}
+                  historyFinished={historyFinished}
+                  clearMessages={clearMessages}
+                />;
       default:
         return <Dashboard />;
     }
@@ -308,6 +327,16 @@ export default function StudyApp() {
             onMaximizeClick={handleMaximizeClick}
             selectedGoal={selectedGoalForChat}
             onClearSelectedGoal={handleClearSelectedGoal}
+            // useChat related props
+            messages={messages}
+            activeMessage={activeMessage}
+            isGeneratingResponse={isGeneratingResponse}
+            sendMessage={sendMessage}
+            cancelSendMessage={cancelSendMessage}
+            requestHistory={requestHistory}
+            isFetchingHistory={isFetchingHistory}
+            historyFinished={historyFinished}
+            clearMessages={clearMessages}
           />
         )}
       </div>
