@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 
 import sqlite3
@@ -1029,108 +1028,162 @@ def main():
         sys.exit(1)
 
     command = sys.argv[1]
+    args = sys.argv[2:]
 
-    if command == '--help' or command == '-h':
-        print_help()
-        sys.exit(0)
-    
-    if command == 'start':
-        if len(sys.argv) != 4: print("使用法: start <subject> <content>"); sys.exit(1)
-        start_session(sys.argv[2], sys.argv[3])
-    elif command == 'break':
-        break_session(sys.argv[2] if len(sys.argv) == 3 else None)
-    elif command == 'end_session':
-        end_session()
-    elif command == 'resume':
-        resume_session(sys.argv[2] if len(sys.argv) == 3 else None)
-    elif command == 'logs_json_for_date':
-        if len(sys.argv) != 3: print("使用法: logs_json_for_date YYYY-MM-DD"); sys.exit(1)
-        show_logs_json_for_date(sys.argv[2])
-    elif command == 'get_chat_history':
-        limit = int(sys.argv[2]) if len(sys.argv) > 2 else 5
-        before_id = int(sys.argv[3]) if len(sys.argv) > 3 else None
-        messages = get_chat_messages(limit, before_id)
-        print(json.dumps(messages, indent=2, ensure_ascii=False))
-    elif command == 'summary':
-        if len(sys.argv) < 3 or len(sys.argv) > 4: print("使用法: summary \"<text>\" [session_id]"); sys.exit(1)
-        add_or_update_session_summary(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
-    elif command == 'daily_summary':
-        if len(sys.argv) < 3 or len(sys.argv) > 4:
-            print("使用法: daily_summary \"<text>\" [YYYY-MM-DD]")
-            sys.exit(1)
-        add_or_update_daily_summary(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
-    elif command == 'daily_goal':
-        if len(sys.argv) < 3 or len(sys.argv) > 4:
-            print("使用法: daily_goal \"<json_string>\" [YYYY-MM-DD]")
-            sys.exit(1)
-        add_or_update_daily_goal(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
-    elif command == 'add_goal_to_date':
-        if len(sys.argv) != 4:
-            print("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
-            sys.exit(1)
-        add_goal_to_date(sys.argv[2], sys.argv[3])
-    elif command == 'get_goal':
-        if len(sys.argv) != 3:
-            print("使用法: get_goal <goal_id>")
-            sys.exit(1)
-        goal_entry = get_goal_by_id_global(sys.argv[2])
-        if goal_entry:
-            print(json.dumps(dict(goal_entry), indent=2, ensure_ascii=False))
-        else:
-            print(f"目標ID {sys.argv[2]} が見つかりません。")
-    elif command == 'update_goal':
-        if len(sys.argv) != 5:
-            print("使用法: update_goal <goal_id> <field_name> <new_value>")
-            sys.exit(1)
-        update_goal_by_id_global(sys.argv[2], sys.argv[3], sys.argv[4])
-    elif command == 'delete_goal':
-        if len(sys.argv) != 3:
-            print("使用法: delete_goal <goal_id>")
-            sys.exit(1)
-        delete_goal_by_id_global(sys.argv[2])
-    elif command == 'backup':
-        backup_now()
-    elif command == 'undo':
-        undo_last_operation()
-    elif command == 'redo':
-        redo_last_undo()
-    elif command == 'reconstruct':
-        if len(sys.argv) != 3: print("使用法: reconstruct \"<json_string>\""); sys.exit(1)
-        reconstruct_from_json(sys.argv[2])
-    elif command == 'consolidate_break':
-        consolidate_last_break_into_resume()
-    elif command == 'update_log_end_time':
-        if len(sys.argv) != 4: print("使用法: update_log_end_time <log_id> <end_time>"); sys.exit(1)
-        update_end_time(int(sys.argv[2]), sys.argv[3])
-    elif command == 'restore':
-        if len(sys.argv) != 3: print("使用法: restore <backup_file_path>"); sys.exit(1)
-        restore_database(sys.argv[2])
-    elif command == 'update_log_entry_cmd':
-        if len(sys.argv) < 5: print("使用法: update_log_entry_cmd <log_id> <field_name> <new_value>"); sys.exit(1)
-        try:
-            log_id = int(sys.argv[2])
-            update_log_entry(log_id, **{sys.argv[3]: sys.argv[4]})
-        except ValueError:
-            print(f"エラー: log_idは整数である必要があります。入力値: {sys.argv[2]}")
-            sys.exit(1)
-    elif command == 'get_entry':
-        if len(sys.argv) != 3: print("使用法: get_entry <log_id>"); sys.exit(1)
-        log_entry = get_log_entry_by_id(int(sys.argv[2]))
-        if log_entry:
-            print(json.dumps(dict(log_entry), indent=2, ensure_ascii=False))
-        else:
-            print("ログID {} が見つかりません。".format(sys.argv[2]))
-    elif command == 'unique_subjects':
-        subjects = get_all_unique_subjects()
-        print(json.dumps(subjects, ensure_ascii=False))
-    elif command == 'dashboard_json':
-        weekly_period_days = sys.argv[2] if len(sys.argv) > 2 else None
-        get_dashboard_data(weekly_period_days)
-    elif command == 'recalculate_durations':
-        recalculate_all_durations()
+    command_handlers = {
+        '--help': lambda _: print_help(),
+        '-h': lambda _: print_help(),
+        'start': handle_start,
+        'break': handle_break,
+        'end_session': lambda _: end_session(),
+        'resume': handle_resume,
+        'logs_json_for_date': handle_logs_json_for_date,
+        'get_chat_history': handle_get_chat_history,
+        'summary': handle_summary,
+        'daily_summary': handle_daily_summary,
+        'daily_goal': handle_daily_goal,
+        'add_goal_to_date': handle_add_goal_to_date,
+        'get_goal': handle_get_goal,
+        'update_goal': handle_update_goal,
+        'delete_goal': handle_delete_goal,
+        'backup': lambda _: backup_now(),
+        'undo': lambda _: undo_last_operation(),
+        'redo': lambda _: redo_last_undo(),
+        'reconstruct': handle_reconstruct,
+        'consolidate_break': lambda _: consolidate_last_break_into_resume(),
+        'update_log_end_time': handle_update_log_end_time,
+        'restore': handle_restore,
+        'update_log_entry_cmd': handle_update_log_entry_cmd,
+        'get_entry': handle_get_entry,
+        'unique_subjects': lambda _: print(json.dumps(get_all_unique_subjects(), ensure_ascii=False)),
+        'dashboard_json': handle_dashboard_json,
+        'recalculate_durations': lambda _: recalculate_all_durations(),
+    }
+
+    handler = command_handlers.get(command)
+    if handler:
+        handler(args)
     else:
         print("エラー: 不明なコマンド '{}'".format(command))
         sys.exit(1)
+
+def handle_start(args):
+    if len(args) != 2:
+        print("使用法: start <subject> <content>")
+        sys.exit(1)
+    start_session(args[0], args[1])
+
+def handle_break(args):
+    break_session(args[0] if len(args) > 0 else None)
+
+def handle_resume(args):
+    resume_session(args[0] if len(args) > 0 else None)
+
+def handle_logs_json_for_date(args):
+    if len(args) != 1:
+        print("使用法: logs_json_for_date YYYY-MM-DD")
+        sys.exit(1)
+    show_logs_json_for_date(args[0])
+
+def handle_get_chat_history(args):
+    limit = int(args[0]) if len(args) > 0 else 5
+    before_id = int(args[1]) if len(args) > 1 else None
+    messages = get_chat_messages(limit, before_id)
+    print(json.dumps(messages, indent=2, ensure_ascii=False))
+
+def handle_summary(args):
+    if not 1 <= len(args) <= 2:
+        print("使用法: summary \"<text>\" [session_id]")
+        sys.exit(1)
+    add_or_update_session_summary(args[0], args[1] if len(args) == 2 else None)
+
+def handle_daily_summary(args):
+    if not 1 <= len(args) <= 2:
+        print("使用法: daily_summary \"<text>\" [YYYY-MM-DD]")
+        sys.exit(1)
+    add_or_update_daily_summary(args[0], args[1] if len(args) == 2 else None)
+
+def handle_daily_goal(args):
+    if not 1 <= len(args) <= 2:
+        print("使用法: daily_goal \"<json_string>\" [YYYY-MM-DD]")
+        sys.exit(1)
+    add_or_update_daily_goal(args[0], args[1] if len(args) == 2 else None)
+
+def handle_add_goal_to_date(args):
+    if len(args) != 2:
+        print("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
+        sys.exit(1)
+    add_goal_to_date(args[0], args[1])
+
+def handle_get_goal(args):
+    if len(args) != 1:
+        print("使用法: get_goal <goal_id>")
+        sys.exit(1)
+    goal_entry = get_goal_by_id_global(args[0])
+    if goal_entry:
+        print(json.dumps(dict(goal_entry), indent=2, ensure_ascii=False))
+    else:
+        print(f"目標ID {args[0]} が見つかりません。")
+
+def handle_update_goal(args):
+    if len(args) != 3:
+        print("使用法: update_goal <goal_id> <field_name> <new_value>")
+        sys.exit(1)
+    update_goal_by_id_global(args[0], args[1], args[2])
+
+def handle_delete_goal(args):
+    if len(args) != 1:
+        print("使用法: delete_goal <goal_id>")
+        sys.exit(1)
+    delete_goal_by_id_global(args[0])
+
+def handle_reconstruct(args):
+    if len(args) != 1:
+        print("使用法: reconstruct \"<json_string>\"")
+        sys.exit(1)
+    reconstruct_from_json(args[0])
+
+def handle_update_log_end_time(args):
+    if len(args) != 2:
+        print("使用法: update_log_end_time <log_id> <end_time>")
+        sys.exit(1)
+    update_end_time(int(args[0]), args[1])
+
+def handle_restore(args):
+    if len(args) != 1:
+        print("使用法: restore <backup_file_path>")
+        sys.exit(1)
+    restore_database(args[0])
+
+def handle_update_log_entry_cmd(args):
+    if len(args) < 2:
+        print("使用法: update_log_entry_cmd <log_id> <field_name> <new_value>")
+        sys.exit(1)
+    try:
+        log_id = int(args[0])
+        update_log_entry(log_id, **{args[1]: args[2]})
+    except ValueError:
+        print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
+        sys.exit(1)
+
+def handle_get_entry(args):
+    if len(args) != 1:
+        print("使用法: get_entry <log_id>")
+        sys.exit(1)
+    try:
+        log_id = int(args[0])
+        log_entry = get_log_entry_by_id(log_id)
+        if log_entry:
+            print(json.dumps(dict(log_entry), indent=2, ensure_ascii=False))
+        else:
+            print(f"ログID {log_id} が見つかりません。")
+    except ValueError:
+        print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
+        sys.exit(1)
+
+def handle_dashboard_json(args):
+    weekly_period_days = args[0] if len(args) > 0 else None
+    get_dashboard_data(weekly_period_days)
 
 if __name__ == '__main__':
     main()
