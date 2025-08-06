@@ -1035,7 +1035,7 @@ def main():
         '-h': lambda _: print_help(),
         'start': handle_start,
         'break': handle_break,
-        'end_session': lambda _: end_session(),
+        'end_session': lambda _: handle_execute([json.dumps({"action": "log.end_session"})]),
         'resume': handle_resume,
         'logs_json_for_date': handle_logs_json_for_date,
         'get_chat_history': handle_get_chat_history,
@@ -1055,7 +1055,7 @@ def main():
         'restore': handle_restore,
         'update_log_entry_cmd': handle_update_log_entry_cmd,
         'get_entry': handle_get_entry,
-        'unique_subjects': lambda _: print(json.dumps(get_all_unique_subjects(), ensure_ascii=False)),
+        'unique_subjects': lambda _: handle_execute([json.dumps({"action": "data.unique_subjects"})]),
         'dashboard_json': handle_dashboard_json,
         'recalculate_durations': lambda _: recalculate_all_durations(),
         'execute': handle_execute,
@@ -1072,19 +1072,42 @@ def handle_start(args):
     if len(args) != 2:
         print("使用法: start <subject> <content>")
         sys.exit(1)
-    start_session(args[0], args[1])
+    
+    params = {
+        "action": "log.create",
+        "params": {
+            "subject": args[0],
+            "content": args[1]
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_break(args):
-    break_session(args[0] if len(args) > 0 else None)
+    params = {
+        "action": "log.break",
+        "params": {"content": args[0] if len(args) > 0 else None}
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_resume(args):
-    resume_session(args[0] if len(args) > 0 else None)
+    params = {
+        "action": "log.resume",
+        "params": {"content": args[0] if len(args) > 0 else None}
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_logs_json_for_date(args):
     if len(args) != 1:
         print("使用法: logs_json_for_date YYYY-MM-DD")
         sys.exit(1)
-    show_logs_json_for_date(args[0])
+
+    params = {
+        "action": "log.get",
+        "params": {
+            "date": args[0]
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_get_chat_history(args):
     limit = int(args[0]) if len(args) > 0 else 5
@@ -1183,8 +1206,13 @@ def handle_get_entry(args):
         sys.exit(1)
 
 def handle_dashboard_json(args):
-    weekly_period_days = args[0] if len(args) > 0 else None
-    get_dashboard_data(weekly_period_days)
+    params = {
+        "action": "data.dashboard",
+        "params": {
+            "days": args[0] if len(args) > 0 else None
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 # --- 新しいコマンド体系 ---
 
@@ -1241,9 +1269,55 @@ def action_log_get(params):
     return None # 出力はshow_logs_json_for_dateが行う
 
 
+def action_log_break(params):
+    """学習セッションを休憩する"""
+    content = params.get("content")
+    break_session(content)
+    return {"status": "success", "message": "学習を休憩しました。"}
+
+def action_log_resume(params):
+    """学習セッションを再開する"""
+    content = params.get("content")
+    resume_session(content)
+    return {"status": "success", "message": "学習を再開しました。"}
+
+def action_log_end_session(params):
+    """学習セッションを終了する"""
+    end_session()
+    return {"status": "success", "message": "学習セッションを終了しました。"}
+
+def action_data_dashboard(params):
+    """ダッシュボードのデータを取得する"""
+    days = params.get("days")
+    get_dashboard_data(days)
+    return None
+
+def action_goal_add_to_date(params):
+    """指定した日付に目標を追加する"""
+    goal_json = params.get("goal_json")
+    date = params.get("date")
+    if not goal_json or not date:
+        raise ValueError("goal_jsonとdateは必須です。")
+    add_goal_to_date(goal_json, date)
+    return {"status": "success", "message": f"{date}に目標を追加しました。"}
+
+def action_data_unique_subjects(params):
+    """ユニークな教科のリストを取得する"""
+    subjects = get_all_unique_subjects()
+    # unique_subjectsはJSON配列を直接出力する必要がある
+    print(json.dumps(subjects, ensure_ascii=False))
+    return None
+
+
 ACTION_HANDLERS = {
     "log.create": action_log_create,
     "log.get": action_log_get,
+    "log.break": action_log_break,
+    "log.resume": action_log_resume,
+    "log.end_session": action_log_end_session,
+    "data.dashboard": action_data_dashboard,
+    "goal.add_to_date": action_goal_add_to_date,
+    "data.unique_subjects": action_data_unique_subjects,
 }
 
 if __name__ == '__main__':
