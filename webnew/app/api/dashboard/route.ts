@@ -1,30 +1,49 @@
-import { NextRequest, NextResponse } from "next/server";
-import { exec } from "child_process";
-import path from "path";
+import { NextResponse } from 'next/server';
+import { spawn } from 'child_process';
+import path from 'path';
 
-export async function GET(request: NextRequest) {
-  const scriptPath = path.resolve(process.cwd(), "../manage_log.py");
-  const weeklyPeriod = request.nextUrl.searchParams.get("weekly_period");
+export async function GET() {
+  try {
+    const pythonScript = path.join(process.cwd(), '../manage_log.py');
+    const args = ['dashboard_json'];
 
-  let command = `python3 ${scriptPath} dashboard_json`;
-  if (weeklyPeriod) {
-    command += ` ${weeklyPeriod}`;
-  }
+    const processPromise = new Promise((resolve, reject) => {
+      const pythonProcess = spawn('python3', [pythonScript, ...args]);
 
-  return new Promise((resolve) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`exec error: ${error}`);
-        resolve(NextResponse.json({ error: "Failed to fetch dashboard data", details: stderr }, { status: 500 }));
-        return;
-      }
-      try {
-        const data = JSON.parse(stdout);
-        resolve(NextResponse.json(data));
-      } catch (e) {
-        console.error(`json parse error: ${e}`);
-        resolve(NextResponse.json({ error: "Failed to parse dashboard data", details: stdout }, { status: 500 }));
-      }
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0) {
+          try {
+            const data = JSON.parse(stdout);
+            resolve(data);
+          } catch (error) {
+            reject(new Error('Failed to parse JSON from python script'));
+          }
+        } else {
+          reject(new Error(`Python script exited with code ${code}: ${stderr}`));
+        }
+      });
+
+      pythonProcess.on('error', (error) => {
+        reject(error);
+      });
     });
-  });
+
+    const data = await processPromise;
+    return NextResponse.json(data);
+
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
 }

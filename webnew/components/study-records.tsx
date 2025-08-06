@@ -88,16 +88,33 @@ const RecordsSkeleton = () => (
   </div>
 );
 
+import { useWebSocket } from "@/context/WebSocketContext";
 import { getSubjectStyle } from "@/lib/utils";
 
 
 
-export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors, onSelectGoal }: StudyRecordsProps) {
+export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors, onSelectGoal, onRefresh }: StudyRecordsProps) {
   const { toast } = useToast();
   const [openSessions, setOpenSessions] = useState<Record<number, boolean>>({});
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
   const isMobile = useIsMobile();
   const isToday = new Date(selectedDate).toDateString() === new Date().toDateString();
+  const { subscribe } = useWebSocket();
+
+  useEffect(() => {
+    console.log('[StudyRecords] Subscribing to WebSocket updates.');
+    const unsubscribe = subscribe((message: any) => {
+      if (message.method === 'databaseUpdated') {
+        console.log(`[StudyRecords] Received databaseUpdated. Calling onRefresh for date: ${selectedDate}`);
+        onRefresh(selectedDate);
+      }
+    });
+
+    return () => {
+      console.log('[StudyRecords] Unsubscribing from WebSocket updates.');
+      unsubscribe();
+    };
+  }, [subscribe, onRefresh, selectedDate]);
 
   const handleMoveGoal = async (goal: Goal) => {
     try {

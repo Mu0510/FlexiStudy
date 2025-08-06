@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Dashboard } from "@/components/dashboard"
 import dynamic from "next/dynamic"
@@ -64,6 +64,40 @@ export default function StudyApp() {
     },
   });
 
+  const fetchLogData = useCallback(async (date: string) => {
+    console.log(`[page.tsx] fetchLogData triggered for date: ${date}`);
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/logs/${date}`, { cache: 'no-store' });
+      if (!response.ok) {
+        if (response.status === 404) {
+          setLogData(null);
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.details || `HTTP error! status: ${response.status}`);
+        }
+      } else {
+        const rawData = await response.json();
+        const transformedData = {
+          ...rawData,
+          sessions: rawData.sessions.map((session: any) => ({
+            ...session,
+            start_time: session.session_start_time,
+            end_time: session.session_end_time,
+            total_duration: session.total_study_minutes,
+            logs: session.details.map((detail: any) => ({ ...detail, type: detail.event_type })),
+          })),
+        };
+        setLogData(transformedData);
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []); // 依存配列は空でOK
+
   const handleViewChange = (view: string) => {
     if (view === 'system-chat') {
       chatStateBeforeSystemView.current = isNewChatOpen;
@@ -79,47 +113,8 @@ export default function StudyApp() {
   };
 
   useEffect(() => {
-    const fetchLogData = async (date: string) => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`/api/logs/${date}`);
-        if (!response.ok) {
-          if (response.status === 404) {
-            setLogData(null);
-          } else {
-            const errorData = await response.json();
-            throw new Error(errorData.details || `HTTP error! status: ${response.status}`);
-          }
-        } else {
-          const rawData = await response.json();
-
-          // APIからのレスポンスをフロントエンドが期待する形式に変換する
-          const transformedData = {
-            ...rawData,
-            sessions: rawData.sessions.map((session: any) => ({
-              ...session,
-              start_time: session.session_start_time, // マッピング追加
-              end_time: session.session_end_time,     // マッピング追加
-              total_duration: session.total_study_minutes, // マッピング追加
-              logs: session.details.map((detail: any) => ({
-                ...detail,
-                type: detail.event_type,
-              })),
-            })),
-          };
-          
-          setLogData(transformedData);
-        }
-      } catch (e: any) {
-        setError(e.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchLogData(selectedDate);
-  }, [selectedDate]);
+  }, [selectedDate, fetchLogData]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -227,7 +222,7 @@ export default function StudyApp() {
   const renderActiveView = () => {
     switch (activeView) {
       case "dashboard":
-        return <Dashboard dashboardData={dashboardData} subjectColors={subjectColors} />;
+        return         <Dashboard dashboardData={dashboardData} subjectColors={subjectColors} />;
       case "records":
         return <StudyRecords 
                   logData={logData} 
@@ -237,6 +232,7 @@ export default function StudyApp() {
                   error={error}
                   subjectColors={subjectColors}
                   onSelectGoal={handleSelectGoal}
+                  onRefresh={fetchLogData}
                />;
       case "analytics":
         return <Analytics />;

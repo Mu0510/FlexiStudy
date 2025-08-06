@@ -55,7 +55,8 @@ Gemini CLIのための学習ログ管理ツール。
   logs_json_for_date YYYY-MM-DD    特定の日の全ログをJSON形式で取得します。
   dashboard_json [days]             Webダッシュボード用のデータをJSON形式で取得します。
   unique_subjects                   記録されている全ての教科名をリスト表示します。
-  get_entry <log_id>                特定のログエントリの詳細を取得します。
+  get_entry <log_id>                特定のログエントリの詳細を取得します。(整数IDのみ)
+  update_log_entry_cmd <log_id> <field> <value> ログエントリの特定のフィールドを更新します。(整数IDのみ)
 
   --- 🎯 目標管理コマンド (安全) ---
   daily_goal "<json_string>" [YYYY-MM-DD] 特定の日の目標をJSONで一括設定・更新します。
@@ -1106,7 +1107,12 @@ def main():
         restore_database(sys.argv[2])
     elif command == 'update_log_entry_cmd':
         if len(sys.argv) < 5: print("使用法: update_log_entry_cmd <log_id> <field_name> <new_value>"); sys.exit(1)
-        update_log_entry(int(sys.argv[2]), **{sys.argv[3]: sys.argv[4]})
+        try:
+            log_id = int(sys.argv[2])
+            update_log_entry(log_id, **{sys.argv[3]: sys.argv[4]})
+        except ValueError:
+            print(f"エラー: log_idは整数である必要があります。入力値: {sys.argv[2]}")
+            sys.exit(1)
     elif command == 'get_entry':
         if len(sys.argv) != 3: print("使用法: get_entry <log_id>"); sys.exit(1)
         log_entry = get_log_entry_by_id(int(sys.argv[2]))
