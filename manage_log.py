@@ -1308,6 +1308,22 @@ def action_data_unique_subjects(params):
     print(json.dumps(subjects, ensure_ascii=False))
     return None
 
+def action_log_delete(params):
+    """指定されたIDの学習ログを削除する"""
+    log_id = params.get("id")
+    if not log_id:
+        raise ValueError("idは必須です。")
+    
+    backup_database("Before deleting log entry.")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM study_logs WHERE id = ?", (log_id,))
+        if cursor.rowcount > 0:
+            conn.commit()
+            return {"status": "success", "message": f"ログID {log_id} を削除しました。"}
+        else:
+            raise ValueError(f"ログID {log_id} が見つかりません。")
+
 
 ACTION_HANDLERS = {
     "log.create": action_log_create,
@@ -1315,6 +1331,7 @@ ACTION_HANDLERS = {
     "log.break": action_log_break,
     "log.resume": action_log_resume,
     "log.end_session": action_log_end_session,
+    "log.delete": action_log_delete,
     "data.dashboard": action_data_dashboard,
     "goal.add_to_date": action_goal_add_to_date,
     "data.unique_subjects": action_data_unique_subjects,
