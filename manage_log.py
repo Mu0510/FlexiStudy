@@ -32,7 +32,7 @@ def get_connection():
 
 def print_help():
     """ヘルプメッセージを表示する"""
-    help_text = """
+    help_text = '''
 Usage: python manage_log.py <command> [arguments]
 
 Gemini CLIのための学習ログ管理ツール。
@@ -83,7 +83,7 @@ Gemini CLIのための学習ログ管理ツール。
                                     >> 全ての既存データ(ログ,概要,目標)が削除されます <<
                                     >> 'undo'では元に戻せません <<
                                     データベースが破損した際の最終手段です。
-""")
+'''
     print(help_text)
 
 # --- テーブル作成・更新 ---
@@ -863,9 +863,11 @@ def get_dashboard_data(weekly_period_days=None):
                 except json.JSONDecodeError:
                     goal_dict['tags'] = []
             today_goals.append(goal_dict)
-            if goal_dict.get('completed', False) or 
-               (goal_dict.get('total_problems') is not None and goal_dict.get('completed_problems') is not None and 
-                goal_dict['total_problems'] > 0 and goal_dict['completed_problems'] >= goal_dict['total_problems']):
+            if (goal_dict.get('completed', False) or 
+               (goal_dict.get('total_problems') is not None and 
+                goal_dict.get('completed_problems') is not None and 
+                goal_dict['total_problems'] > 0 and 
+                goal_dict['completed_problems'] >= goal_dict['total_problems'])):
                 completed_goals += 1
 
         # 最近の学習セッション (直近2件)
@@ -875,7 +877,7 @@ def get_dashboard_data(weekly_period_days=None):
             WHERE event_type IN ('START', 'RESUME')
             ORDER BY start_time DESC 
             LIMIT 2
-        """,)
+        """)
         recent_sessions_raw = cursor.fetchall()
         recent_sessions = []
         for row in recent_sessions_raw:
