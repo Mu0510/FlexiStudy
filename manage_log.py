@@ -1058,6 +1058,7 @@ def main():
         'unique_subjects': lambda _: print(json.dumps(get_all_unique_subjects(), ensure_ascii=False)),
         'dashboard_json': handle_dashboard_json,
         'recalculate_durations': lambda _: recalculate_all_durations(),
+        'execute': handle_execute,
     }
 
     handler = command_handlers.get(command)
@@ -1184,6 +1185,66 @@ def handle_get_entry(args):
 def handle_dashboard_json(args):
     weekly_period_days = args[0] if len(args) > 0 else None
     get_dashboard_data(weekly_period_days)
+
+# --- 新しいコマンド体系 ---
+
+def handle_execute(args):
+    """新しい'execute'コマンドを処理する"""
+    if len(args) != 1:
+        print("使用法: execute '<json_string>'")
+        sys.exit(1)
+    
+    try:
+        data = json.loads(args[0])
+        action = data.get("action")
+        params = data.get("params", {})
+
+        if not action:
+            print("エラー: JSONデータに'action'キーが含まれていません。")
+            sys.exit(1)
+
+        # アクションハンドラを呼び出す
+        action_handler = ACTION_HANDLERS.get(action)
+        if action_handler:
+            result = action_handler(params)
+            if result is not None:
+                print(json.dumps(result, indent=2, ensure_ascii=False))
+        else:
+            print(f"エラー: 不明なアクション '{action}'")
+            sys.exit(1)
+
+    except json.JSONDecodeError:
+        print("エラー: 無効なJSON形式です。")
+        sys.exit(1)
+    except Exception as e:
+        print(f"処理中にエラーが発生しました: {e}")
+        sys.exit(1)
+
+def action_log_create(params):
+    """学習ログを作成する (start_sessionのラッパー)"""
+    subject = params.get("subject")
+    content = params.get("content")
+    if not subject or not content:
+        raise ValueError("subjectとcontentは必須です。")
+    start_session(subject, content)
+    return {"status": "success", "message": "学習セッションを開始しました。"}
+
+def action_log_get(params):
+    """指定された日付のログを取得する (show_logs_json_for_dateのラッパー)"""
+    date_str = params.get("date")
+    if not date_str:
+        raise ValueError("dateは必須です。")
+    # show_logs_json_for_dateは直接printしてしまうため、出力をキャプチャするか、
+    # データを返すようにshow_logs_json_for_dateを修正する必要がある。
+    # ここでは簡単のため、既存の関数をそのまま呼び出す。
+    show_logs_json_for_date(date_str)
+    return None # 出力はshow_logs_json_for_dateが行う
+
+
+ACTION_HANDLERS = {
+    "log.create": action_log_create,
+    "log.get": action_log_get,
+}
 
 if __name__ == '__main__':
     main()
