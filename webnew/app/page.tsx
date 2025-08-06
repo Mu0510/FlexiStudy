@@ -65,6 +65,25 @@ export default function StudyApp() {
     },
   });
 
+  const fetchDashboardData = useCallback(async () => {
+    const weeklyPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
+    const weeklyPeriodDays = weeklyPeriod === '7_days' ? 7 : null;
+    
+    try {
+      const apiUrl = weeklyPeriodDays 
+        ? `/api/dashboard?weekly_period=${weeklyPeriodDays}`
+        : '/api/dashboard';
+      const response = await fetch(apiUrl);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      setDashboardData(data);
+    } catch (e) {
+      console.error("Failed to fetch dashboard data:", e);
+    }
+  }, []);
+
   const fetchLogData = useCallback(async (date: string) => {
     console.log(`[page.tsx] fetchLogData triggered for date: ${date}`);
     setIsLoading(true);
@@ -118,25 +137,6 @@ export default function StudyApp() {
   }, [selectedDate, fetchLogData]);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      const weeklyPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
-      const weeklyPeriodDays = weeklyPeriod === '7_days' ? 7 : null;
-      
-      try {
-        const apiUrl = weeklyPeriodDays 
-          ? `/api/dashboard?weekly_period=${weeklyPeriodDays}`
-          : '/api/dashboard';
-        const response = await fetch(apiUrl);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        setDashboardData(data);
-      } catch (e) {
-        console.error("Failed to fetch dashboard data:", e);
-      }
-    };
-
     fetchDashboardData();
 
     const handleStorageChange = (e: StorageEvent) => {
@@ -151,7 +151,7 @@ export default function StudyApp() {
       window.removeEventListener('storage', handleStorageChange);
     };
 
-  }, []);
+  }, [fetchDashboardData]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
