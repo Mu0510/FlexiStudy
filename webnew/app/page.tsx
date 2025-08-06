@@ -227,6 +227,7 @@ export default function StudyApp() {
                   dashboardData={dashboardData} 
                   subjectColors={subjectColors} 
                   onRefresh={fetchDashboardData} 
+                  onSelectGoal={handleSelectGoal}
                />;
       case "records":
         return <StudyRecords 

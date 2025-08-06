@@ -155,3 +155,13 @@ study_log_20250803_123432_199914.db: Before adding a goal to a specific date.
 study_log_20250803_123432_201178.db: Before daily goal update.
 study_log_20250802_223636_642417.db: Restored from backup
 study_log_20250803_142645_237736.db: Before daily summary update.
+study_log_20250806_090530_181505.db: Before updating goal by global ID.
+study_log_20250806_090846_493541.db: Before updating goal by global ID.
+study_log_20250806_091336_648471.db: Before updating goal by global ID.
+study_log_20250806_091506_987718.db: Before updating goal by global ID.
+study_log_20250806_091805_231199.db: Before updating goal by global ID.
+study_log_20250806_092002_758206.db: Before updating goal by global ID.
+study_log_20250806_092139_125846.db: Before updating goal by global ID.
+study_log_20250806_092358_703268.db: Before updating goal by global ID.
+study_log_20250806_092507_215677.db: Before updating goal by global ID.
+study_log_20250806_092835_275160.db: Before updating goal by global ID.

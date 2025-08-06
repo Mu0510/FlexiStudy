@@ -8,7 +8,7 @@ import { Target, Clock, TrendingUp, BookOpen, Calendar, Award, Zap, Play } from 
 import { Skeleton } from "@/components/ui/skeleton"
 import { DailyGoalsCard } from "@/components/daily-goals-card"
 
-export function Dashboard({ dashboardData, subjectColors }) {
+export function Dashboard({ dashboardData, subjectColors, onSelectGoal }) {
   const { studyStats, todayGoals, recentSessions } = dashboardData || {};
 
   if (!dashboardData) {
@@ -122,6 +122,7 @@ export function Dashboard({ dashboardData, subjectColors }) {
             }}
             className="border-0 shadow-lg bg-white dark:bg-neutral-800"
             subjectColors={subjectColors}
+            onSelectGoal={onSelectGoal}
           />
         </div>
 
