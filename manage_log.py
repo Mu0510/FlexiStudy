@@ -83,7 +83,7 @@ Gemini CLIのための学習ログ管理ツール。
                                     >> 全ての既存データ(ログ,概要,目標)が削除されます <<
                                     >> 'undo'では元に戻せません <<
                                     データベースが破損した際の最終手段です。
-"""
+""")
     print(help_text)
 
 # --- テーブル作成・更新 ---
@@ -395,10 +395,9 @@ def update_goal_by_id_global(goal_id, field, value):
             return {"status": "error", "message": f"無効なフィールド名 '{field}' です。"}
 
         now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
-        cursor.execute(
-            f"UPDATE goals SET {set_clause}, updated_at = ? WHERE id = ?",
-            (param_value, now, goal_id)
-        )
+        query = f"UPDATE goals SET {set_clause}, updated_at = ? WHERE id = ?"
+        params = (param_value, now, goal_id)
+        cursor.execute(query, params)
         conn.commit()
         return {"status": "success", "message": f"目標ID {goal_id} の {field} を更新しました。"}
 
@@ -600,16 +599,17 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
                 goal_entry["updated_at"] = now
 
                 # goalsテーブルに挿入または更新
-                cursor.execute(
-                    """
+                sql = """
                     INSERT OR REPLACE INTO goals (id, date, task, completed, subject, total_problems, completed_problems, tags, details, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """
-                    ,
-                    (goal_entry["id"], date_str, goal_entry["task"], 1 if goal_entry["completed"] else 0,
-                     goal_entry["subject"], goal_entry["total_problems"], goal_entry["completed_problems"],
-                     json.dumps(goal_entry["tags"], ensure_ascii=False), goal_entry["details"],
-                     goal_entry["created_at"], goal_entry["updated_at"])
+                params = (
+                    goal_entry["id"], date_str, goal_entry["task"], 1 if goal_entry["completed"] else 0,
+                    goal_entry["subject"], goal_entry["total_problems"], goal_entry["completed_problems"],
+                    json.dumps(goal_entry["tags"], ensure_ascii=False), goal_entry["details"],
+                    goal_entry["created_at"], goal_entry["updated_at"]
+                )
+                cursor.execute(sql, params)
             conn.commit()
         return {"status": "success", "message": f"日付 {date_str} の目標を更新しました。"}
 
@@ -653,16 +653,17 @@ def add_goal_to_date(goal_json_str, date_str):
 
         with get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                """
+            sql = """
                 INSERT INTO goals (id, date, task, completed, subject, total_problems, completed_problems, tags, details, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
-                ,
-                (new_goal["id"], date_str, new_goal["task"], 1 if new_goal["completed"] else 0,
-                 new_goal["subject"], new_goal["total_problems"], new_goal["completed_problems"],
-                 json.dumps(new_goal["tags"], ensure_ascii=False), new_goal["details"],
-                 new_goal["created_at"], new_goal["updated_at"])
+            params = (
+                new_goal["id"], date_str, new_goal["task"], 1 if new_goal["completed"] else 0,
+                new_goal["subject"], new_goal["total_problems"], new_goal["completed_problems"],
+                json.dumps(new_goal["tags"], ensure_ascii=False), new_goal["details"],
+                new_goal["created_at"], new_goal["updated_at"]
+            )
+            cursor.execute(sql, params)
             conn.commit()
 
         return {"status": "success", "message": f"日付 {date_str} に目標「{new_goal.get('task', '')}」を追加しました。"}
