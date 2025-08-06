@@ -211,14 +211,16 @@ def manage_redo_backups():
         print("Redoバックアップの管理中にエラーが発生しました: {}".format(e))
 
 def restore_database(backup_file_path, description="Restored from backup"):
+    """指定されたバックアップファイルからデータベースを復元し、結果を返す"""
     try:
         shutil.copy2(backup_file_path, DB_PATH)
-        print("データベースを復元しました: {} から".format(backup_file_path))
+        message = f"データベースを復元しました: {backup_file_path} から"
         with open(BACKUP_LOG_PATH, "a", encoding="utf-8") as f:
-            log_entry = "{}: {}".format(os.path.basename(backup_file_path), description)
+            log_entry = f"{os.path.basename(backup_file_path)}: {description}"
             f.write(log_entry + "\n")
+        return {"status": "success", "message": message}
     except Exception as e:
-        print("データベースの復元中にエラーが発生しました: {}".format(e))
+        return {"status": "error", "message": f"データベースの復元中にエラーが発生しました: {e}"}
 
 def get_latest_backup_file(directory):
     backup_files = sorted(
@@ -323,10 +325,14 @@ def consolidate_last_break_into_resume():
         print("エラー: 最後のイベントがBREAK、その前のイベントがRESUMEではありません。")
 
 def update_end_time(log_id, end_time):
+    """指定されたログIDの終了時刻を更新し、結果を返す"""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT start_time FROM study_logs WHERE id = ?", (log_id,))
-        start_time_str = cursor.fetchone()[0]
+        start_time_result = cursor.fetchone()
+        if not start_time_result:
+            return {"status": "error", "message": f"ログID {log_id} が見つかりません。"}
+        start_time_str = start_time_result[0]
         
         start_time = datetime.datetime.strptime(start_time_str, '%Y-%m-%d %H:%M:%S')
         end_time_dt = datetime.datetime.strptime(end_time, '%Y-%m-%d %H:%M:%S')
@@ -338,58 +344,55 @@ def update_end_time(log_id, end_time):
             "UPDATE study_logs SET end_time = ?, duration_minutes = ? WHERE id = ?",
             (end_time, duration_minutes, log_id)
         )
+        conn.commit()
+        return {"status": "success", "message": f"ログID {log_id} の終了時刻を更新しました。"}
 
 def get_goal_by_id_global(goal_id):
+    """指定されたIDの目標を取得し、結果を返す"""
     with get_connection() as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM goals WHERE id = ?", (goal_id,))
-        return cursor.fetchone()
+        goal = cursor.fetchone()
+        if goal:
+            return {"status": "success", "goal": dict(goal)}
+        else:
+            return {"status": "error", "message": f"目標ID {goal_id} が見つかりません。"}
 
 def update_goal_by_id_global(goal_id, field, value):
+    """指定されたIDの目標の特定のフィールドを更新し、結果を返す"""
     backup_database("Before updating goal by global ID.")
     with get_connection() as conn:
         cursor = conn.cursor()
         
-        # Check if the goal exists
         cursor.execute("SELECT id FROM goals WHERE id = ?", (goal_id,))
         if cursor.fetchone() is None:
-            print("エラー: 目標ID {} が見つかりません。".format(goal_id))
-            return
+            return {"status": "error", "message": f"目標ID {goal_id} が見つかりません。"}
 
         set_clause = ""
         param_value = value
 
         if field == "completed":
-            param_value = 1 if value.lower() == "true" else 0
+            param_value = 1 if str(value).lower() == "true" else 0
             set_clause = "completed = ?"
         elif field in ["total_problems", "completed_problems"]:
             try:
                 param_value = int(value)
                 set_clause = f"{field} = ?"
             except ValueError:
-                print(f"エラー: {field} は整数である必要があります。")
-                return
+                return {"status": "error", "message": f"{field} は整数である必要があります。"}
         elif field == "tags":
             try:
-                json.loads(value) # Validate if it's a valid JSON string
+                json.loads(value)
                 param_value = value
                 set_clause = "tags = ?"
             except json.JSONDecodeError:
-                print(f"エラー: tags は有効なJSON文字列である必要があります。")
-                return
-        elif field == "details":
+                return {"status": "error", "message": "tags は有効なJSON文字列である必要があります。"}
+        elif field in ["details", "task", "subject"]:
             param_value = value
-            set_clause = "details = ?"
-        elif field == "task":
-            param_value = value
-            set_clause = "task = ?"
-        elif field == "subject":
-            param_value = value
-            set_clause = "subject = ?"
+            set_clause = f"{field} = ?"
         else:
-            print(f"エラー: 無効なフィールド名 '{field}' です。")
-            return
+            return {"status": "error", "message": f"無効なフィールド名 '{field}' です。"}
 
         now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
         cursor.execute(
@@ -397,68 +400,51 @@ def update_goal_by_id_global(goal_id, field, value):
             (param_value, now, goal_id)
         )
         conn.commit()
-    print(f"目標ID {goal_id} の {field} を更新しました。")
+        return {"status": "success", "message": f"目標ID {goal_id} の {field} を更新しました。"}
 
 def delete_goal_by_id_global(goal_id):
+    """指定されたIDの目標を削除し、結果を返す"""
     backup_database("Before deleting goal by global ID.")
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
         if cursor.rowcount > 0:
             conn.commit()
-            print("目標ID {} を削除しました。".format(goal_id))
+            return {"status": "success", "message": f"目標ID {goal_id} を削除しました。"}
         else:
-            print("エラー: 目標ID {} が見つかりません。".format(goal_id))
+            return {"status": "error", "message": f"目標ID {goal_id} が見つかりません。"}
 
-def update_log_entry(log_id, event_type=None, subject=None, content=None, start_time=None, end_time=None, duration_minutes=None, summary=None):
+def update_log_entry(log_id, **kwargs):
+    """ログエントリの特定のフィールドを更新し、結果を返す"""
     backup_database("Before updating log entry.")
     with get_connection() as conn:
         cursor = conn.cursor()
         set_clauses = []
         params = []
-        if event_type is not None:
-            set_clauses.append("event_type = ?")
-            params.append(event_type)
-        if subject is not None:
-            set_clauses.append("subject = ?")
-            params.append(subject)
-        if content is not None:
-            set_clauses.append("content = ?")
-            params.append(content)
-        if start_time is not None:
-            set_clauses.append("start_time = ?")
-            params.append(start_time)
-        if end_time is not None:
-            set_clauses.append("end_time = ?")
-            params.append(end_time)
-        if duration_minutes is not None:
-            set_clauses.append("duration_minutes = ?")
-            params.append(duration_minutes)
-        if summary is not None:
-            set_clauses.append("summary = ?")
-            params.append(summary)
+        for key, value in kwargs.items():
+            set_clauses.append(f"{key} = ?")
+            params.append(value)
         
         if not set_clauses:
-            print("更新するフィールドが指定されていません。")
-            return
+            return {"status": "error", "message": "更新するフィールドが指定されていません。"}
 
         params.append(log_id)
         query = "UPDATE study_logs SET {} WHERE id = ?".format(", ".join(set_clauses))
         cursor.execute(query, tuple(params))
         conn.commit()
-        print("ログID {} を更新しました。".format(log_id))
+        return {"status": "success", "message": f"ログID {log_id} を更新しました。"}
 
 def get_log_entry_by_id(log_id):
+    """指定されたIDのログエントリを取得し、結果を返す"""
     with get_connection() as conn:
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM study_logs WHERE id = ?", (log_id,))
-        return cursor.fetchone()
-    with get_connection() as conn:
-        conn.execute(
-            "UPDATE study_logs SET end_time = ? WHERE id = ?",
-            (end_time, log_id)
-        )
+        log_entry = cursor.fetchone()
+        if log_entry:
+            return {"status": "success", "entry": dict(log_entry)}
+        else:
+            return {"status": "error", "message": f"ログID {log_id} が見つかりません。"}
 
 def start_session(subject, content):
     if not is_today_log_exists():
@@ -541,32 +527,31 @@ def resume_session(content=None):
         print("エラー: 休憩中のセッションがありません。")
 
 def add_or_update_daily_summary(summary_text, date_str=None):
+    """日ごとの概要を追加または更新し、結果を返す"""
     backup_database("Before daily summary update.")
-    """日ごとの概要を追加または更新する"""
     if not date_str:
         date_str = datetime.date.today().strftime('%Y-%m-%d')
     with get_connection() as conn:
         cursor = conn.cursor()
-        # 既存のレコードがあるか確認
         cursor.execute("SELECT date FROM daily_summaries WHERE date = ?", (date_str,))
         if cursor.fetchone():
-            # あればUPDATE
             cursor.execute(
                 "UPDATE daily_summaries SET summary = ? WHERE date = ?",
                 (summary_text, date_str)
             )
+            message = f"日付 {date_str} の概要を更新しました。"
         else:
-            # なければINSERT
             cursor.execute(
                 "INSERT INTO daily_summaries (date, summary) VALUES (?, ?)",
                 (date_str, summary_text)
             )
+            message = f"日付 {date_str} の概要を新規作成しました。"
         conn.commit()
-    print(f"Geminiの分析に基づき、日付 {date_str} の概要を更新しました。")
+    return {"status": "success", "message": message}
 
 def add_or_update_daily_goal(goal_json_str, date_str=None):
+    """日ごとの目標を追加または更新し、結果を返す"""
     backup_database("Before daily goal update.")
-    """日ごとの目標を追加または更新する"""
     if not date_str:
         date_str = datetime.date.today().strftime('%Y-%m-%d')
     try:
@@ -619,26 +604,24 @@ def add_or_update_daily_goal(goal_json_str, date_str=None):
                     """
                     INSERT OR REPLACE INTO goals (id, date, task, completed, subject, total_problems, completed_problems, tags, details, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                    """
+                    ,
                     (goal_entry["id"], date_str, goal_entry["task"], 1 if goal_entry["completed"] else 0,
                      goal_entry["subject"], goal_entry["total_problems"], goal_entry["completed_problems"],
                      json.dumps(goal_entry["tags"], ensure_ascii=False), goal_entry["details"],
-                     goal_entry["created_at"], goal_entry["updated_at"]))
+                     goal_entry["created_at"], goal_entry["updated_at"])
             conn.commit()
-        print(f"日付 {date_str} の目標を更新しました。")
+        return {"status": "success", "message": f"日付 {date_str} の目標を更新しました。"}
 
     except json.JSONDecodeError as e:
-        print(f"エラー: 目標は有効なJSON形式である必要があります。{e}")
-        return
+        return {"status": "error", "message": f"目標は有効なJSON形式である必要があります。{e}"}
     except ValueError as ve:
-        print(f"エラー: 目標データの構造が不正です。{ve}")
-        return
+        return {"status": "error", "message": f"目標データの構造が不正です。{ve}"}
     except Exception as e:
-        print(f"エラー: 目標の更新中に予期せぬエラーが発生しました。{e}")
-        return
+        return {"status": "error", "message": f"目標の更新中に予期せぬエラーが発生しました。{e}"}
 
 def add_goal_to_date(goal_json_str, date_str):
-    """指定された日付に新しい目標を1つ追加する"""
+    """指定された日付に新しい目標を1つ追加し、結果を返す"""
     backup_database("Before adding a goal to a specific date.")
     try:
         new_goal = json.loads(goal_json_str)
@@ -674,29 +657,26 @@ def add_goal_to_date(goal_json_str, date_str):
                 """
                 INSERT INTO goals (id, date, task, completed, subject, total_problems, completed_problems, tags, details, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                """
+                ,
                 (new_goal["id"], date_str, new_goal["task"], 1 if new_goal["completed"] else 0,
                  new_goal["subject"], new_goal["total_problems"], new_goal["completed_problems"],
                  json.dumps(new_goal["tags"], ensure_ascii=False), new_goal["details"],
-                 new_goal["created_at"], new_goal["updated_at"]))
+                 new_goal["created_at"], new_goal["updated_at"])
             conn.commit()
 
-        print(f"日付 {date_str} に目標「{new_goal.get('task', '')}」を追加しました。")
+        return {"status": "success", "message": f"日付 {date_str} に目標「{new_goal.get('task', '')}」を追加しました。"}
 
     except json.JSONDecodeError as e:
-        print(f"エラー: 追加する目標データが有効なJSON形式ではありません。{e}")
-        return
+        return {"status": "error", "message": f"追加する目標データが有効なJSON形式ではありません。{e}"}
     except ValueError as ve:
-        print(f"エラー: 目標データの構造が不正です。{ve}")
-        return
+        return {"status": "error", "message": f"目標データの構造が不正です。{ve}"}
     except Exception as e:
-        print(f"エラー: 目標データの処理中にエラーが発生しました。{e}")
-        return
-
+        return {"status": "error", "message": f"目標データの処理中にエラーが発生しました。{e}"}
 
 def add_or_update_session_summary(summary_text, session_id=None):
-    backup_database("Before session summary update.")
     """セッションの概要を追加または更新する"""
+    backup_database("Before session summary update.")
     with get_connection() as conn:
         cursor = conn.cursor()
         target_id = session_id
@@ -800,12 +780,12 @@ def show_logs_json_for_date(date_str):
                 current_session["details"].append({
                     "event_type": log_dict["event_type"], "content": log_dict["content"],
                     "start_time": start_dt.strftime("%H:%M"),
-                    "end_time": end_dt.strftime("%H:%M") if log_dict["end_time"] else "",
+                    "end_time": end_dt.strftime(" %H:%M") if log_dict["end_time"] else "",
                     "duration_minutes": duration_minutes
                 })
                 if not current_session["session_start_time"]:
                      current_session["session_start_time"] = start_dt.strftime("%H:%M")
-                current_session["session_end_time"] = end_dt.strftime("%H:%M") if log_dict["end_time"] else start_dt.strftime("%H:%M")
+                current_session["session_end_time"] = end_dt.strftime(" %H:%M") if log_dict["end_time"] else start_dt.strftime(" %H:%M")
         if current_session: output_data["sessions"].append(current_session)
 
     # セッション情報から日次サマリー情報を計算
@@ -882,8 +862,8 @@ def get_dashboard_data(weekly_period_days=None):
                 except json.JSONDecodeError:
                     goal_dict['tags'] = []
             today_goals.append(goal_dict)
-            if goal_dict.get('completed', False) or \
-               (goal_dict.get('total_problems') is not None and goal_dict.get('completed_problems') is not None and \
+            if goal_dict.get('completed', False) or 
+               (goal_dict.get('total_problems') is not None and goal_dict.get('completed_problems') is not None and 
                 goal_dict['total_problems'] > 0 and goal_dict['completed_problems'] >= goal_dict['total_problems']):
                 completed_goals += 1
 
@@ -947,12 +927,11 @@ def recalculate_all_durations():
 
 
 def reconstruct_from_json(json_data_str):
-    """JSONデータからデータベースを再構築する"""
+    """JSONデータからデータベースを再構築し、結果を返す"""
     try:
         data = json.loads(json_data_str)
     except json.JSONDecodeError as e:
-        print("エラー: JSONデータの解析に失敗しました: {}".format(e))
-        return
+        return {"status": "error", "message": f"JSONデータの解析に失敗しました: {e}"}
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -961,7 +940,6 @@ def reconstruct_from_json(json_data_str):
         cursor.execute("DELETE FROM daily_summaries")
         cursor.execute("DELETE FROM goals")
         conn.commit()
-        print("既存の学習ログ、日次概要、目標をクリアしました。")
 
         today_date_str = datetime.date.today().strftime('%Y-%m-%d')
 
@@ -973,7 +951,6 @@ def reconstruct_from_json(json_data_str):
                 (today_date_str, daily_summary_text)
             )
             conn.commit()
-            print("日次概要を挿入しました。")
 
         # セッションデータを挿入
         for session in data.get("sessions", []):
@@ -988,14 +965,13 @@ def reconstruct_from_json(json_data_str):
                 end_time_str = detail.get("end_time")
                 duration_minutes = detail.get("duration_minutes")
 
-                # Add seconds if missing
                 if len(start_time_str.split(':')) == 2: # HH:MM format
                     start_time_str += ':00'
                 if end_time_str and len(end_time_str.split(':')) == 2: # HH:MM format
                     end_time_str += ':00'
 
-                full_start_time = "{} {}".format(today_date_str, start_time_str)
-                full_end_time = "{} {}".format(today_date_str, end_time_str) if end_time_str else None
+                full_start_time = f"{today_date_str} {start_time_str}"
+                full_end_time = f"{today_date_str} {end_time_str}" if end_time_str else None
 
                 cursor.execute(
                     "INSERT INTO study_logs (event_type, subject, content, start_time, end_time, duration_minutes) VALUES (?, ?, ?, ?, ?, ?)",
@@ -1004,14 +980,13 @@ def reconstruct_from_json(json_data_str):
                 if first_event_id is None and event_type == 'START':
                     first_event_id = cursor.lastrowid
             
-            # セッションのサマリーを最初のSTARTイベントに紐づける
             if first_event_id and session_summary:
                 cursor.execute(
                     "UPDATE study_logs SET summary = ? WHERE id = ?",
                     (session_summary, first_event_id)
                 )
         conn.commit()
-        print("データベースの再構築が完了しました。")
+        return {"status": "success", "message": "データベースの再構築が完了しました。"}
 
 def is_today_log_exists():
     with get_connection() as conn:
@@ -1125,67 +1100,124 @@ def handle_daily_summary(args):
     if not 1 <= len(args) <= 2:
         print("使用法: daily_summary \"<text>\" [YYYY-MM-DD]")
         sys.exit(1)
-    add_or_update_daily_summary(args[0], args[1] if len(args) == 2 else None)
+    
+    params = {
+        "action": "summary.daily_update",
+        "params": {
+            "text": args[0],
+            "date": args[1] if len(args) == 2 else None
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_daily_goal(args):
     if not 1 <= len(args) <= 2:
         print("使用法: daily_goal \"<json_string>\" [YYYY-MM-DD]")
         sys.exit(1)
-    add_or_update_daily_goal(args[0], args[1] if len(args) == 2 else None)
+    
+    params = {
+        "action": "goal.daily_update",
+        "params": {
+            "goal_json": args[0],
+            "date": args[1] if len(args) == 2 else None
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_add_goal_to_date(args):
     if len(args) != 2:
         print("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
         sys.exit(1)
-    add_goal_to_date(args[0], args[1])
+    params = {
+        "action": "goal.add_to_date",
+        "params": {
+            "goal_json": args[0],
+            "date": args[1]
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_get_goal(args):
     if len(args) != 1:
         print("使用法: get_goal <goal_id>")
         sys.exit(1)
-    goal_entry = get_goal_by_id_global(args[0])
-    if goal_entry:
-        print(json.dumps(dict(goal_entry), indent=2, ensure_ascii=False))
-    else:
-        print(f"目標ID {args[0]} が見つかりません。")
+    params = {
+        "action": "goal.get",
+        "params": {"id": args[0]}
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_update_goal(args):
     if len(args) != 3:
         print("使用法: update_goal <goal_id> <field_name> <new_value>")
         sys.exit(1)
-    update_goal_by_id_global(args[0], args[1], args[2])
+    params = {
+        "action": "goal.update",
+        "params": {
+            "id": args[0],
+            "field": args[1],
+            "value": args[2]
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_delete_goal(args):
     if len(args) != 1:
         print("使用法: delete_goal <goal_id>")
         sys.exit(1)
-    delete_goal_by_id_global(args[0])
+    params = {
+        "action": "goal.delete",
+        "params": {"id": args[0]}
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_reconstruct(args):
     if len(args) != 1:
         print("使用法: reconstruct \"<json_string>\"")
         sys.exit(1)
-    reconstruct_from_json(args[0])
+    params = {
+        "action": "db.reconstruct",
+        "params": {"json_data": args[0]}
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_update_log_end_time(args):
     if len(args) != 2:
         print("使用法: update_log_end_time <log_id> <end_time>")
         sys.exit(1)
-    update_end_time(int(args[0]), args[1])
+    params = {
+        "action": "log.update_end_time",
+        "params": {
+            "id": int(args[0]),
+            "end_time": args[1]
+        }
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_restore(args):
     if len(args) != 1:
         print("使用法: restore <backup_file_path>")
         sys.exit(1)
-    restore_database(args[0])
+    params = {
+        "action": "db.restore",
+        "params": {"backup_path": args[0]}
+    }
+    handle_execute([json.dumps(params)])
 
 def handle_update_log_entry_cmd(args):
-    if len(args) < 2:
+    if len(args) < 3:
         print("使用法: update_log_entry_cmd <log_id> <field_name> <new_value>")
         sys.exit(1)
     try:
-        log_id = int(args[0])
-        update_log_entry(log_id, **{args[1]: args[2]})
+        params = {
+            "action": "log.update_entry",
+            "params": {
+                "id": int(args[0]),
+                "field": args[1],
+                "value": args[2]
+            }
+        }
+        handle_execute([json.dumps(params)])
     except ValueError:
         print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
         sys.exit(1)
@@ -1195,12 +1227,11 @@ def handle_get_entry(args):
         print("使用法: get_entry <log_id>")
         sys.exit(1)
     try:
-        log_id = int(args[0])
-        log_entry = get_log_entry_by_id(log_id)
-        if log_entry:
-            print(json.dumps(dict(log_entry), indent=2, ensure_ascii=False))
-        else:
-            print(f"ログID {log_id} が見つかりません。")
+        params = {
+            "action": "log.get_entry",
+            "params": {"id": int(args[0])}
+        }
+        handle_execute([json.dumps(params)])
     except ValueError:
         print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
         sys.exit(1)
@@ -1298,8 +1329,7 @@ def action_goal_add_to_date(params):
     date = params.get("date")
     if not goal_json or not date:
         raise ValueError("goal_jsonとdateは必須です。")
-    add_goal_to_date(goal_json, date)
-    return {"status": "success", "message": f"{date}に目標を追加しました。"}
+    return add_goal_to_date(goal_json, date)
 
 def action_data_unique_subjects(params):
     """ユニークな教科のリストを取得する"""
@@ -1325,6 +1355,83 @@ def action_log_delete(params):
             raise ValueError(f"ログID {log_id} が見つかりません。")
 
 
+def action_summary_daily_update(params):
+    """日次サマリーを更新する"""
+    text = params.get("text")
+    date = params.get("date")
+    if text is None:
+        raise ValueError("textは必須です。")
+    return add_or_update_daily_summary(text, date)
+
+def action_goal_daily_update(params):
+    """日次目標を更新する"""
+    goal_json = params.get("goal_json")
+    date = params.get("date")
+    if goal_json is None:
+        raise ValueError("goal_jsonは必須です。")
+    return add_or_update_daily_goal(goal_json, date)
+
+def action_goal_get(params):
+    """IDで指定した目標を取得する"""
+    goal_id = params.get("id")
+    if not goal_id:
+        raise ValueError("idは必須です。")
+    return get_goal_by_id_global(goal_id)
+
+def action_goal_update(params):
+    """IDで指定した目標を更新する"""
+    goal_id = params.get("id")
+    field = params.get("field")
+    value = params.get("value")
+    if not all([goal_id, field, value]):
+        raise ValueError("id, field, valueは必須です。")
+    return update_goal_by_id_global(goal_id, field, value)
+
+def action_goal_delete(params):
+    """IDで指定した目標を削除する"""
+    goal_id = params.get("id")
+    if not goal_id:
+        raise ValueError("idは必須です。")
+    return delete_goal_by_id_global(goal_id)
+
+def action_log_get_entry(params):
+    """IDで指定したログエントリを取得する"""
+    log_id = params.get("id")
+    if log_id is None:
+        raise ValueError("idは必須です。")
+    return get_log_entry_by_id(log_id)
+
+def action_log_update_entry(params):
+    """IDで指定したログエントリを更新する"""
+    log_id = params.get("id")
+    field = params.get("field")
+    value = params.get("value")
+    if not all([log_id, field, value]):
+        raise ValueError("id, field, valueは必須です。")
+    return update_log_entry(log_id, **{field: value})
+
+def action_log_update_end_time(params):
+    """ログエントリの終了時刻を更新する"""
+    log_id = params.get("id")
+    end_time = params.get("end_time")
+    if not all([log_id, end_time]):
+        raise ValueError("id, end_timeは必須です。")
+    return update_end_time(log_id, end_time)
+
+def action_db_restore(params):
+    """バックアップからデータベースを復元する"""
+    backup_path = params.get("backup_path")
+    if not backup_path:
+        raise ValueError("backup_pathは必須です。")
+    return restore_database(backup_path)
+
+def action_db_reconstruct(params):
+    """JSONデータからデータベースを再構築する"""
+    json_data = params.get("json_data")
+    if not json_data:
+        raise ValueError("json_dataは必須です。")
+    return reconstruct_from_json(json_data)
+
 ACTION_HANDLERS = {
     "log.create": action_log_create,
     "log.get": action_log_get,
@@ -1332,9 +1439,19 @@ ACTION_HANDLERS = {
     "log.resume": action_log_resume,
     "log.end_session": action_log_end_session,
     "log.delete": action_log_delete,
+    "log.get_entry": action_log_get_entry,
+    "log.update_entry": action_log_update_entry,
+    "log.update_end_time": action_log_update_end_time,
+    "summary.daily_update": action_summary_daily_update,
+    "goal.daily_update": action_goal_daily_update,
     "data.dashboard": action_data_dashboard,
     "goal.add_to_date": action_goal_add_to_date,
+    "goal.get": action_goal_get,
+    "goal.update": action_goal_update,
+    "goal.delete": action_goal_delete,
     "data.unique_subjects": action_data_unique_subjects,
+    "db.restore": action_db_restore,
+    "db.reconstruct": action_db_reconstruct,
 }
 
 if __name__ == '__main__':
