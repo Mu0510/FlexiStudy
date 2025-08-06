@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Dashboard } from "@/components/dashboard"
+import { DashboardContainer } from "@/components/dashboard-container"
 import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import Image from "next/image"
@@ -222,7 +223,11 @@ export default function StudyApp() {
   const renderActiveView = () => {
     switch (activeView) {
       case "dashboard":
-        return         <Dashboard dashboardData={dashboardData} subjectColors={subjectColors} />;
+        return <DashboardContainer 
+                  dashboardData={dashboardData} 
+                  subjectColors={subjectColors} 
+                  onRefresh={fetchDashboardData} 
+               />;
       case "records":
         return <StudyRecords 
                   logData={logData} 
