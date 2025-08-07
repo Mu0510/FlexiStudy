@@ -515,35 +515,36 @@ def end_session():
         logger.error("エラー: 開始中のセッションがありません。")
 
 def break_session(update_content=None, break_content=None):
+    """現在のセッションを一時停止し、BREAKイベントを記録する。"""
     backup_database("Before break session.")
     last_active_id = get_last_active_log_id()
-    if last_active_id:
+
+    if not last_active_id:
+        logger.error("エラー: 開始中のセッションがありません。")
+        return {"status": "error", "message": "エラー: 開始中のセッションがありません。"}
+
+    try:
         now = get_now()
+        # 進行中のセッションを終了させる
         update_end_time(last_active_id, now)
 
-        # --update-contentが指定された場合、直前のログの内容を更新
-        if update_content:
+        # contentが指定されていれば更新
+        if update_content is not None:
             update_log_entry(last_active_id, content=update_content)
 
-        # Get the details of the last active log entry to generate summary
-        last_active_log_entry = get_log_entry_by_id(last_active_id)
-        generated_summary = ""
-        if last_active_log_entry:
-            subject = last_active_log_entry['subject'] if last_active_log_entry['subject'] else "不明な教科"
-            # Use the potentially updated content for summary generation
-            current_content_for_summary = last_active_log_entry['content'] if last_active_log_entry['content'] else "不明な内容"
-            generated_summary = "{} {} 完了".format(subject, current_content_for_summary)
-
+        # 新しいBREAKイベントを記録
         with get_connection() as conn:
             conn.execute(
                 "INSERT INTO study_logs (event_type, content, start_time) VALUES (?, ?, ?)",
-                ('BREAK', break_content, now) # --break-contentの内容を記録
+                ('BREAK', break_content, now)
             )
-        # セッションの概要を更新
-        add_or_update_session_summary(generated_summary, last_active_id)
-        logger.info("学習を休憩しました。")
-    else:
-        logger.error("エラー: 開始中のセッションがありません。")
+        
+        logger.info(f"学習を休憩しました。")
+        return {"status": "success", "message": "学習を休憩しました。"}
+
+    except Exception as e:
+        logger.error(f"休憩処理中にエラーが発生しました: {e}", exc_info=True)
+        return {"status": "error", "message": f"処理中にエラーが発生しました: {e}"}
 
 def resume_session(content=None):
     backup_database("Before resume session.")
