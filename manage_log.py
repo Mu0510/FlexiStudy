@@ -100,6 +100,7 @@ Options:
 [session]
   - session.merge: 2つの学習セッションを結合
     - params: {"session1_id": int, "session2_id": int}
+    - (注) 結合する2つのセッションのサマリーが一致している必要があります。
 
 [summary]
   - summary.session_update: セッションの概要を追加・更新

@@ -261,3 +261,47 @@ study_log_20250807_133339_504486.db: Before adding a goal to a specific date.
 study_log_20250807_133342_974892.db: Before adding a goal to a specific date.
 study_log_20250807_133350_964346.db: Before deleting goal by global ID.
 study_log_20250807_133410_008726.db: Before deleting goal by global ID.
+study_log_20250807_133526_210161.db: Before start session.
+study_log_20250807_135616_076314.db: Before ending session.
+study_log_20250807_135844_412710.db: Before updating log entry.
+study_log_20250807_140129_608515.db: Before session summary update.
+study_log_20250807_140131_754705.db: Before session summary update.
+study_log_20250807_140134_126170.db: Before updating goal by global ID.
+study_log_20250807_140526_817541.db: Before session summary update.
+study_log_20250807_140744_675903.db: Before ending session.
+study_log_20250807_140748_354075.db: Before updating goal by global ID.
+study_log_20250807_140755_171494.db: Before session summary update.
+study_log_20250807_143146_309892.db: Before adding a goal to a specific date.
+study_log_20250807_143303_589734.db: Before updating goal by global ID.
+study_log_20250807_143306_293125.db: Before updating goal by global ID.
+study_log_20250807_143336_412555.db: Before updating goal by global ID.
+study_log_20250807_143449_174117.db: Before updating goal by global ID.
+study_log_20250807_143452_017168.db: Before updating goal by global ID.
+study_log_20250807_143516_725630.db: Before updating goal by global ID.
+study_log_20250807_143519_998076.db: Before updating goal by global ID.
+study_log_20250807_143852_710491.db: Before updating goal by global ID.
+study_log_20250807_154324_260116.db: Before start session.
+study_log_20250807_154400_817963.db: For Redo
+study_log_20250807_154324_260116.db: Undo operation
+study_log_20250807_154825_120607.db: Before start session.
+study_log_20250807_164918_372992.db: Before break session.
+study_log_20250807_164918_379504.db: Before updating log entry.
+study_log_20250807_164932_350655.db: Before break session.
+study_log_20250807_165004_525017.db: Before break session.
+study_log_20250807_165012_406047.db: Before break session.
+study_log_20250807_165047_062411.db: Before updating log entry.
+study_log_20250807_170010_259453.db: Before start session.
+study_log_20250807_170012_496761.db: Before break session.
+study_log_20250807_170043_761054.db: For Redo
+study_log_20250807_170012_496761.db: Undo operation
+study_log_20250807_170048_627529.db: For Redo
+study_log_20250807_170010_259453.db: Undo operation
+study_log_20250807_170134_380699.db: Before start session.
+study_log_20250807_170136_659602.db: Before break session.
+study_log_20250807_170136_666086.db: Before updating log entry.
+study_log_20250807_170248_726798.db: For Redo
+study_log_20250807_170136_666086.db: Undo operation
+study_log_20250807_170252_029545.db: For Redo
+study_log_20250807_170136_659602.db: Undo operation
+study_log_20250807_170310_626620.db: For Redo
+study_log_20250807_170134_380699.db: Undo operation
