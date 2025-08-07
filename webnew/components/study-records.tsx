@@ -31,6 +31,9 @@ interface LogEntry {
   content: string;
   start_time: string;
   end_time: string;
+  id: number;
+  memo?: string;
+  impression?: string;
 }
 
 interface StudySession {
@@ -309,6 +312,18 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                               <span className="whitespace-nowrap">{detail.start_time} - {detail.end_time}</span>
                             </div>
                           </div>
+                          {detail.memo && (
+                            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 whitespace-pre-wrap">
+                              <MessageSquare className="mr-2 -ml-6 inline-block h-4 w-4 align-middle text-slate-400" />
+                              <span className="align-middle">[メモ] {detail.memo}</span>
+                            </p>
+                          )}
+                          {detail.impression && (
+                            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 whitespace-pre-wrap">
+                              <MessageSquare className="mr-2 -ml-6 inline-block h-4 w-4 align-middle text-slate-400" />
+                              <span className="align-middle">[感想] {detail.impression}</span>
+                            </p>
+                          )}
                         </div>
                       </div>
                     ))}
