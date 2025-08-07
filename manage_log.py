@@ -721,8 +721,8 @@ def get_chat_messages(limit=5, before_id=None):
         messages = cursor.fetchall()
         return [dict(m) for m in messages]
 
-def show_logs_json_for_date(date_str):
-    """指定された日付のログと概要をJSONで出力する"""
+def get_logs_json_for_date(date_str):
+    """指定された日付のログと概要をJSONで返す"""
     output_data = {
         "daily_summary": {
             "date": date_str,
@@ -802,7 +802,7 @@ def show_logs_json_for_date(date_str):
         output_data['daily_summary']['total_duration'] = total_minutes
         output_data['daily_summary']['subjects'] = subjects
 
-    print(json.dumps(output_data, indent=2, ensure_ascii=False))
+    return output_data
 
 def get_all_unique_subjects():
     """すべての学習ログからユニークな教科のリストを取得する"""
@@ -813,7 +813,7 @@ def get_all_unique_subjects():
         return subjects
 
 def get_dashboard_data(weekly_period_days=None):
-    """ダッシュボード用のデータを取得してJSONで出力する"""
+    """ダッシュボード用のデータを取得して返す"""
     today = datetime.date.today()
     today_str = today.strftime('%Y-%m-%d')
     
@@ -906,7 +906,7 @@ def get_dashboard_data(weekly_period_days=None):
         "recentSessions": recent_sessions
     }
     
-    print(json.dumps(dashboard_data, indent=2, ensure_ascii=False))
+    return dashboard_data
 
 def recalculate_all_durations():
     """すべてのログのduration_minutesを再計算する"""
