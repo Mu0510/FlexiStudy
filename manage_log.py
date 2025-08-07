@@ -42,9 +42,9 @@ Gemini CLIのための学習ログ管理ツール。
 毎日使う、基本的な学習記録用のコマンドです。
 
   start <subject> "<content>"       新しい学習セッションを開始します。
-  break [--update-content "<text>"] [--break-content "<text>"]
+  break [--edit-last-entry "<text>"] [--break-content "<text>"]
                                     現在のセッションを一時停止します。
-                                    --update-content: 直前の作業内容を更新します。
+                                    --edit-last-entry: 直前の作業内容を更新します。
                                     --break-content: 休憩の理由を記録します。
   resume ["<content>"]              一時停止したセッションを再開します。
   end_session                       現在の学習セッションを休憩なしで終了します。
@@ -1070,7 +1070,7 @@ def handle_break(args):
     break_content = None
     i = 0
     while i < len(args):
-        if args[i] == '--update-content' and i + 1 < len(args):
+        if args[i] == '--edit-last-entry' and i + 1 < len(args):
             update_content = args[i+1]
             i += 2
         elif args[i] == '--break-content' and i + 1 < len(args):
