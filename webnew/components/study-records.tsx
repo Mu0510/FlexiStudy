@@ -296,9 +296,10 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                           <Badge
                             variant="outline"
                             className={
-                              detail.type === "START" ? "border-green-200 text-green-700 dark:border-green-700/50 dark:text-green-300"
+                              `w-20 text-center ` +
+                              (detail.type === "START" ? "border-green-200 text-green-700 dark:border-green-700/50 dark:text-green-300"
                               : detail.type === "BREAK" ? "border-orange-200 text-orange-700 dark:border-orange-700/50 dark:text-orange-300"
-                              : "border-blue-200 text-blue-700 dark:border-blue-700/50 dark:text-blue-300"
+                              : "border-blue-200 text-blue-700 dark:border-blue-700/50 dark:text-blue-300")
                             }
                           >
                             {detail.type}
