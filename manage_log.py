@@ -97,6 +97,10 @@ Options:
   - log.delete: ログエントリを削除
     - params: {"id": int}
 
+[session]
+  - session.merge: 2つの学習セッションを結合
+    - params: {"session1_id": int, "session2_id": int}
+
 [summary]
   - summary.session_update: セッションの概要を追加・更新
     - params: {"text": "str", "session_id": int (optional)}
@@ -545,6 +549,51 @@ def break_session(update_content=None, break_content=None):
     except Exception as e:
         logger.error(f"休憩処理中にエラーが発生しました: {e}", exc_info=True)
         return {"status": "error", "message": f"処理中にエラーが発生しました: {e}"}
+
+def merge_sessions(session1_id, session2_id):
+    """2つの学習セッションを結合する"""
+    backup_database("Before merging sessions.")
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        # セッション1と2のSTARTログを取得
+        cursor.execute("SELECT * FROM study_logs WHERE id = ? AND event_type = 'START'", (session1_id,))
+        session1_start = cursor.fetchone()
+        cursor.execute("SELECT * FROM study_logs WHERE id = ? AND event_type = 'START'", (session2_id,))
+        session2_start = cursor.fetchone()
+
+        if not session1_start or not session2_start:
+            return {"status": "error", "message": "指定されたIDのSTARTログが見つかりません。"}
+
+        # サマリーの一致を確認
+        if session1_start['summary'] != session2_start['summary']:
+            return {"status": "error", "message": "セッションサマリーが一致しません。まず手動で内容を統一してください。"}
+
+        # セッション1の最後のログを取得
+        cursor.execute("SELECT * FROM study_logs WHERE id >= ? and id < ? ORDER BY start_time DESC, id DESC LIMIT 1", (session1_id, session2_id))
+        session1_last_log = cursor.fetchone()
+
+        if not session1_last_log or not session1_last_log['end_time']:
+            return {"status": "error", "message": "セッション1の終了時刻が見つかりません。"}
+
+        break_start_time = session1_last_log['end_time']
+        break_end_time = session2_start['start_time']
+
+        # BREAKイベントを挿入
+        cursor.execute(
+            "INSERT INTO study_logs (event_type, subject, content, start_time, end_time) VALUES (?, ?, ?, ?, ?)",
+            ('BREAK', session1_start['subject'], 'セッション結合による自動挿入', break_start_time, break_end_time)
+        )
+
+        # セッション2のSTARTをRESUMEに更新
+        cursor.execute(
+            "UPDATE study_logs SET event_type = ?, summary = NULL WHERE id = ?",
+            ('RESUME', session2_id)
+        )
+
+        conn.commit()
+        return {"status": "success", "message": f"セッション {session1_id} と {session2_id} を結合しました。"}
 
 def resume_session(content=None):
     backup_database("Before resume session.")
@@ -1159,6 +1208,14 @@ def action_log_resume(params):
     content = params.get("content")
     return resume_session(content)
 
+def action_session_merge(params):
+    """2つの学習セッションを結合する"""
+    session1_id = params.get("session1_id")
+    session2_id = params.get("session2_id")
+    if not session1_id or not session2_id:
+        raise ValueError("session1_idとsession2_idは必須です。")
+    return merge_sessions(session1_id, session2_id)
+
 def action_log_end_session():
     """学習セッションを終了する"""
     return end_session()
@@ -1294,6 +1351,7 @@ ACTION_HANDLERS = {
     "log.get_entry": action_log_get_entry,
     "log.update_entry": action_log_update_entry,
     "log.update_end_time": action_log_update_end_time,
+    "session.merge": action_session_merge,
     "summary.daily_update": action_summary_daily_update,
     "summary.session_update": action_summary_session_update,
     "goal.daily_update": action_goal_daily_update,
