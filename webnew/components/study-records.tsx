@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { DailyGoalsCard } from "@/components/daily-goals-card";
 import { Skeleton } from "@/components/ui/skeleton"
-import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle } from "lucide-react"
+import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb } from "lucide-react"
 
 // Define the types for our data to ensure type safety
 interface Goal {
@@ -313,16 +313,16 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                             </div>
                           </div>
                           {detail.memo && (
-                            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 whitespace-pre-wrap">
-                              <MessageSquare className="mr-2 -ml-6 inline-block h-4 w-4 align-middle text-slate-400" />
-                              <span className="align-middle">[メモ] {detail.memo}</span>
-                            </p>
+                            <div className="flex items-start text-slate-600 dark:text-slate-400 text-sm mt-1">
+                              <ClipboardList className="w-4 h-4 mr-2 mt-0.5 text-slate-500 flex-shrink-0" />
+                              <span className="whitespace-pre-wrap flex-grow">{detail.memo}</span>
+                            </div>
                           )}
                           {detail.impression && (
-                            <p className="text-slate-600 dark:text-slate-400 text-sm mt-1 whitespace-pre-wrap">
-                              <MessageSquare className="mr-2 -ml-6 inline-block h-4 w-4 align-middle text-slate-400" />
-                              <span className="align-middle">[感想] {detail.impression}</span>
-                            </p>
+                            <div className="flex items-start text-slate-600 dark:text-slate-400 text-sm mt-1">
+                              <Lightbulb className="w-4 h-4 mr-2 mt-0.5 text-slate-500 flex-shrink-0" />
+                              <span className="whitespace-pre-wrap flex-grow">{detail.impression}</span>
+                            </div>
                           )}
                         </div>
                       </div>
