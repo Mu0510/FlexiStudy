@@ -255,3 +255,9 @@ study_log_20250807_103620_219516.db: Redo operation
 study_log_20250807_103912_561656.db: Before updating log entry.
 study_log_20250807_125712_343301.db: Before adding a goal to a specific date.
 study_log_20250807_131629_814228.db: Before adding a goal to a specific date.
+study_log_20250807_133001_324154.db: Before deleting goal by global ID.
+study_log_20250807_133011_154027.db: Before deleting goal by global ID.
+study_log_20250807_133339_504486.db: Before adding a goal to a specific date.
+study_log_20250807_133342_974892.db: Before adding a goal to a specific date.
+study_log_20250807_133350_964346.db: Before deleting goal by global ID.
+study_log_20250807_133410_008726.db: Before deleting goal by global ID.

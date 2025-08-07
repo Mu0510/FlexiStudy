@@ -94,8 +94,16 @@ export default function StudyApp() {
         if (response.status === 404) {
           setLogData(null);
         } else {
-          const errorData = await response.json();
-          throw new Error(errorData.details || `HTTP error! status: ${response.status}`);
+          const errorText = await response.text();
+          let errorDetails = `HTTP error! status: ${response.status}`;
+          try {
+            const errorData = JSON.parse(errorText);
+            errorDetails = errorData.details || errorDetails;
+          } catch (e) {
+            console.error("Failed to parse error response as JSON:", errorText);
+            errorDetails = errorText;
+          }
+          throw new Error(errorDetails);
         }
       } else {
         const rawData = await response.json();
@@ -106,7 +114,7 @@ export default function StudyApp() {
             start_time: session.session_start_time,
             end_time: session.session_end_time,
             total_duration: session.total_study_minutes,
-            logs: session.details.map((detail: any) => ({ ...detail, type: detail.event_type })),
+            logs: session.details.map((detail: any) => ({ ...detail, type: detail.event_type })).sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
           })),
         };
         setLogData(transformedData);
@@ -116,7 +124,7 @@ export default function StudyApp() {
     } finally {
       setIsLoading(false);
     }
-  }, []); // 依存配列は空でOK
+  }, []);
 
   const handleViewChange = (view: string) => {
     if (view === 'system-chat') {
