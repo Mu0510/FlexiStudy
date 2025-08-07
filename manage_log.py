@@ -676,8 +676,14 @@ def add_goal_to_date(goal_json_str, date_str):
         new_goal['id'] = str(uuid.uuid4())
         new_goal['completed'] = False
         # total_problemsとcompleted_problemsのデフォルト値を設定
-        if 'total_problems' not in new_goal:
+        if 'total_problems' not in new_goal or new_goal['total_problems'] is None:
             new_goal['total_problems'] = None
+        else:
+            try:
+                new_goal['total_problems'] = int(new_goal['total_problems'])
+            except (ValueError, TypeError):
+                new_goal['total_problems'] = None
+
         if 'completed_problems' not in new_goal:
             new_goal['completed_problems'] = None
         now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
