@@ -684,8 +684,11 @@ def add_goal_to_date(goal_json_str, date_str):
             except (ValueError, TypeError):
                 new_goal['total_problems'] = None
 
-        if 'completed_problems' not in new_goal:
-            new_goal['completed_problems'] = None
+        if 'completed_problems' not in new_goal or new_goal['completed_problems'] is None:
+            if new_goal.get('total_problems') is not None:
+                new_goal['completed_problems'] = 0
+            else:
+                new_goal['completed_problems'] = None
         now = datetime.datetime.now(JST).strftime('%Y-%m-%d %H:%M:%S')
         new_goal['created_at'] = now
         new_goal['updated_at'] = now
