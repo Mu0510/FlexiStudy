@@ -473,8 +473,11 @@ def update_log_entry(log_id, **kwargs):
         set_clauses = []
         params = []
         for key, value in kwargs.items():
-            set_clauses.append(f"{key} = ?")
-            params.append(value)
+            if key in ["memo", "impression", "content", "subject", "summary", "event_type", "start_time", "end_time", "duration_minutes"]:
+                set_clauses.append(f"{key} = ?")
+                params.append(value)
+            else:
+                return {"status": "error", "message": f"無効なフィールド名 '{key}' です。"}
         
         if not set_clauses:
             return {"status": "error", "message": "更新するフィールドが指定されていません。"}
@@ -864,7 +867,7 @@ def get_logs_json_for_date(date_str):
         output_data["daily_summary"]["goals"] = goals_list
 
         cursor.execute("""
-            SELECT id, event_type, subject, content, start_time, end_time, summary
+            SELECT id, event_type, subject, content, start_time, end_time, duration_minutes, summary, memo, impression
             FROM study_logs WHERE DATE(start_time) = ? ORDER BY start_time
         """, (date_str,))
         logs = cursor.fetchall()
@@ -887,13 +890,18 @@ def get_logs_json_for_date(date_str):
                 duration_minutes = int((end_dt - start_dt).total_seconds() / 60)
                 if log_dict["event_type"] in ('START', 'RESUME'):
                     current_session["total_study_minutes"] += duration_minutes
-                current_session["details"].append({
+                detail_entry = {
                     "id": log_dict["id"],
                     "event_type": log_dict["event_type"], "content": log_dict["content"],
                     "start_time": start_dt.strftime("%H:%M"),
                     "end_time": end_dt.strftime(" %H:%M") if log_dict["end_time"] else "",
                     "duration_minutes": duration_minutes
-                })
+                }
+                if log_dict["memo"] is not None and log_dict["memo"] != '':
+                    detail_entry["memo"] = log_dict["memo"]
+                if log_dict["impression"] is not None and log_dict["impression"] != '':
+                    detail_entry["impression"] = log_dict["impression"]
+                current_session["details"].append(detail_entry)
                 if not current_session["session_start_time"]:
                      current_session["session_start_time"] = start_dt.strftime("%H:%M")
                 current_session["session_end_time"] = end_dt.strftime(" %H:%M") if log_dict["end_time"] else start_dt.strftime(" %H:%M")
