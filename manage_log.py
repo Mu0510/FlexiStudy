@@ -42,9 +42,13 @@ Gemini CLIのための学習ログ管理ツール。
 毎日使う、基本的な学習記録用のコマンドです。
 
   start <subject> "<content>"       新しい学習セッションを開始します。
-  break ["<content>"]               現在のセッションを一時停止します。
+  break [--update-content "<text>"] [--break-content "<text>"]
+                                    現在のセッションを一時停止します。
+                                    --update-content: 直前の作業内容を更新します。
+                                    --break-content: 休憩の理由を記録します。
   resume ["<content>"]              一時停止したセッションを再開します。
   end_session                       現在の学習セッションを休憩なしで終了します。
+  update_content <log_id> "<text>"  指定したIDのログの内容(content)を更新します。
 
 --- 📊 データの確認・要約コマンド (安全) ---
 記録した学習内容を確認・要約するためのコマンドです。
@@ -467,16 +471,16 @@ def end_session():
     else:
         print("エラー: 開始中のセッションがありません。")
 
-def break_session(content=None):
+def break_session(update_content=None, break_content=None):
     backup_database("Before break session.")
     last_active_id = get_last_active_log_id()
     if last_active_id:
         now = get_now()
         update_end_time(last_active_id, now)
 
-        # If user provided content to break, update the last active log's content
-        if content:
-            update_log_entry(last_active_id, content=content)
+        # --update-contentが指定された場合、直前のログの内容を更新
+        if update_content:
+            update_log_entry(last_active_id, content=update_content)
 
         # Get the details of the last active log entry to generate summary
         last_active_log_entry = get_log_entry_by_id(last_active_id)
@@ -490,10 +494,10 @@ def break_session(content=None):
         with get_connection() as conn:
             conn.execute(
                 "INSERT INTO study_logs (event_type, content, start_time) VALUES (?, ?, ?)",
-                ('BREAK', None, now) # BREAKイベントのcontentは空にする
+                ('BREAK', break_content, now) # --break-contentの内容を記録
             )
         # セッションの概要を更新
-        add_or_update_session_summary(content, last_active_id)
+        add_or_update_session_summary(generated_summary, last_active_id)
         print("学習を休憩しました。")
     else:
         print("エラー: 開始中のセッションがありません。")
@@ -1032,6 +1036,7 @@ def main():
         'update_log_end_time': handle_update_log_end_time,
         'restore': handle_restore,
         'update_log_entry_cmd': handle_update_log_entry_cmd,
+        'update_content': handle_update_content,
         'get_entry': handle_get_entry,
         'unique_subjects': lambda _: handle_execute([json.dumps({"action": "data.unique_subjects"})]),
         'dashboard_json': handle_dashboard_json,
@@ -1061,9 +1066,28 @@ def handle_start(args):
     handle_execute([json.dumps(params)])
 
 def handle_break(args):
+    update_content = None
+    break_content = None
+    i = 0
+    while i < len(args):
+        if args[i] == '--update-content' and i + 1 < len(args):
+            update_content = args[i+1]
+            i += 2
+        elif args[i] == '--break-content' and i + 1 < len(args):
+            break_content = args[i+1]
+            i += 2
+        else:
+            # オプションではない引数は、下位互換性のためにbreak_contentとして扱う
+            if break_content is None and update_content is None:
+                break_content = args[i]
+            i += 1
+
     params = {
         "action": "log.break",
-        "params": {"content": args[0] if len(args) > 0 else None}
+        "params": {
+            "update_content": update_content,
+            "break_content": break_content
+        }
     }
     handle_execute([json.dumps(params)])
 
@@ -1225,6 +1249,24 @@ def handle_update_log_entry_cmd(args):
         print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
         sys.exit(1)
 
+def handle_update_content(args):
+    if len(args) != 2:
+        print("使用法: update_content <log_id> \"<new_content>\"")
+        sys.exit(1)
+    try:
+        params = {
+            "action": "log.update_entry",
+            "params": {
+                "id": int(args[0]),
+                "field": "content",
+                "value": args[1]
+            }
+        }
+        handle_execute([json.dumps(params)])
+    except ValueError:
+        print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
+        sys.exit(1)
+
 def handle_get_entry(args):
     if len(args) != 1:
         print("使用法: get_entry <log_id>")
@@ -1305,8 +1347,9 @@ def action_log_get(params):
 
 def action_log_break(params):
     """学習セッションを休憩する"""
-    content = params.get("content")
-    break_session(content)
+    update_content = params.get("update_content")
+    break_content = params.get("break_content")
+    break_session(update_content=update_content, break_content=break_content)
     return {"status": "success", "message": "学習を休憩しました。"}
 
 def action_log_resume(params):
