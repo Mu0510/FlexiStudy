@@ -420,7 +420,7 @@ def update_goal_by_id_global(goal_id, field, value):
         param_value = value
 
         if field == "completed":
-            param_value = 1 if str(value).lower() == "true" else 0
+            param_value = 1 if str(value).lower() in ("true", "1") else 0
             set_clause = "completed = ?"
         elif field in ["total_problems", "completed_problems"]:
             try:
