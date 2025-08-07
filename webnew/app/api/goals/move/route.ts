@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
 
 export async function POST(request: Request) {
@@ -11,9 +11,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Goal data is required' }, { status: 400 });
     }
 
-    // goalオブジェクトをエスケープ処理したJSON文字列に変換
-    const goalJsonString = JSON.stringify(JSON.stringify(goal));
-    // JSTで今日の日付を取得 (YYYY-MM-DD形式)
     const today = new Date().toLocaleDateString('ja-JP', {
       timeZone: 'Asia/Tokyo',
       year: 'numeric',
@@ -22,28 +19,55 @@ export async function POST(request: Request) {
     }).replace(/\//g, '-');
 
     const pythonScriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
-    // 新しいコマンド `add_goal_to_date` を呼び出す
-    const command = `python3 ${pythonScriptPath} add_goal_to_date ${goalJsonString} ${today}`;
+    const commandPayload = {
+      action: 'goal.add_to_date', // アクション名を修正
+      params: {
+        goal: goal,
+        date: today,
+      },
+    };
+    const args = ['--api-mode', 'execute', JSON.stringify(commandPayload)];
 
-    return new Promise((resolve) => {
-      exec(command, (error, stdout, stderr) => {
-        if (error) {
-          console.error(`exec error: ${error}`);
-          console.error(`stderr: ${stderr}`);
-          resolve(NextResponse.json({ error: 'Failed to execute script', details: stderr }, { status: 500 }));
-          return;
-        }
-        try {
-          // 成功した場合、stdoutは空か、成功メッセージを含む
-          resolve(NextResponse.json({ success: true, message: stdout.trim() }));
-        } catch (parseError) {
-          console.error(`JSON parse error: ${parseError}`);
-          resolve(NextResponse.json({ error: 'Failed to parse script output', details: stdout }, { status: 500 }));
+    const processPromise = new Promise((resolve, reject) => {
+      const pythonProcess = spawn('python3', [pythonScriptPath, ...args]);
+
+      let stdout = '';
+      let stderr = '';
+
+      pythonProcess.stdout.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      pythonProcess.stderr.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      pythonProcess.on('close', (code) => {
+        if (code === 0) {
+          try {
+            const result = JSON.parse(stdout);
+            if (result.status === 'success') {
+              resolve(NextResponse.json({ success: true, message: result.message }));
+            } else {
+              reject(new Error(result.message || 'Python script returned an error'));
+            }
+          } catch (e) {
+            reject(new Error(`Failed to parse python script output: ${stdout}`));
+          }
+        } else {
+          reject(new Error(`Python script exited with code ${code}: ${stderr}`));
         }
       });
+
+      pythonProcess.on('error', (err) => {
+        reject(err);
+      });
     });
-  } catch (e) {
+
+    return await processPromise;
+
+  } catch (e: any) {
     console.error('API Error:', e);
-    return NextResponse.json({ error: 'Invalid request body' }, { status: 400 });
+    return NextResponse.json({ error: 'Invalid request body or failed to move goal', details: e.message }, { status: 500 });
   }
 }

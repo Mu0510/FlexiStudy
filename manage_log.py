@@ -7,11 +7,13 @@ import sys
 import shutil
 import json
 import uuid
+import logging
 from zoneinfo import ZoneInfo
 
 # --- 定数 ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.join(SCRIPT_DIR, 'study_log.db')
+LOG_FILE_PATH = os.path.join(SCRIPT_DIR, 'manage_log.log')
 BACKUP_DIR = os.path.join(SCRIPT_DIR, 'db_backups')
 BACKUP_LOG_PATH = os.path.join(BACKUP_DIR, 'backup_log.txt')
 MAX_BACKUPS = 100
@@ -20,6 +22,30 @@ MAX_LONG_TERM_BACKUPS = 30
 REDO_BACKUP_DIR = os.path.join(SCRIPT_DIR, 'db_redo_backups')
 MAX_REDO_BACKUPS = 10
 JST = ZoneInfo("Asia/Tokyo")
+
+# --- ロギング設定 ---
+logger = logging.getLogger(__name__)
+
+def setup_logging(api_mode=False):
+    """ロギングを設定する"""
+    logger.setLevel(logging.INFO)
+    
+    # 既存のハンドラをクリア
+    if logger.hasHandlers():
+        logger.handlers.clear()
+
+    # ファイルハンドラ (常にログファイルに記録)
+    file_handler = logging.FileHandler(LOG_FILE_PATH, encoding='utf-8')
+    file_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(file_formatter)
+    logger.addHandler(file_handler)
+
+    # APIモードでない場合のみ、コンソールにも出力
+    if not api_mode:
+        stream_handler = logging.StreamHandler(sys.stderr)
+        stream_formatter = logging.Formatter('%(message)s')
+        stream_handler.setFormatter(stream_formatter)
+        logger.addHandler(stream_handler)
 
 # --- データベース接続 ---
 def get_connection():
@@ -32,62 +58,79 @@ def get_connection():
 
 def print_help():
     """ヘルプメッセージを表示する"""
-    help_text = '''
-Usage: python manage_log.py <command> [arguments]
+    help_text = """
+Usage: python manage_log.py [--api-mode] execute '<json_payload>'
 
 Gemini CLIのための学習ログ管理ツール。
-コマンドは目的別に分類されています。危険なコマンドには警告が付いています。
+すべての操作はJSONペイロードを引数とする `execute` コマンド経由で行います。
 
---- 📖 日常的な記録コマンド (安全) ---
-毎日使う、基本的な学習記録用のコマンドです。
+Options:
+  --api-mode    JSON出力以外のコンソールメッセージを抑制します。
 
-  start <subject> "<content>"       新しい学習セッションを開始します。
-  break [--edit-last-entry "<text>"] [--break-content "<text>"]
-                                    現在のセッションを一時停止します。
-                                    --edit-last-entry: 直前の作業内容を更新します。
-                                    --break-content: 休憩の理由を記録します。
-  resume ["<content>"]              一時停止したセッションを再開します。
-  end_session                       現在の学習セッションを休憩なしで終了します。
-  update_content <log_id> "<text>"  指定したIDのログの内容(content)を更新します。
+--- JSON Payload Structure ---
+{
+  "action": "group.action_name",
+  "params": {
+    "key1": "value1",
+    "key2": "value2"
+  }
+}
 
---- 📊 データの確認・要約コマンド (安全) ---
-記録した学習内容を確認・要約するためのコマンドです。
+--- Available Actions ---
 
-  summary "<text>" [session_id]     セッションの概要を追加・更新します。(Geminiが内容を生成)
-  daily_summary "<text>" [YYYY-MM-DD] 特定の日の概要を追加・更新します。(Geminiが内容を生成)
-  logs_json_for_date YYYY-MM-DD    特定の日の全ログをJSON形式で取得します。
-  dashboard_json [days]             Webダッシュボード用のデータをJSON形式で取得します。
-  unique_subjects                   記録されている全ての教科名をリスト表示します。
-  get_entry <log_id>                特定のログエントリの詳細を取得します。(整数IDのみ)
-  update_log_entry_cmd <log_id> <field> <value> ログエントリの特定のフィールドを更新します。(整数IDのみ)
+[log]
+  - log.create: 新しい学習セッションを開始
+    - params: {"subject": "str", "content": "str"}
+  - log.break: 現在のセッションを一時停止
+    - params: {"update_content": "str", "break_content": "str"}
+  - log.resume: 一時停止したセッションを再開
+    - params: {"content": "str"}
+  - log.end_session: 現在の学習セッションを終了
+  - log.get: 指定した日付の全ログをJSONで取得
+    - params: {"date": "YYYY-MM-DD"}
+  - log.get_entry: 特定のログエントリの詳細を取得
+    - params: {"id": int}
+  - log.update_entry: ログエントリの特定のフィールドを更新
+    - params: {"id": int, "field": "str", "value": "any"}
+  - log.update_end_time: ログエントリの終了時刻を更新
+    - params: {"id": int, "end_time": "YYYY-MM-DD HH:MM:SS"}
+  - log.delete: ログエントリを削除
+    - params: {"id": int}
 
-  --- 🎯 目標管理コマンド (安全) ---
-  daily_goal "<json_string>" [YYYY-MM-DD] 特定の日の目標をJSONで一括設定・更新します。
-  add_goal_to_date "<json>" <YYYY-MM-DD> 特定の日に新しい目標を1つ追加します。
-  get_goal <goal_id>                IDで指定した目標の詳細を取得します。
-  update_goal <id> <field> <value>  IDで指定した目標の特定フィールドを更新します。
-  delete_goal <goal_id>             IDで指定した目標を削除します。
+[summary]
+  - summary.session_update: セッションの概要を追加・更新
+    - params: {"text": "str", "session_id": int (optional)}
+  - summary.daily_update: 特定の日の概要を追加・更新
+    - params: {"text": "str", "date": "YYYY-MM-DD" (optional)}
 
---- ⚠️ データベース保守・復旧コマンド (注意/危険) ---
-データベースのバックアップや復元、修正を行います。データの損失に繋がる可能性があるため、慎重に使用してください。
+[goal]
+  - goal.daily_update: 特定の日の目標をJSONで一括設定・更新
+    - params: {"goal_json": "json_string", "date": "YYYY-MM-DD" (optional)}
+  - goal.add_to_date: 特定の日に新しい目標を1つ追加
+    - params: {"goal_json": "json_string", "date": "YYYY-MM-DD"}
+  - goal.get: IDで指定した目標の詳細を取得
+    - params: {"id": "str"}
+  - goal.update: IDで指定した目標の特定フィールドを更新
+    - params: {"id": "str", "field": "str", "value": "any"}
+  - goal.delete: IDで指定した目標を削除
+    - params: {"id": "str"}
 
-  backup                            手動でデータベースのバックアップを作成します。
-  undo                              直前のデータベース操作を取り消します。(バックアップから復元)
-  redo                              直前の'undo'操作をやり直します。
+[data]
+  - data.dashboard: Webダッシュボード用のデータを取得
+    - params: {"days": int (optional)}
+  - data.unique_subjects: 記録されている全ての教科名をリスト表示
 
-  consolidate_break                 [状況による] 最後のBREAKを直前のRESUMEに統合します。
-                                    (手動でのログ修正が面倒な場合に使用)
-  recalculate_durations             [状況による] 全てのログのdurationを再計算します。
-                                    (時間計算に不整合が起きた場合に使用)
-
-  ⚠️ restore <backup_file_path>      [危険] 指定したバックアップファイルからデータベースを復元します。
-                                    現在のデータは上書きされます。'undo'の方が安全です。
-
-  ⚠️ reconstruct "<json_string>"       [極めて危険] JSONデータからデータベースを完全に再構築します。
-                                    >> 全ての既存データ(ログ,概要,目標)が削除されます <<
-                                    >> 'undo'では元に戻せません <<
-                                    データベースが破損した際の最終手段です。
-'''
+[db] (⚠️ 注意/危険)
+  - db.backup: 手動でDBバックアップを作成
+  - db.undo: 直前のDB操作を取り消し
+  - db.redo: 直前の'undo'操作をやり直し
+  - db.consolidate_break: 最後のBREAKを直前のRESUMEに統合
+  - db.recalculate_durations: 全てのログのdurationを再計算
+  - db.restore: ⚠️ 指定したバックアップファイルからDBを復元
+    - params: {"backup_path": "str"}
+  - db.reconstruct: ⚠️ JSONデータからDBを完全に再構築
+    - params: {"json_data": "json_string"}
+"""
     print(help_text)
 
 # --- テーブル作成・更新 ---
@@ -143,9 +186,9 @@ def add_summary_column_if_not_exists():
             if 'summary' not in columns:
                 cursor.execute("ALTER TABLE study_logs ADD COLUMN summary TEXT")
                 conn.commit()
-                print("データベースに 'summary' カラムを追加しました。")
+                logger.info("データベースに 'summary' カラムを追加しました。")
     except Exception as e:
-        print("カラムの追加中にエラーが発生しました: {}".format(e))
+        logger.error("カラムの追加中にエラーが発生しました: {}".format(e))
 
 # --- バックアップ関連 ---
 def backup_database(description="Regular backup", backup_type="short_term"):
@@ -163,7 +206,7 @@ def backup_database(description="Regular backup", backup_type="short_term"):
     backup_path = os.path.join(target_dir, backup_filename)
     try:
         shutil.copy2(DB_PATH, backup_path)
-        print("データベースをバックアップしました: {}".format(backup_path))
+        logger.info("データベースをバックアップしました: {}".format(backup_path))
         with open(BACKUP_LOG_PATH, "a", encoding="utf-8") as f:
             log_entry = "{}: {}".format(backup_filename, description)
             f.write(log_entry + "\n")
@@ -174,7 +217,7 @@ def backup_database(description="Regular backup", backup_type="short_term"):
         else:
             manage_backups()
     except Exception as e:
-        print("データベースのバックアップ中にエラーが発生しました: {}".format(e))
+        logger.error("データベースのバックアップ中にエラーが発生しました: {}".format(e))
 
 def backup_now():
     """手動バックアップを実行する"""
@@ -190,7 +233,7 @@ def manage_backups():
         while len(backup_files) > MAX_BACKUPS:
             os.remove(backup_files.pop(0))
     except Exception as e:
-        print("バックアップの管理中にエラーが発生しました: {}".format(e))
+        logger.error("バックアップの管理中にエラーが発生しました: {}".format(e))
 
 def manage_long_term_backups():
     try:
@@ -201,7 +244,7 @@ def manage_long_term_backups():
         while len(backup_files) > MAX_LONG_TERM_BACKUPS:
             os.remove(backup_files.pop(0))
     except Exception as e:
-        print("長期バックアップの管理中にエラーが発生しました: {}".format(e))
+        logger.error("長期バックアップの管理中にエラーが発生しました: {}".format(e))
 
 def manage_redo_backups():
     try:
@@ -212,7 +255,7 @@ def manage_redo_backups():
         while len(redo_files) > MAX_REDO_BACKUPS:
             os.remove(redo_files.pop(0))
     except Exception as e:
-        print("Redoバックアップの管理中にエラーが発生しました: {}".format(e))
+        logger.error("Redoバックアップの管理中にエラーが発生しました: {}".format(e))
 
 def restore_database(backup_file_path, description="Restored from backup"):
     """指定されたバックアップファイルからデータベースを復元し、結果を返す"""
@@ -262,9 +305,9 @@ def undo_last_operation():
         restore_database(latest_backup, "Undo operation")
         # 使用したバックアップファイルを削除
         os.remove(latest_backup)
-        print("直前の操作を取り消しました。")
+        logger.info("直前の操作を取り消しました。")
     else:
-        print("取り消せる操作がありません。")
+        logger.warning("取り消せる操作がありません。")
 
 def redo_last_undo():
     """undo操作を元に戻す"""
@@ -276,9 +319,9 @@ def redo_last_undo():
         restore_database(latest_redo_backup, "Redo operation")
         # 使用したredoバックアップファイルを削除
         os.remove(latest_redo_backup)
-        print("直前のundo操作を元に戻しました。")
+        logger.info("直前のundo操作を元に戻しました。")
     else:
-        print("元に戻せるundo操作がありません。")
+        logger.warning("元に戻せるundo操作がありません。")
 
 def get_latest_log_entry():
     with get_connection() as conn:
@@ -300,7 +343,7 @@ def consolidate_last_break_into_resume():
     second_latest_log = get_second_latest_log_entry()
 
     if not latest_log or not second_latest_log:
-        print("エラー: ログエントリが不足しています。")
+        logger.error("エラー: ログエントリが不足しています。")
         return
 
     if latest_log['event_type'] == 'BREAK' and second_latest_log['event_type'] == 'RESUME':
@@ -324,9 +367,9 @@ def consolidate_last_break_into_resume():
             # BREAKイベントを削除
             cursor.execute("DELETE FROM study_logs WHERE id = ?", (latest_log['id'],))
             conn.commit()
-        print("最後のBREAKイベントを直前のRESUMEイベントに統合しました。")
+        logger.info("最後のBREAKイベントを直前のRESUMEイベントに統合しました。")
     else:
-        print("エラー: 最後のイベントがBREAK、その前のイベントがRESUMEではありません。")
+        logger.error("エラー: 最後のイベントがBREAK、その前のイベントがRESUMEではありません。")
 
 def update_end_time(log_id, end_time):
     """指定されたログIDの終了時刻を更新し、結果を返す"""
@@ -459,7 +502,7 @@ def start_session(subject, content):
             "INSERT INTO study_logs (event_type, subject, content, start_time) VALUES (?, ?, ?, ?)",
             ('START', subject, content, now)
         )
-    print("学習を開始しました: {} - {}".format(subject, content))
+    logger.info("学習を開始しました: {} - {}".format(subject, content))
 
 def end_session():
     backup_database("Before ending session.")
@@ -467,9 +510,9 @@ def end_session():
     if last_active_id:
         now = get_now()
         update_end_time(last_active_id, now)
-        print("学習セッションを終了しました。")
+        logger.info("学習セッションを終了しました。")
     else:
-        print("エラー: 開始中のセッションがありません。")
+        logger.error("エラー: 開始中のセッションがありません。")
 
 def break_session(update_content=None, break_content=None):
     backup_database("Before break session.")
@@ -498,9 +541,9 @@ def break_session(update_content=None, break_content=None):
             )
         # セッションの概要を更新
         add_or_update_session_summary(generated_summary, last_active_id)
-        print("学習を休憩しました。")
+        logger.info("学習を休憩しました。")
     else:
-        print("エラー: 開始中のセッションがありません。")
+        logger.error("エラー: 開始中のセッションがありません。")
 
 def resume_session(content=None):
     backup_database("Before resume session.")
@@ -525,9 +568,9 @@ def resume_session(content=None):
                 "INSERT INTO study_logs (event_type, subject, content, start_time) VALUES (?, ?, ?, ?)",
                 ('RESUME', subject, actual_content, now)
             )
-        print("学習を再開しました。")
+        logger.info("学習を再開しました。")
     else:
-        print("エラー: 休憩中のセッションがありません。")
+        logger.error("エラー: 休憩中のセッションがありません。")
 
 def add_or_update_daily_summary(summary_text, date_str=None):
     """日ごとの概要を追加または更新し、結果を返す"""
@@ -691,14 +734,14 @@ def add_or_update_session_summary(summary_text, session_id=None):
             if result: target_id = result[0]
         
         if not target_id:
-            print("エラー: 対象セッションが見つかりません。")
+            logger.error("エラー: 対象セッションが見つかりません。")
             return
 
         cursor.execute("UPDATE study_logs SET summary = ? WHERE id = ?", (summary_text, target_id))
         if cursor.rowcount > 0:
-            print("セッションID {} の概要を更新しました。".format(target_id))
+            logger.info("セッションID {} の概要を更新しました。".format(target_id))
         else:
-            print("エラー: セッションID {} が見つかりません。".format(target_id))
+            logger.error("エラー: セッションID {} が見つかりません。".format(target_id))
 
 # --- ログ表示・計算 ---
 def get_chat_messages(limit=5, before_id=None):
@@ -881,7 +924,7 @@ def get_dashboard_data(weekly_period_days=None):
             WHERE event_type IN ('START', 'RESUME')
             ORDER BY start_time DESC 
             LIMIT 2
-        """)
+        """ )
         recent_sessions_raw = cursor.fetchall()
         recent_sessions = []
         for row in recent_sessions_raw:
@@ -928,9 +971,9 @@ def recalculate_all_durations():
                     (duration_minutes, log_id)
                 )
             except (ValueError, TypeError) as e:
-                print("Could not process log ID {}: {}".format(log_id, e))
+                logger.error("Could not process log ID {}: {}".format(log_id, e))
         conn.commit()
-    print("すべてのログの学習時間を再計算しました。")
+    logger.info("すべてのログの学習時間を再計算しました。")
 
 
 def reconstruct_from_json(json_data_str):
@@ -1002,184 +1045,31 @@ def is_today_log_exists():
 # --- メイン処理 ---
 def main():
     """コマンドライン引数に応じて各関数を呼び出す"""
-    create_tables()
-    add_summary_column_if_not_exists()
+    # 引数から --api-mode をチェック
+    api_mode = '--api-mode' in sys.argv
+    if api_mode:
+        sys.argv.remove('--api-mode')
 
-    if len(sys.argv) < 2:
-        print("エラー: コマンドを指定してください。 --help で利用可能なコマンドを確認できます。")
-        sys.exit(1)
-
-    command = sys.argv[1]
-    args = sys.argv[2:]
-
-    command_handlers = {
-        '--help': lambda _: print_help(),
-        '-h': lambda _: print_help(),
-        'start': handle_start,
-        'break': handle_break,
-        'end_session': lambda _: handle_execute([json.dumps({"action": "log.end_session"})]),
-        'resume': handle_resume,
-        'logs_json_for_date': handle_logs_json_for_date,
-        'get_chat_history': handle_get_chat_history,
-        'summary': handle_summary,
-        'daily_summary': handle_daily_summary,
-        'daily_goal': handle_daily_goal,
-        'add_goal_to_date': handle_add_goal_to_date,
-        'get_goal': handle_get_goal,
-        'update_goal': handle_update_goal,
-        'delete_goal': handle_delete_goal,
-        'backup': lambda _: backup_now(),
-        'undo': lambda _: undo_last_operation(),
-        'redo': lambda _: redo_last_undo(),
-        'reconstruct': handle_reconstruct,
-        'consolidate_break': lambda _: consolidate_last_break_into_resume(),
-        'update_log_end_time': handle_update_log_end_time,
-        'restore': handle_restore,
-        'update_log_entry_cmd': handle_update_log_entry_cmd,
-        'update_content': handle_update_content,
-        'get_entry': handle_get_entry,
-        'unique_subjects': lambda _: handle_execute([json.dumps({"action": "data.unique_subjects"})]),
-        'dashboard_json': handle_dashboard_json,
-        'recalculate_durations': lambda _: recalculate_all_durations(),
-        'execute': handle_execute,
-    }
-
-    handler = command_handlers.get(command)
-    if handler:
-        handler(args)
-    else:
-        print("エラー: 不明なコマンド '{}'".format(command))
-        sys.exit(1)
-
-def main():
-    """コマンドライン引数に応じて各関数を呼び出す"""
-    create_tables()
-    add_summary_column_if_not_exists()
-
-    if len(sys.argv) < 2:
-        print_help()
-        sys.exit(1)
-
-    command = sys.argv[1]
+    setup_logging(api_mode=api_mode)
     
-    if command == '--help' or command == '-h':
+    create_tables()
+    add_summary_column_if_not_exists()
+
+    if len(sys.argv) < 2 or sys.argv[1] in ('--help', '-h'):
         print_help()
         sys.exit(0)
 
+    command = sys.argv[1]
+    
     if command == 'execute':
-        if len(sys.argv) != 3:
-            print("使用法: execute '<json_string>'")
+        if len(sys.argv) != 3: # executeの引数はJSON文字列1つのみ
+            logger.error("使用法: python manage_log.py [--api-mode] execute '<json_string>'")
             sys.exit(1)
         handle_execute(sys.argv[2])
     else:
-        # 下位互換性のための古いコマンド体系の処理
-        try:
-            params = parse_old_command(command, sys.argv[2:])
-            handle_execute(json.dumps(params))
-        except ValueError as e:
-            print(f"エラー: {e}")
-            sys.exit(1)
-
-def parse_old_command(command, args):
-    """古いコマンド形式を新しいJSON形式に変換する"""
-    action_map = {
-        'start': 'log.create',
-        'break': 'log.break',
-        'resume': 'log.resume',
-        'end_session': 'log.end_session',
-        'update_content': 'log.update_entry',
-        'summary': 'summary.session_update',
-        'daily_summary': 'summary.daily_update',
-        'logs_json_for_date': 'log.get',
-        'dashboard_json': 'data.dashboard',
-        'unique_subjects': 'data.unique_subjects',
-        'get_entry': 'log.get_entry',
-        'update_log_entry_cmd': 'log.update_entry',
-        'daily_goal': 'goal.daily_update',
-        'add_goal_to_date': 'goal.add_to_date',
-        'get_goal': 'goal.get',
-        'update_goal': 'goal.update',
-        'delete_goal': 'goal.delete',
-        'backup': 'db.backup',
-        'undo': 'db.undo',
-        'redo': 'db.redo',
-        'reconstruct': 'db.reconstruct',
-        'consolidate_break': 'db.consolidate_break',
-        'update_log_end_time': 'log.update_end_time',
-        'restore': 'db.restore',
-        'recalculate_durations': 'db.recalculate_durations'
-    }
-    if command not in action_map:
-        raise ValueError(f"不明なコマンド '{command}'")
-
-    action = action_map[command]
-    params = {}
-
-    # 各コマンドの引数パースロジック
-    if command == 'start':
-        if len(args) != 2: raise ValueError("使用法: start <subject> <content>")
-        params = {"subject": args[0], "content": args[1]}
-    elif command == 'break':
-        update_content = None
-        break_content = None
-        i = 0
-        while i < len(args):
-            if args[i] == '--edit-last-entry' and i + 1 < len(args):
-                update_content = args[i+1]
-                i += 2
-            elif args[i] == '--break-content' and i + 1 < len(args):
-                break_content = args[i+1]
-                i += 2
-            else:
-                if break_content is None and update_content is None:
-                    break_content = args[i]
-                i += 1
-        params = {"update_content": update_content, "break_content": break_content}
-    elif command == 'resume':
-        params = {"content": args[0] if args else None}
-    elif command == 'update_content':
-        if len(args) != 2: raise ValueError("使用法: update_content <log_id> \"<new_content>\"")
-        params = {"id": int(args[0]), "field": "content", "value": args[1]}
-    elif command == 'summary':
-        if not 1 <= len(args) <= 2: raise ValueError("使用法: summary \"<text>\" [session_id]")
-        params = {"text": args[0], "session_id": args[1] if len(args) == 2 else None}
-    elif command == 'daily_summary':
-        if not 1 <= len(args) <= 2: raise ValueError("使用法: daily_summary \"<text>\" [YYYY-MM-DD]")
-        params = {"text": args[0], "date": args[1] if len(args) == 2 else None}
-    elif command == 'logs_json_for_date':
-        if len(args) != 1: raise ValueError("使用法: logs_json_for_date YYYY-MM-DD")
-        params = {"date": args[0]}
-    elif command == 'dashboard_json':
-        params = {"days": args[0] if args else None}
-    elif command == 'get_entry':
-        if len(args) != 1: raise ValueError("使用法: get_entry <log_id>")
-        params = {"id": int(args[0])}
-    elif command == 'update_log_entry_cmd':
-        if len(args) < 3: raise ValueError("使用法: update_log_entry_cmd <log_id> <field_name> <new_value>")
-        params = {"id": int(args[0]), "field": args[1], "value": args[2]}
-    elif command == 'daily_goal':
-        if not 1 <= len(args) <= 2: raise ValueError("使用法: daily_goal \"<json_string>\" [YYYY-MM-DD]")
-        params = {"goal_json": args[0], "date": args[1] if len(args) == 2 else None}
-    elif command == 'add_goal_to_date':
-        if len(args) != 2: raise ValueError("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
-        params = {"goal_json": args[0], "date": args[1]}
-    elif command == 'get_goal' or command == 'delete_goal':
-        if len(args) != 1: raise ValueError(f"使用法: {command} <goal_id>")
-        params = {"id": args[0]}
-    elif command == 'update_goal':
-        if len(args) != 3: raise ValueError("使用法: update_goal <goal_id> <field_name> <new_value>")
-        params = {"id": args[0], "field": args[1], "value": args[2]}
-    elif command == 'reconstruct':
-        if len(args) != 1: raise ValueError("使用法: reconstruct \"<json_string>\"")
-        params = {"json_data": args[0]}
-    elif command == 'update_log_end_time':
-        if len(args) != 2: raise ValueError("使用法: update_log_end_time <log_id> <end_time>")
-        params = {"id": int(args[0]), "end_time": args[1]}
-    elif command == 'restore':
-        if len(args) != 1: raise ValueError("使用法: restore <backup_file_path>")
-        params = {"backup_path": args[0]}
-
-    return {"action": action, "params": params}
+        logger.error(f"エラー: 不明なコマンド '{command}'。'execute' コマンドを使用してください。")
+        logger.error("詳細は --help を確認してください。")
+        sys.exit(1)
 
 
 # --- 新しいコマンド体系 ---
@@ -1192,6 +1082,7 @@ def handle_execute(json_string):
         params = data.get("params", {})
 
         if not action:
+            # このエラーはJSONとして返す
             print(json.dumps({"status": "error", "message": "JSONデータに'action'キーが含まれていません。"}, indent=2, ensure_ascii=False))
             sys.exit(1)
 
@@ -1207,13 +1098,17 @@ def handle_execute(json_string):
             if result is not None:
                 print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
+            # このエラーはJSONとして返す
             print(json.dumps({"status": "error", "message": f"不明なアクション '{action}'"}, indent=2, ensure_ascii=False))
             sys.exit(1)
 
     except json.JSONDecodeError:
+        # このエラーはJSONとして返す
         print(json.dumps({"status": "error", "message": "無効なJSON形式です。"}, indent=2, ensure_ascii=False))
         sys.exit(1)
     except Exception as e:
+        # このエラーはJSONとして返す
+        logger.error(f"ハンドル実行中に予期せぬエラー: {e}", exc_info=True)
         print(json.dumps({"status": "error", "message": f"処理中にエラーが発生しました: {e}"}, indent=2, ensure_ascii=False))
         sys.exit(1)
 
@@ -1255,11 +1150,13 @@ def action_data_dashboard(params):
 
 def action_goal_add_to_date(params):
     """指定した日付に目標を追加する"""
-    goal_json = params.get("goal_json")
+    goal = params.get("goal")
     date = params.get("date")
-    if not goal_json or not date:
-        raise ValueError("goal_jsonとdateは必須です。")
-    return add_goal_to_date(goal_json, date)
+    if not goal or not date:
+        raise ValueError("goalとdateは必須です。")
+    # goalオブジェクトをJSON文字列に変換
+    goal_json_str = json.dumps(goal, ensure_ascii=False)
+    return add_goal_to_date(goal_json_str, date)
 
 def action_data_unique_subjects():
     """ユニークな教科のリストを取得する"""

@@ -1,9 +1,20 @@
-web/node_modules/
-node_modules/
-*.db
-*.pyc
-# Serena-specific files
-.serena/
+# Dependencies
+/node_modules
+/.pnpm
+.pnpm-lock.yaml
+/pnpm-lock.yaml
 
-# User uploaded files
-webnew/mnt/userFiles/
+# Next.js
+/.next/
+/out/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Log files
+*.log
+/db_backups/backup_log.txt

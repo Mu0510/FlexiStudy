@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
+import { spawn } from 'child_process';
 import path from 'path';
 
 export async function GET(
@@ -13,22 +13,47 @@ export async function GET(
   }
 
   const pythonScriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
-  const command = `python3 ${pythonScriptPath} logs_json_for_date ${date}`;
+  const commandPayload = {
+    action: "log.get",
+    params: { date: date }
+  };
+  const args = ['--api-mode', 'execute', JSON.stringify(commandPayload)];
 
-  return new Promise((resolve) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`exec error: ${error}`);
-        resolve(NextResponse.json({ error: 'Failed to execute script', details: stderr }, { status: 500 }));
-        return;
-      }
-      try {
-        const data = JSON.parse(stdout);
-        resolve(NextResponse.json(data));
-      } catch (parseError) {
-        console.error(`JSON parse error: ${parseError}`);
-        resolve(NextResponse.json({ error: 'Failed to parse script output', details: stdout }, { status: 500 }));
+  const promise = new Promise((resolve, reject) => {
+    const pythonProcess = spawn('python3', [pythonScriptPath, ...args]);
+    let stdout = '';
+    let stderr = '';
+
+    pythonProcess.stdout.on('data', (data) => {
+      stdout += data.toString();
+    });
+
+    pythonProcess.stderr.on('data', (data) => {
+      stderr += data.toString();
+    });
+
+    pythonProcess.on('close', (code) => {
+      if (code === 0) {
+        try {
+          const data = JSON.parse(stdout);
+          resolve(NextResponse.json(data));
+        } catch (e) {
+          reject(new Error(`Failed to parse JSON: ${stdout}`));
+        }
+      } else {
+        reject(new Error(`Python script exited with code ${code}: ${stderr}`));
       }
     });
+
+     pythonProcess.on('error', (err) => {
+        reject(err);
+    });
   });
+
+  try {
+    return await promise;
+  } catch (error: any) {
+      console.error(`[API ERROR] /api/logs/[date]:`, error);
+      return NextResponse.json({ error: 'Failed to execute script', details: error.message }, { status: 500 });
+  }
 }

@@ -12,7 +12,11 @@ export async function GET(request: Request) {
 
   return new Promise((resolve) => {
     const pythonScriptPath = path.join(process.cwd(), '..', 'manage_log.py');
-    const pythonProcess = spawn('python3', [pythonScriptPath, 'logs_json_for_date', date]);
+    const commandPayload = {
+      action: "log.get",
+      params: { date: date }
+    };
+    const pythonProcess = spawn('python3', [pythonScriptPath, '--api-mode', 'execute', JSON.stringify(commandPayload)]);
 
     let data = '';
     let error = '';

@@ -5,7 +5,8 @@ import path from 'path';
 export async function GET() {
   try {
     const pythonScript = path.join(process.cwd(), '../manage_log.py');
-    const args = ['dashboard_json'];
+    const commandPayload = { action: 'data.dashboard', params: {} };
+    const args = ['--api-mode', 'execute', JSON.stringify(commandPayload)];
 
     const processPromise = new Promise((resolve, reject) => {
       const pythonProcess = spawn('python3', [pythonScript, ...args]);
