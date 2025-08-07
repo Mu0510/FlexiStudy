@@ -1051,277 +1051,170 @@ def main():
         print("エラー: 不明なコマンド '{}'".format(command))
         sys.exit(1)
 
-def handle_start(args):
-    if len(args) != 2:
-        print("使用法: start <subject> <content>")
+def main():
+    """コマンドライン引数に応じて各関数を呼び出す"""
+    create_tables()
+    add_summary_column_if_not_exists()
+
+    if len(sys.argv) < 2:
+        print_help()
         sys.exit(1)
+
+    command = sys.argv[1]
     
-    params = {
-        "action": "log.create",
-        "params": {
-            "subject": args[0],
-            "content": args[1]
-        }
+    if command == '--help' or command == '-h':
+        print_help()
+        sys.exit(0)
+
+    if command == 'execute':
+        if len(sys.argv) != 3:
+            print("使用法: execute '<json_string>'")
+            sys.exit(1)
+        handle_execute(sys.argv[2])
+    else:
+        # 下位互換性のための古いコマンド体系の処理
+        try:
+            params = parse_old_command(command, sys.argv[2:])
+            handle_execute(json.dumps(params))
+        except ValueError as e:
+            print(f"エラー: {e}")
+            sys.exit(1)
+
+def parse_old_command(command, args):
+    """古いコマンド形式を新しいJSON形式に変換する"""
+    action_map = {
+        'start': 'log.create',
+        'break': 'log.break',
+        'resume': 'log.resume',
+        'end_session': 'log.end_session',
+        'update_content': 'log.update_entry',
+        'summary': 'summary.session_update',
+        'daily_summary': 'summary.daily_update',
+        'logs_json_for_date': 'log.get',
+        'dashboard_json': 'data.dashboard',
+        'unique_subjects': 'data.unique_subjects',
+        'get_entry': 'log.get_entry',
+        'update_log_entry_cmd': 'log.update_entry',
+        'daily_goal': 'goal.daily_update',
+        'add_goal_to_date': 'goal.add_to_date',
+        'get_goal': 'goal.get',
+        'update_goal': 'goal.update',
+        'delete_goal': 'goal.delete',
+        'backup': 'db.backup',
+        'undo': 'db.undo',
+        'redo': 'db.redo',
+        'reconstruct': 'db.reconstruct',
+        'consolidate_break': 'db.consolidate_break',
+        'update_log_end_time': 'log.update_end_time',
+        'restore': 'db.restore',
+        'recalculate_durations': 'db.recalculate_durations'
     }
-    handle_execute([json.dumps(params)])
+    if command not in action_map:
+        raise ValueError(f"不明なコマンド '{command}'")
 
-def handle_break(args):
-    update_content = None
-    break_content = None
-    i = 0
-    while i < len(args):
-        if args[i] == '--edit-last-entry' and i + 1 < len(args):
-            update_content = args[i+1]
-            i += 2
-        elif args[i] == '--break-content' and i + 1 < len(args):
-            break_content = args[i+1]
-            i += 2
-        else:
-            # オプションではない引数は、下位互換性のためにbreak_contentとして扱う
-            if break_content is None and update_content is None:
-                break_content = args[i]
-            i += 1
+    action = action_map[command]
+    params = {}
 
-    params = {
-        "action": "log.break",
-        "params": {
-            "update_content": update_content,
-            "break_content": break_content
-        }
-    }
-    handle_execute([json.dumps(params)])
+    # 各コマンドの引数パースロジック
+    if command == 'start':
+        if len(args) != 2: raise ValueError("使用法: start <subject> <content>")
+        params = {"subject": args[0], "content": args[1]}
+    elif command == 'break':
+        update_content = None
+        break_content = None
+        i = 0
+        while i < len(args):
+            if args[i] == '--edit-last-entry' and i + 1 < len(args):
+                update_content = args[i+1]
+                i += 2
+            elif args[i] == '--break-content' and i + 1 < len(args):
+                break_content = args[i+1]
+                i += 2
+            else:
+                if break_content is None and update_content is None:
+                    break_content = args[i]
+                i += 1
+        params = {"update_content": update_content, "break_content": break_content}
+    elif command == 'resume':
+        params = {"content": args[0] if args else None}
+    elif command == 'update_content':
+        if len(args) != 2: raise ValueError("使用法: update_content <log_id> \"<new_content>\"")
+        params = {"id": int(args[0]), "field": "content", "value": args[1]}
+    elif command == 'summary':
+        if not 1 <= len(args) <= 2: raise ValueError("使用法: summary \"<text>\" [session_id]")
+        params = {"text": args[0], "session_id": args[1] if len(args) == 2 else None}
+    elif command == 'daily_summary':
+        if not 1 <= len(args) <= 2: raise ValueError("使用法: daily_summary \"<text>\" [YYYY-MM-DD]")
+        params = {"text": args[0], "date": args[1] if len(args) == 2 else None}
+    elif command == 'logs_json_for_date':
+        if len(args) != 1: raise ValueError("使用法: logs_json_for_date YYYY-MM-DD")
+        params = {"date": args[0]}
+    elif command == 'dashboard_json':
+        params = {"days": args[0] if args else None}
+    elif command == 'get_entry':
+        if len(args) != 1: raise ValueError("使用法: get_entry <log_id>")
+        params = {"id": int(args[0])}
+    elif command == 'update_log_entry_cmd':
+        if len(args) < 3: raise ValueError("使用法: update_log_entry_cmd <log_id> <field_name> <new_value>")
+        params = {"id": int(args[0]), "field": args[1], "value": args[2]}
+    elif command == 'daily_goal':
+        if not 1 <= len(args) <= 2: raise ValueError("使用法: daily_goal \"<json_string>\" [YYYY-MM-DD]")
+        params = {"goal_json": args[0], "date": args[1] if len(args) == 2 else None}
+    elif command == 'add_goal_to_date':
+        if len(args) != 2: raise ValueError("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
+        params = {"goal_json": args[0], "date": args[1]}
+    elif command == 'get_goal' or command == 'delete_goal':
+        if len(args) != 1: raise ValueError(f"使用法: {command} <goal_id>")
+        params = {"id": args[0]}
+    elif command == 'update_goal':
+        if len(args) != 3: raise ValueError("使用法: update_goal <goal_id> <field_name> <new_value>")
+        params = {"id": args[0], "field": args[1], "value": args[2]}
+    elif command == 'reconstruct':
+        if len(args) != 1: raise ValueError("使用法: reconstruct \"<json_string>\"")
+        params = {"json_data": args[0]}
+    elif command == 'update_log_end_time':
+        if len(args) != 2: raise ValueError("使用法: update_log_end_time <log_id> <end_time>")
+        params = {"id": int(args[0]), "end_time": args[1]}
+    elif command == 'restore':
+        if len(args) != 1: raise ValueError("使用法: restore <backup_file_path>")
+        params = {"backup_path": args[0]}
 
-def handle_resume(args):
-    params = {
-        "action": "log.resume",
-        "params": {"content": args[0] if len(args) > 0 else None}
-    }
-    handle_execute([json.dumps(params)])
+    return {"action": action, "params": params}
 
-def handle_logs_json_for_date(args):
-    if len(args) != 1:
-        print("使用法: logs_json_for_date YYYY-MM-DD")
-        sys.exit(1)
-
-    params = {
-        "action": "log.get",
-        "params": {
-            "date": args[0]
-        }
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_get_chat_history(args):
-    limit = int(args[0]) if len(args) > 0 else 5
-    before_id = int(args[1]) if len(args) > 1 else None
-    messages = get_chat_messages(limit, before_id)
-    print(json.dumps(messages, indent=2, ensure_ascii=False))
-
-def handle_summary(args):
-    if not 1 <= len(args) <= 2:
-        print("使用法: summary \"<text>\" [session_id]")
-        sys.exit(1)
-    add_or_update_session_summary(args[0], args[1] if len(args) == 2 else None)
-
-def handle_daily_summary(args):
-    if not 1 <= len(args) <= 2:
-        print("使用法: daily_summary \"<text>\" [YYYY-MM-DD]")
-        sys.exit(1)
-    
-    params = {
-        "action": "summary.daily_update",
-        "params": {
-            "text": args[0],
-            "date": args[1] if len(args) == 2 else None
-        }
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_daily_goal(args):
-    if not 1 <= len(args) <= 2:
-        print("使用法: daily_goal \"<json_string>\" [YYYY-MM-DD]")
-        sys.exit(1)
-    
-    params = {
-        "action": "goal.daily_update",
-        "params": {
-            "goal_json": args[0],
-            "date": args[1] if len(args) == 2 else None
-        }
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_add_goal_to_date(args):
-    if len(args) != 2:
-        print("使用法: add_goal_to_date \"<goal_json>\" <YYYY-MM-DD>")
-        sys.exit(1)
-    params = {
-        "action": "goal.add_to_date",
-        "params": {
-            "goal_json": args[0],
-            "date": args[1]
-        }
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_get_goal(args):
-    if len(args) != 1:
-        print("使用法: get_goal <goal_id>")
-        sys.exit(1)
-    params = {
-        "action": "goal.get",
-        "params": {"id": args[0]}
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_update_goal(args):
-    if len(args) != 3:
-        print("使用法: update_goal <goal_id> <field_name> <new_value>")
-        sys.exit(1)
-    params = {
-        "action": "goal.update",
-        "params": {
-            "id": args[0],
-            "field": args[1],
-            "value": args[2]
-        }
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_delete_goal(args):
-    if len(args) != 1:
-        print("使用法: delete_goal <goal_id>")
-        sys.exit(1)
-    params = {
-        "action": "goal.delete",
-        "params": {"id": args[0]}
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_reconstruct(args):
-    if len(args) != 1:
-        print("使用法: reconstruct \"<json_string>\"")
-        sys.exit(1)
-    params = {
-        "action": "db.reconstruct",
-        "params": {"json_data": args[0]}
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_update_log_end_time(args):
-    if len(args) != 2:
-        print("使用法: update_log_end_time <log_id> <end_time>")
-        sys.exit(1)
-    params = {
-        "action": "log.update_end_time",
-        "params": {
-            "id": int(args[0]),
-            "end_time": args[1]
-        }
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_restore(args):
-    if len(args) != 1:
-        print("使用法: restore <backup_file_path>")
-        sys.exit(1)
-    params = {
-        "action": "db.restore",
-        "params": {"backup_path": args[0]}
-    }
-    handle_execute([json.dumps(params)])
-
-def handle_update_log_entry_cmd(args):
-    if len(args) < 3:
-        print("使用法: update_log_entry_cmd <log_id> <field_name> <new_value>")
-        sys.exit(1)
-    try:
-        params = {
-            "action": "log.update_entry",
-            "params": {
-                "id": int(args[0]),
-                "field": args[1],
-                "value": args[2]
-            }
-        }
-        handle_execute([json.dumps(params)])
-    except ValueError:
-        print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
-        sys.exit(1)
-
-def handle_update_content(args):
-    if len(args) != 2:
-        print("使用法: update_content <log_id> \"<new_content>\"")
-        sys.exit(1)
-    try:
-        params = {
-            "action": "log.update_entry",
-            "params": {
-                "id": int(args[0]),
-                "field": "content",
-                "value": args[1]
-            }
-        }
-        handle_execute([json.dumps(params)])
-    except ValueError:
-        print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
-        sys.exit(1)
-
-def handle_get_entry(args):
-    if len(args) != 1:
-        print("使用法: get_entry <log_id>")
-        sys.exit(1)
-    try:
-        params = {
-            "action": "log.get_entry",
-            "params": {"id": int(args[0])}
-        }
-        handle_execute([json.dumps(params)])
-    except ValueError:
-        print(f"エラー: log_idは整数である必要があります。入力値: {args[0]}")
-        sys.exit(1)
-
-def handle_dashboard_json(args):
-    params = {
-        "action": "data.dashboard",
-        "params": {
-            "days": args[0] if len(args) > 0 else None
-        }
-    }
-    handle_execute([json.dumps(params)])
 
 # --- 新しいコマンド体系 ---
 
-def handle_execute(args):
+def handle_execute(json_string):
     """新しい'execute'コマンドを処理する"""
-    if len(args) != 1:
-        print("使用法: execute '<json_string>'")
-        sys.exit(1)
-    
     try:
-        data = json.loads(args[0])
+        data = json.loads(json_string)
         action = data.get("action")
         params = data.get("params", {})
 
         if not action:
-            print("エラー: JSONデータに'action'キーが含まれていません。")
+            print(json.dumps({"status": "error", "message": "JSONデータに'action'キーが含まれていません。"}, indent=2, ensure_ascii=False))
             sys.exit(1)
 
         # アクションハンドラを呼び出す
         action_handler = ACTION_HANDLERS.get(action)
         if action_handler:
-            result = action_handler(params)
+            # backup_databaseのような引数なしで呼び出す必要があるアクションを処理
+            if not params and action in ['db.backup', 'db.undo', 'db.redo', 'db.consolidate_break', 'db.recalculate_durations', 'data.unique_subjects', 'log.end_session']:
+                 result = action_handler()
+            else:
+                 result = action_handler(params)
+
             if result is not None:
                 print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
-            print(f"エラー: 不明なアクション '{action}'")
+            print(json.dumps({"status": "error", "message": f"不明なアクション '{action}'"}, indent=2, ensure_ascii=False))
             sys.exit(1)
 
     except json.JSONDecodeError:
-        print("エラー: 無効なJSON形式です。")
+        print(json.dumps({"status": "error", "message": "無効なJSON形式です。"}, indent=2, ensure_ascii=False))
         sys.exit(1)
     except Exception as e:
-        print(f"処理中にエラーが発生しました: {e}")
+        print(json.dumps({"status": "error", "message": f"処理中にエラーが発生しました: {e}"}, indent=2, ensure_ascii=False))
         sys.exit(1)
 
 def action_log_create(params):
@@ -1330,44 +1223,35 @@ def action_log_create(params):
     content = params.get("content")
     if not subject or not content:
         raise ValueError("subjectとcontentは必須です。")
-    start_session(subject, content)
-    return {"status": "success", "message": "学習セッションを開始しました。"}
+    return start_session(subject, content)
 
 def action_log_get(params):
-    """指定された日付のログを取得する (show_logs_json_for_dateのラッパー)"""
+    """指定された日付のログを取得する"""
     date_str = params.get("date")
     if not date_str:
         raise ValueError("dateは必須です。")
-    # show_logs_json_for_dateは直接printしてしまうため、出力をキャプチャするか、
-    # データを返すようにshow_logs_json_for_dateを修正する必要がある。
-    # ここでは簡単のため、既存の関数をそのまま呼び出す。
-    show_logs_json_for_date(date_str)
-    return None # 出力はshow_logs_json_for_dateが行う
+    return get_logs_json_for_date(date_str)
 
 
 def action_log_break(params):
     """学習セッションを休憩する"""
     update_content = params.get("update_content")
     break_content = params.get("break_content")
-    break_session(update_content=update_content, break_content=break_content)
-    return {"status": "success", "message": "学習を休憩しました。"}
+    return break_session(update_content=update_content, break_content=break_content)
 
 def action_log_resume(params):
     """学習セッションを再開する"""
     content = params.get("content")
-    resume_session(content)
-    return {"status": "success", "message": "学習を再開しました。"}
+    return resume_session(content)
 
-def action_log_end_session(params):
+def action_log_end_session():
     """学習セッションを終了する"""
-    end_session()
-    return {"status": "success", "message": "学習セッションを終了しました。"}
+    return end_session()
 
 def action_data_dashboard(params):
     """ダッシュボードのデータを取得する"""
     days = params.get("days")
-    get_dashboard_data(days)
-    return None
+    return get_dashboard_data(days)
 
 def action_goal_add_to_date(params):
     """指定した日付に目標を追加する"""
@@ -1377,12 +1261,9 @@ def action_goal_add_to_date(params):
         raise ValueError("goal_jsonとdateは必須です。")
     return add_goal_to_date(goal_json, date)
 
-def action_data_unique_subjects(params):
+def action_data_unique_subjects():
     """ユニークな教科のリストを取得する"""
-    subjects = get_all_unique_subjects()
-    # unique_subjectsはJSON配列を直接出力する必要がある
-    print(json.dumps(subjects, ensure_ascii=False))
-    return None
+    return get_all_unique_subjects()
 
 def action_log_delete(params):
     """指定されたIDの学習ログを削除する"""
@@ -1409,6 +1290,14 @@ def action_summary_daily_update(params):
         raise ValueError("textは必須です。")
     return add_or_update_daily_summary(text, date)
 
+def action_summary_session_update(params):
+    """セッションサマリーを更新する"""
+    text = params.get("text")
+    session_id = params.get("session_id")
+    if text is None:
+        raise ValueError("textは必須です。")
+    return add_or_update_session_summary(text, session_id)
+
 def action_goal_daily_update(params):
     """日次目標を更新する"""
     goal_json = params.get("goal_json")
@@ -1429,7 +1318,7 @@ def action_goal_update(params):
     goal_id = params.get("id")
     field = params.get("field")
     value = params.get("value")
-    if not all([goal_id, field, value]):
+    if not all([goal_id, field, value is not None]):
         raise ValueError("id, field, valueは必須です。")
     return update_goal_by_id_global(goal_id, field, value)
 
@@ -1452,7 +1341,7 @@ def action_log_update_entry(params):
     log_id = params.get("id")
     field = params.get("field")
     value = params.get("value")
-    if not all([log_id, field, value]):
+    if not all([log_id, field, value is not None]):
         raise ValueError("id, field, valueは必須です。")
     return update_log_entry(log_id, **{field: value})
 
@@ -1489,6 +1378,7 @@ ACTION_HANDLERS = {
     "log.update_entry": action_log_update_entry,
     "log.update_end_time": action_log_update_end_time,
     "summary.daily_update": action_summary_daily_update,
+    "summary.session_update": action_summary_session_update,
     "goal.daily_update": action_goal_daily_update,
     "data.dashboard": action_data_dashboard,
     "goal.add_to_date": action_goal_add_to_date,
@@ -1498,6 +1388,11 @@ ACTION_HANDLERS = {
     "data.unique_subjects": action_data_unique_subjects,
     "db.restore": action_db_restore,
     "db.reconstruct": action_db_reconstruct,
+    "db.backup": backup_now,
+    "db.undo": undo_last_operation,
+    "db.redo": redo_last_undo,
+    "db.consolidate_break": consolidate_last_break_into_resume,
+    "db.recalculate_durations": recalculate_all_durations,
 }
 
 if __name__ == '__main__':
