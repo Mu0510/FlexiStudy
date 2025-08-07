@@ -166,7 +166,9 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                     const command = msg.params?.confirmation?.command;
                     if (command && command.includes('manage_log.py')) {
                         console.log(`[Server] Detected database command: "${command}". Broadcasting databaseUpdated message.`);
-                        broadcast(wss, { jsonrpc: '2.0', method: 'databaseUpdated', params: {} });
+                        setTimeout(() => {
+                            broadcast(wss, { jsonrpc: '2.0', method: 'databaseUpdated', params: {} });
+                        }, 200);
                     }
                 }
 

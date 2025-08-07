@@ -165,3 +165,91 @@ study_log_20250806_092139_125846.db: Before updating goal by global ID.
 study_log_20250806_092358_703268.db: Before updating goal by global ID.
 study_log_20250806_092507_215677.db: Before updating goal by global ID.
 study_log_20250806_092835_275160.db: Before updating goal by global ID.
+study_log_20250806_093330_162958.db: Daily auto backup before first study session.
+study_log_20250806_093330_163604.db: Before start session.
+study_log_20250806_093417_845761.db: Before updating log entry.
+study_log_20250806_102250_509051.db: Before break session.
+study_log_20250806_102250_519815.db: Before updating log entry.
+study_log_20250806_102250_525496.db: Before session summary update.
+study_log_20250806_102325_215486.db: For Redo
+study_log_20250806_102250_525496.db: Undo operation
+study_log_20250806_102516_150442.db: Before updating log entry.
+study_log_20250806_102549_107192.db: Before break session.
+study_log_20250806_102549_113361.db: Before updating log entry.
+study_log_20250806_102549_119268.db: Before session summary update.
+study_log_20250806_102608_010216.db: For Redo
+study_log_20250806_102549_119268.db: Undo operation
+study_log_20250806_102618_514945.db: Before consolidating last BREAK into RESUME.
+study_log_20250806_102711_912754.db: For Redo
+study_log_20250806_102618_514945.db: Undo operation
+study_log_20250806_102714_125125.db: For Redo
+study_log_20250806_102549_113361.db: Undo operation
+study_log_20250806_102759_690862.db: For Redo
+study_log_20250806_102549_107192.db: Undo operation
+study_log_20250806_102801_746716.db: For Redo
+study_log_20250806_102516_150442.db: Undo operation
+study_log_20250806_102810_953817.db: Before updating log entry.
+study_log_20250806_102813_765334.db: Before break session.
+study_log_20250806_102813_771942.db: Before updating log entry.
+study_log_20250806_102813_778341.db: Before session summary update.
+study_log_20250806_102826_782122.db: For Redo
+study_log_20250806_102813_778341.db: Undo operation
+study_log_20250806_102839_517155.db: Before resume session.
+study_log_20250806_102842_009946.db: Before break session.
+study_log_20250806_102842_016527.db: Before updating log entry.
+study_log_20250806_102842_022234.db: Before session summary update.
+study_log_20250806_102901_483270.db: For Redo
+study_log_20250806_102842_022234.db: Undo operation
+study_log_20250806_102903_843887.db: For Redo
+study_log_20250806_102842_016527.db: Undo operation
+study_log_20250806_102905_987211.db: For Redo
+study_log_20250806_102842_009946.db: Undo operation
+study_log_20250806_102908_303749.db: For Redo
+study_log_20250806_102839_517155.db: Undo operation
+study_log_20250806_102910_638382.db: For Redo
+study_log_20250806_102813_771942.db: Undo operation
+study_log_20250806_102912_898584.db: For Redo
+study_log_20250806_102813_765334.db: Undo operation
+study_log_20250806_102915_129293.db: For Redo
+study_log_20250806_102810_953817.db: Undo operation
+study_log_20250806_102921_273006.db: Before updating log entry.
+study_log_20250806_102923_520725.db: Before break session.
+study_log_20250806_102923_526988.db: Before updating log entry.
+study_log_20250806_102923_532426.db: Before session summary update.
+study_log_20250806_102943_420725.db: For Redo
+study_log_20250806_102923_532426.db: Undo operation
+study_log_20250806_102945_329556.db: For Redo
+study_log_20250806_102923_526988.db: Undo operation
+study_log_20250806_102947_483203.db: For Redo
+study_log_20250806_102923_520725.db: Undo operation
+study_log_20250806_103000_164812.db: For Redo
+study_log_20250806_102921_273006.db: Undo operation
+study_log_20250806_103002_141174.db: For Redo
+study_log_20250806_102250_519815.db: Undo operation
+study_log_20250806_103048_109011.db: Before break session.
+study_log_20250806_103237_037723.db: Before session summary update.
+study_log_20250806_105633_444778.db: Before start session.
+study_log_20250806_110935_385436.db: Before deleting log entry.
+study_log_20250807_095304_195128.db: Before adding a goal to a specific date.
+study_log_20250807_095314_506191.db: Daily auto backup before first study session.
+study_log_20250807_095314_506616.db: Before start session.
+study_log_20250807_103559_042916.db: Before break session.
+study_log_20250807_103559_049299.db: Before updating log entry.
+study_log_20250807_103604_894403.db: Before break session.
+study_log_20250807_103620_219516.db: For Redo
+study_log_20250807_103604_894403.db: Undo operation
+study_log_20250807_103621_833139.db: For Redo
+study_log_20250807_103559_049299.db: Undo operation
+study_log_20250807_103654_279629.db: Before break session.
+study_log_20250807_103713_320190.db: For Redo
+study_log_20250807_103654_279629.db: Undo operation
+study_log_20250807_103730_719435.db: For Redo
+study_log_20250807_103559_042916.db: Undo operation
+study_log_20250807_103741_725930.db: For Redo
+study_log_20250807_095314_506616.db: Undo operation
+study_log_20250807_103813_757052.db: Before break session.
+study_log_20250807_103832_517403.db: For Undo (Redo operation)
+study_log_20250807_103621_833139.db: Redo operation
+study_log_20250807_103834_977465.db: For Undo (Redo operation)
+study_log_20250807_103620_219516.db: Redo operation
+study_log_20250807_103912_561656.db: Before updating log entry.
