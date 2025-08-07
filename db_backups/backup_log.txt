@@ -305,3 +305,22 @@ study_log_20250807_170252_029545.db: For Redo
 study_log_20250807_170136_659602.db: Undo operation
 study_log_20250807_170310_626620.db: For Redo
 study_log_20250807_170134_380699.db: Undo operation
+study_log_20250807_171658_995123.db: Before session summary update.
+study_log_20250807_171701_108953.db: Before merging sessions.
+study_log_20250807_171801_016258.db: Before start session.
+study_log_20250807_172350_927742.db: Before updating log entry.
+study_log_20250807_180557_280093.db: Before break session.
+study_log_20250807_180557_286693.db: Before updating log entry.
+study_log_20250807_180635_330676.db: Before session summary update.
+study_log_20250807_180635_532367.db: Before session summary update.
+study_log_20250807_180637_647571.db: Before merging sessions.
+study_log_20250807_183217_368905.db: Before resume session.
+study_log_20250807_183217_376640.db: Before updating log entry.
+study_log_20250807_190803_710701.db: Before break session.
+study_log_20250807_190803_717082.db: Before updating log entry.
+study_log_20250807_190854_732286.db: Before updating log entry.
+study_log_20250807_190914_748926.db: For Redo
+study_log_20250807_190854_732286.db: Undo operation
+study_log_20250807_190956_962795.db: Before updating log entry.
+study_log_20250807_191101_947184.db: For Redo
+study_log_20250807_190956_962795.db: Undo operation

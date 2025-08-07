@@ -836,7 +836,8 @@ def get_logs_json_for_date(date_str):
         },
         "total_day_study_minutes": 0,
         "subjects_studied": [],
-        "sessions": []
+        "sessions": [],
+        "all_entries": []
     }
     with get_connection() as conn:
         conn.row_factory = sqlite3.Row
@@ -869,6 +870,7 @@ def get_logs_json_for_date(date_str):
         logs = cursor.fetchall()
 
     if logs:
+        output_data["all_entries"] = [dict(log) for log in logs]
         current_session = None
         for log in logs:
             log_dict = dict(log)
@@ -886,6 +888,7 @@ def get_logs_json_for_date(date_str):
                 if log_dict["event_type"] in ('START', 'RESUME'):
                     current_session["total_study_minutes"] += duration_minutes
                 current_session["details"].append({
+                    "id": log_dict["id"],
                     "event_type": log_dict["event_type"], "content": log_dict["content"],
                     "start_time": start_dt.strftime("%H:%M"),
                     "end_time": end_dt.strftime(" %H:%M") if log_dict["end_time"] else "",
