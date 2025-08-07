@@ -80,11 +80,11 @@ Options:
 
 [log]
   - log.create: 新しい学習セッションを開始
-    - params: {"subject": "str", "content": "str"}
+    - params: {"subject": "str", "content": "str", "memo": "str" (optional), "impression": "str" (optional)}
   - log.break: 現在のセッションを一時停止
     - params: {"update_content": "str", "break_content": "str"}
   - log.resume: 一時停止したセッションを再開
-    - params: {"content": "str"}
+    - params: {"content": "str", "memo": "str" (optional), "impression": "str" (optional)}
   - log.end_session: 現在の学習セッションを終了
   - log.get: 指定した日付の全ログをJSONで取得
     - params: {"date": "YYYY-MM-DD"}
@@ -500,15 +500,15 @@ def get_log_entry_by_id(log_id):
         else:
             return {"status": "error", "message": f"ログID {log_id} が見つかりません。"}
 
-def start_session(subject, content):
+def start_session(subject, content, memo=None, impression=None):
     if not is_today_log_exists():
         backup_database("Daily auto backup before first study session.", backup_type="long_term")
     backup_database("Before start session.")
     now = get_now()
     with get_connection() as conn:
         conn.execute(
-            "INSERT INTO study_logs (event_type, subject, content, start_time) VALUES (?, ?, ?, ?)",
-            ('START', subject, content, now)
+            "INSERT INTO study_logs (event_type, subject, content, start_time, memo, impression) VALUES (?, ?, ?, ?, ?, ?)",
+            ('START', subject, content, now, memo, impression)
         )
     logger.info("学習を開始しました: {} - {}".format(subject, content))
 
@@ -599,7 +599,7 @@ def merge_sessions(session1_id, session2_id):
         conn.commit()
         return {"status": "success", "message": f"セッション {session1_id} と {session2_id} を結合しました。"}
 
-def resume_session(content=None):
+def resume_session(content=None, memo=None, impression=None):
     backup_database("Before resume session.")
     last_active_id = get_last_active_log_id()
     if last_active_id:
@@ -619,8 +619,8 @@ def resume_session(content=None):
             actual_content = result[1] if result else None
 
             conn.execute(
-                "INSERT INTO study_logs (event_type, subject, content, start_time) VALUES (?, ?, ?, ?)",
-                ('RESUME', subject, actual_content, now)
+                "INSERT INTO study_logs (event_type, subject, content, start_time, memo, impression) VALUES (?, ?, ?, ?, ?, ?)",
+                ('RESUME', subject, actual_content, now, memo, impression)
             )
         logger.info("学習を再開しました。")
     else:
@@ -1196,9 +1196,11 @@ def action_log_create(params):
     """学習ログを作成する (start_sessionのラッパー)"""
     subject = params.get("subject")
     content = params.get("content")
+    memo = params.get("memo")
+    impression = params.get("impression")
     if not subject or not content:
         raise ValueError("subjectとcontentは必須です。")
-    start_session(subject, content)
+    start_session(subject, content, memo, impression)
     return {"status": "success", "message": "学習セッションを開始しました。"}
 
 def action_log_get(params):
@@ -1218,7 +1220,10 @@ def action_log_break(params):
 def action_log_resume(params):
     """学習セッションを再開する"""
     content = params.get("content")
-    return resume_session(content)
+    memo = params.get("memo")
+    impression = params.get("impression")
+    resume_session(content, memo, impression)
+    return {"status": "success", "message": "学習セッションを再開しました。"}
 
 def action_session_merge(params):
     """2つの学習セッションを結合する"""

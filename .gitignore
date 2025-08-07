@@ -17,4 +17,15 @@
 
 # Log files
 *.log
-/db_backups/backup_log.txt
+
+# Local data
+study_log.db
+db_backups/
+db_redo_backups/
+webnew/mnt/
+
+# Python cache
+*.pyc
+
+# Temporary files
+temp_*.py
