@@ -1136,7 +1136,8 @@ def action_log_create(params):
     content = params.get("content")
     if not subject or not content:
         raise ValueError("subjectとcontentは必須です。")
-    return start_session(subject, content)
+    start_session(subject, content)
+    return {"status": "success", "message": "学習セッションを開始しました。"}
 
 def action_log_get(params):
     """指定された日付のログを取得する"""
