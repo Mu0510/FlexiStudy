@@ -1096,6 +1096,15 @@ def handle_execute(json_string):
                  result = action_handler(params)
 
             if result is not None:
+                if isinstance(result, dict):
+                    result['reminder'] = {
+                        "message": "学習セッションが更新されました。以下の点について確認し、必要であれば更新してください。更新すべきか不明瞭な場合はユーザーに確認してください。",
+                        "items_to_check": [
+                            "セッションサマリー (summary.session_update)",
+                            "日次サマリー (summary.daily_update)",
+                            "目標の状態 (goal.update)"
+                        ]
+                    }
                 print(json.dumps(result, indent=2, ensure_ascii=False))
         else:
             # このエラーはJSONとして返す
