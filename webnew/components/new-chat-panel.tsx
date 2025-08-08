@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon } from "lucide-react"
+import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon, Pause } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils"
 // import { useChat } from '@/hooks/useChat'; // useChatは親コンポーネントで管理
@@ -67,11 +67,14 @@ interface NewChatPanelProps {
   // --- Goal related props ---
   selectedGoal?: Goal | null;
   onClearSelectedGoal?: () => void;
+  // --- Session related props ---
+  selectedSession?: { session: any; logEntry: any } | null;
+  onClearSelectedSession?: () => void;
   // --- useChat related props ---
   messages: Message[];
   activeMessage: ActiveMessage | null;
   isGeneratingResponse: boolean;
-  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; }) => void;
+  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; session?: { session: any; logEntry: any } | null; }) => void;
   cancelSendMessage: () => void;
   requestHistory: (isInitialLoad?: boolean) => void;
   isFetchingHistory: boolean;
@@ -129,6 +132,8 @@ export function NewChatPanel({
   onMaximizeClick,
   selectedGoal,
   onClearSelectedGoal,
+  selectedSession,
+  onClearSelectedSession,
   // --- useChat related props ---
   messages,
   activeMessage,
@@ -284,9 +289,9 @@ export function NewChatPanel({
     }
 
     // Send message with text, file info, and goal info
-    if (input.trim() || uploadedFiles.length > 0 || selectedGoal) {
+    if (input.trim() || uploadedFiles.length > 0 || selectedGoal || selectedSession) {
       shouldScrollToBottomRef.current = true; // Force scroll to bottom on send
-      sendMessage({ text: input, files: uploadedFiles, goal: selectedGoal });
+      sendMessage({ text: input, files: uploadedFiles, goal: selectedGoal, session: selectedSession });
     }
 
     // Reset inputs
@@ -294,6 +299,9 @@ export function NewChatPanel({
     setSelectedFiles([]);
     if (onClearSelectedGoal) {
       onClearSelectedGoal();
+    }
+    if (onClearSelectedSession) {
+      onClearSelectedSession();
     }
     if (chatInputRef.current) {
       chatInputRef.current.focus();
@@ -618,6 +626,33 @@ export function NewChatPanel({
                       size="icon"
                       className="h-6 w-6 rounded-full flex-shrink-0"
                       onClick={onClearSelectedGoal}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Selected Session Section */}
+              {selectedSession && (
+                <div className="mb-2 p-2 border-b border-gray-200 dark:border-slate-700">
+                  <div className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm">
+                    {selectedSession.logEntry.type === "START" && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
+                    {selectedSession.logEntry.type === "BREAK" && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
+                    {selectedSession.logEntry.type === "RESUME" && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={selectedSession.logEntry.content || "休憩"}>
+                        {selectedSession.logEntry.content || "休憩"}
+                      </p>
+                      <p className="text-gray-500 dark:text-gray-400 text-xs">
+                        {selectedSession.session.subject} - {selectedSession.logEntry.start_time} ({selectedSession.logEntry.duration_minutes}分)
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 rounded-full flex-shrink-0"
+                      onClick={onClearSelectedSession}
                     >
                       <X className="h-4 w-4" />
                     </Button>

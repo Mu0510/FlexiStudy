@@ -55,6 +55,7 @@ export default function StudyApp() {
   const [dashboardData, setDashboardData] = useState(null);
   const [selectedGoalForChat, setSelectedGoalForChat] = useState<Goal | null>(null);
   const [selectedFilesForChat, setSelectedFilesForChat] = useState<File[]>([]);
+  const [selectedSessionForChat, setSelectedSessionForChat] = useState<{ session: any; logEntry: any } | null>(null);
 
   const chatStateBeforeSystemView = useRef(false);
 
@@ -223,9 +224,18 @@ export default function StudyApp() {
     setIsNewChatOpen(true);
   };
 
+  const handleSelectSession = (session: any, logEntry: any) => {
+    setSelectedSessionForChat({ session, logEntry });
+    setIsNewChatOpen(true);
+  };
+
   const handleClearSelectedGoal = () => {
     setSelectedGoalForChat(null);
     setSelectedFilesForChat([]);
+  };
+
+  const handleClearSelectedSession = () => {
+    setSelectedSessionForChat(null);
   };
 
   const renderActiveView = () => {
@@ -246,7 +256,8 @@ export default function StudyApp() {
                   error={error}
                   subjectColors={subjectColors}
                   onSelectGoal={handleSelectGoal}
-                  onRefresh={fetchLogData}
+                  onSelectSession={handleSelectSession}
+                  onRefresh={() => fetchLogData(selectedDate)}
                />;
       case "analytics":
         return <Analytics />;
@@ -277,9 +288,15 @@ export default function StudyApp() {
                   setSelectedFiles={setSelectedFilesForChat}
                   selectedGoal={selectedGoalForChat}
                   onClearSelectedGoal={handleClearSelectedGoal}
+                  selectedSession={selectedSessionForChat}
+                  onClearSelectedSession={handleClearSelectedSession}
                 />;
       default:
-        return <Dashboard />;
+        return <Dashboard 
+                  dashboardData={dashboardData} 
+                  subjectColors={subjectColors} 
+                  onSelectGoal={handleSelectGoal}
+               />;
     }
   }
 
@@ -340,12 +357,15 @@ export default function StudyApp() {
               setIsNewChatOpen(false);
               setIsFullScreen(false);
               setSelectedGoalForChat(null);
+              setSelectedSessionForChat(null);
             }} 
             isFullScreen={isFullScreen}
             setIsFullScreen={setIsFullScreen}
             onMaximizeClick={handleMaximizeClick}
             selectedGoal={selectedGoalForChat}
             onClearSelectedGoal={handleClearSelectedGoal}
+            selectedSession={selectedSessionForChat}
+            onClearSelectedSession={handleClearSelectedSession}
             // useChat related props
             messages={messages}
             activeMessage={activeMessage}

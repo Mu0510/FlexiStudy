@@ -333,3 +333,29 @@ study_log_20250807_194543_421025.db: Before updating log entry.
 study_log_20250807_194726_598648.db: Before updating log entry.
 study_log_20250807_194732_685049.db: Before updating log entry.
 study_log_20250807_195136_783948.db: Before updating log entry.
+study_log_20250807_214957_522558.db: Before deleting log entry.
+study_log_20250807_215004_267020.db: Before session summary update.
+study_log_20250807_215028_666356.db: Before session summary update.
+study_log_20250807_223620_842833.db: Before start session.
+study_log_20250807_223743_621863.db: Before ending session.
+study_log_20250807_223833_677667.db: Before session summary update.
+study_log_20250808_082440_439656.db: Before daily summary update.
+study_log_20250808_083651_626215.db: Before daily summary update.
+study_log_20250808_094601_012502.db: Before updating goal by global ID.
+study_log_20250808_094617_659056.db: Before updating goal by global ID.
+study_log_20250808_094622_899633.db: Before adding a goal to a specific date.
+study_log_20250808_094634_240680.db: Daily auto backup before first study session.
+study_log_20250808_094634_241125.db: Before start session.
+study_log_20250808_113502_449468.db: Before break session.
+study_log_20250808_113502_456013.db: Before updating log entry.
+study_log_20250808_113544_258020.db: Before updating log entry.
+study_log_20250808_113547_282274.db: Before updating log entry.
+study_log_20250808_113618_548751.db: Before updating log entry.
+study_log_20250808_113643_180870.db: Before updating log entry.
+study_log_20250808_114105_759543.db: Before updating goal by global ID.
+study_log_20250808_114207_445184.db: Before break session.
+study_log_20250808_114348_265080.db: For Redo
+study_log_20250808_114207_445184.db: Undo operation
+study_log_20250808_114433_026796.db: Before updating log entry.
+study_log_20250808_122537_764119.db: Before deleting log entry.
+study_log_20250808_122541_266361.db: Before session summary update.

@@ -67,6 +67,8 @@ interface StudyRecordsProps {
   error: string | null;
   subjectColors: Record<string, string>;
   onSelectGoal?: (goal: Goal) => void;
+  onSelectSession?: (session: StudySession, logEntry: LogEntry) => void;
+  onRefresh?: () => void;
 }
 
 const RecordsSkeleton = () => (
@@ -96,7 +98,7 @@ import { getSubjectStyle } from "@/lib/utils";
 
 
 
-export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors, onSelectGoal, onRefresh }: StudyRecordsProps) {
+export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, error, subjectColors, onSelectGoal, onSelectSession, onRefresh }: StudyRecordsProps) {
   const { toast } = useToast();
   const [openSessions, setOpenSessions] = useState<Record<number, boolean>>({});
   const [isDatePickerOpen, setDatePickerOpen] = useState(false);
@@ -109,7 +111,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     const unsubscribe = subscribe((message: any) => {
       if (message.method === 'databaseUpdated') {
         console.log(`[StudyRecords] Received databaseUpdated. Calling onRefresh for date: ${selectedDate}`);
-        onRefresh(selectedDate);
+        onRefresh?.();
       }
     });
 
@@ -290,19 +292,25 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                     {session.logs.map((detail, index) => (
                       <div key={index} className="flex items-center space-x-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                         <div className="flex items-center space-x-3 w-28 flex-shrink-0">
-                          {detail.type === "START" && <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0"><Play className="w-4 h-4 text-green-600 dark:text-green-400" /></div>}
-                          {detail.type === "BREAK" && <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-full flex-shrink-0"><Pause className="w-4 h-4 text-orange-600 dark:text-orange-400" /></div>}
-                          {detail.type === "RESUME" && <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full flex-shrink-0"><Play className="w-4 h-4 text-blue-600 dark:text-blue-400" /></div>}
-                          <Badge
-                            variant="outline"
-                            className={
-                              detail.type === "START" ? "border-green-200 text-green-700 dark:border-green-700/50 dark:text-green-300"
-                              : detail.type === "BREAK" ? "border-orange-200 text-orange-700 dark:border-orange-700/50 dark:text-orange-300"
-                              : "border-blue-200 text-blue-700 dark:border-blue-700/50 dark:text-blue-300"
-                            }
+                          <div 
+                            className="cursor-pointer hover:opacity-80 transition-opacity flex items-center space-x-2"
+                            onClick={() => onSelectSession?.(session, detail)}
+                            title="この学習セッションをチャットに送信"
                           >
-                            {detail.type}
-                          </Badge>
+                            {detail.type === "START" && <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0"><Play className="w-4 h-4 text-green-600 dark:text-green-400" /></div>}
+                            {detail.type === "BREAK" && <div className="p-2 bg-orange-100 dark:bg-orange-900/30 rounded-full flex-shrink-0"><Pause className="w-4 h-4 text-orange-600 dark:text-orange-400" /></div>}
+                            {detail.type === "RESUME" && <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-full flex-shrink-0"><Play className="w-4 h-4 text-blue-600 dark:text-blue-400" /></div>}
+                            <Badge
+                              variant="outline"
+                              className={
+                                detail.type === "START" ? "border-green-200 text-green-700 dark:border-green-700/50 dark:text-green-300"
+                                : detail.type === "BREAK" ? "border-orange-200 text-orange-700 dark:border-orange-700/50 dark:text-orange-300"
+                                : "border-blue-200 text-blue-700 dark:border-blue-700/50 dark:text-blue-300"
+                              }
+                            >
+                              {detail.type}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
