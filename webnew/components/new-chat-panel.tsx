@@ -40,7 +40,7 @@ interface Message {
   content: string;
   files?: FileInfo[];
   goal?: Goal | null;
-  session?: { session: any; logEntry: any } | null;
+  session?: any | null;
   type?: 'text' | 'tool';
   toolCallId?: string;
   status?: 'running' | 'finished' | 'error';
@@ -69,13 +69,13 @@ interface NewChatPanelProps {
   selectedGoal?: Goal | null;
   onClearSelectedGoal?: () => void;
   // --- Session related props ---
-  selectedSession?: { session: any; logEntry: any } | null;
+  selectedSession?: any | null;
   onClearSelectedSession?: () => void;
   // --- useChat related props ---
   messages: Message[];
   activeMessage: ActiveMessage | null;
   isGeneratingResponse: boolean;
-  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; session?: { session: any; logEntry: any } | null; }) => void;
+  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; session?: any | null; }) => void;
   cancelSendMessage: () => void;
   requestHistory: (isInitialLoad?: boolean) => void;
   isFetchingHistory: boolean;
@@ -552,15 +552,15 @@ export function NewChatPanel({
                 {msg.role === 'user' && msg.session && (
                   <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
                     <div className="bg-gray-100 dark:bg-slate-700 rounded-xl p-3 flex items-center space-x-2 text-sm w-auto max-w-full">
-                      {msg.session.logEntry.type === "START" && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
-                      {msg.session.logEntry.type === "BREAK" && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
-                      {msg.session.logEntry.type === "RESUME" && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
+                      {msg.session.type === "START" && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
+                      {msg.session.type === "BREAK" && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
+                      {msg.session.type === "RESUME" && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.session.logEntry.content || "休憩"}>
-                          {msg.session.logEntry.content || "休憩"}
+                        <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.session.content || "休憩"}>
+                          {msg.session.content || "休憩"}
                         </p>
                         <p className="text-gray-500 dark:text-gray-400 text-xs">
-                          {msg.session.session.subject} - {msg.session.logEntry.start_time} ({msg.session.logEntry.duration_minutes}分)
+                           {msg.session.start_time} ({msg.session.duration_minutes}分)
                         </p>
                       </div>
                     </div>
@@ -655,15 +655,15 @@ export function NewChatPanel({
               {selectedSession && (
                 <div className="mb-2 p-2 border-b border-gray-200 dark:border-slate-700">
                   <div className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm">
-                    {selectedSession.logEntry.type === "START" && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
-                    {selectedSession.logEntry.type === "BREAK" && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
-                    {selectedSession.logEntry.type === "RESUME" && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
+                    {selectedSession.type === "START" && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
+                    {selectedSession.type === "BREAK" && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
+                    {selectedSession.type === "RESUME" && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={selectedSession.logEntry.content || "休憩"}>
-                        {selectedSession.logEntry.content || "休憩"}
+                      <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={selectedSession.content || "休憩"}>
+                        {selectedSession.content || "休憩"}
                       </p>
                       <p className="text-gray-500 dark:text-gray-400 text-xs">
-                        {selectedSession.session.subject} - {selectedSession.logEntry.start_time} ({selectedSession.logEntry.duration_minutes}分)
+                        {selectedSession.start_time} ({selectedSession.duration_minutes}分)
                       </p>
                     </div>
                     <Button

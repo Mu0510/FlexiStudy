@@ -356,8 +356,7 @@ app.prepare().then(() => {
                 systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- ID: ${goal.id}\n- 教科: ${goal.subject}\n- タスク: ${goal.task}${goal.details ? `\n- 詳細: ${goal.details}` : ''}`);
             }
             if (session) {
-                const { session: sessionData, logEntry } = session;
-                systemMessages.push(`[System]ユーザーは以下の学習セッションを共有しました：\n- セッションID: ${sessionData.session_id}\n- 教科: ${sessionData.subject}\n- イベントタイプ: ${logEntry.type}\n- 学習内容: ${logEntry.content || "休憩"}\n- 時間: ${logEntry.start_time} - ${logEntry.end_time} (${logEntry.duration_minutes}分)${logEntry.memo ? `\n- メモ: ${logEntry.memo}` : ''}${logEntry.impression ? `\n- 感想: ${logEntry.impression}` : ''}`);
+                systemMessages.push(`[System]ユーザーは以下の学習記録を共有しました：\n- ログID: ${session.id}\n- イベントタイプ: ${session.type}\n- 学習内容: ${session.content || "休憩"}\n- 時間: ${session.start_time} - ${session.end_time} (${session.duration_minutes}分)${session.memo ? `\n- メモ: ${session.memo}` : ''}${session.impression ? `\n- 感想: ${session.impression}` : ''}`);
             }
 
             let messageForAI = inputText;

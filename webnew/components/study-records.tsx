@@ -67,7 +67,7 @@ interface StudyRecordsProps {
   error: string | null;
   subjectColors: Record<string, string>;
   onSelectGoal?: (goal: Goal) => void;
-  onSelectSession?: (session: StudySession, logEntry: LogEntry) => void;
+  onSelectSession?: (logEntry: LogEntry) => void;
   onRefresh?: () => void;
 }
 
@@ -294,7 +294,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                         <div className="flex items-center space-x-3 w-28 flex-shrink-0">
                           <div 
                             className="cursor-pointer hover:opacity-80 transition-opacity flex items-center space-x-2"
-                            onClick={() => onSelectSession?.(session, detail)}
+                            onClick={() => onSelectSession?.(detail)}
                             title="この学習セッションをチャットに送信"
                           >
                             {detail.type === "START" && <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-full flex-shrink-0"><Play className="w-4 h-4 text-green-600 dark:text-green-400" /></div>}

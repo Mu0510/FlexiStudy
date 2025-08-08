@@ -55,7 +55,7 @@ export default function StudyApp() {
   const [dashboardData, setDashboardData] = useState(null);
   const [selectedGoalForChat, setSelectedGoalForChat] = useState<Goal | null>(null);
   const [selectedFilesForChat, setSelectedFilesForChat] = useState<File[]>([]);
-  const [selectedSessionForChat, setSelectedSessionForChat] = useState<{ session: any; logEntry: any } | null>(null);
+  const [selectedSessionForChat, setSelectedSessionForChat] = useState<any | null>(null);
 
   const chatStateBeforeSystemView = useRef(false);
 
@@ -224,8 +224,8 @@ export default function StudyApp() {
     setIsNewChatOpen(true);
   };
 
-  const handleSelectSession = (session: any, logEntry: any) => {
-    setSelectedSessionForChat({ session, logEntry });
+  const handleSelectSession = (logEntry: any) => {
+    setSelectedSessionForChat(logEntry);
     setIsNewChatOpen(true);
   };
 
