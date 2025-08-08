@@ -238,6 +238,10 @@ export default function StudyApp() {
     setSelectedSessionForChat(null);
   };
 
+  const handleRefresh = useCallback(() => {
+    fetchLogData(selectedDate);
+  }, [fetchLogData, selectedDate]);
+
   const renderActiveView = () => {
     switch (activeView) {
       case "dashboard":
@@ -257,7 +261,7 @@ export default function StudyApp() {
                   subjectColors={subjectColors}
                   onSelectGoal={handleSelectGoal}
                   onSelectSession={handleSelectSession}
-                  onRefresh={() => fetchLogData(selectedDate)}
+                  onRefresh={handleRefresh}
                />;
       case "analytics":
         return <Analytics />;
