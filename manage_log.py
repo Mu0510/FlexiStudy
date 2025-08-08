@@ -82,9 +82,9 @@ Options:
   - log.create: 新しい学習セッションを開始
     - params: {"subject": "str", "content": "str", "memo": "str" (optional), "impression": "str" (optional)}
   - log.break: 現在のセッションを一時停止
-    - params: {"update_content": "str", "break_content": "str"}
+    - params: {"break_content": "str" (optional)}
   - log.resume: 一時停止したセッションを再開
-    - params: {"content": "str", "memo": "str" (optional), "impression": "str" (optional)}
+    - params: {"memo": "str" (optional), "impression": "str" (optional)}
   - log.end_session: 現在の学習セッションを終了
   - log.get: 指定した日付の全ログをJSONで取得
     - params: {"date": "YYYY-MM-DD"}
@@ -522,7 +522,7 @@ def end_session():
     else:
         logger.error("エラー: 開始中のセッションがありません。")
 
-def break_session(update_content=None, break_content=None):
+def break_session(break_content=None):
     """現在のセッションを一時停止し、BREAKイベントを記録する。"""
     backup_database("Before break session.")
     last_active_id = get_last_active_log_id()
@@ -535,10 +535,6 @@ def break_session(update_content=None, break_content=None):
         now = get_now()
         # 進行中のセッションを終了させる
         update_end_time(last_active_id, now)
-
-        # contentが指定されていれば更新
-        if update_content is not None:
-            update_log_entry(last_active_id, content=update_content)
 
         # 新しいBREAKイベントを記録
         with get_connection() as conn:
@@ -599,14 +595,12 @@ def merge_sessions(session1_id, session2_id):
         conn.commit()
         return {"status": "success", "message": f"セッション {session1_id} と {session2_id} を結合しました。"}
 
-def resume_session(content=None, memo=None, impression=None):
+def resume_session(memo=None, impression=None):
     backup_database("Before resume session.")
     last_active_id = get_last_active_log_id()
     if last_active_id:
         now = get_now()
         update_end_time(last_active_id, now)
-        if content: # If content is provided to resume, update the content of the last BREAK event
-            update_log_entry(last_active_id, content=content)
         with get_connection() as conn:
             # 最後のSTARTイベントのsubjectとcontentを取得
             cursor = conn.cursor()
@@ -1213,16 +1207,14 @@ def action_log_get(params):
 
 def action_log_break(params):
     """学習セッションを休憩する"""
-    update_content = params.get("update_content")
     break_content = params.get("break_content")
-    return break_session(update_content=update_content, break_content=break_content)
+    return break_session(break_content=break_content)
 
 def action_log_resume(params):
     """学習セッションを再開する"""
-    content = params.get("content")
     memo = params.get("memo")
     impression = params.get("impression")
-    resume_session(content, memo, impression)
+    resume_session(memo, impression)
     return {"status": "success", "message": "学習セッションを再開しました。"}
 
 def action_session_merge(params):
