@@ -35,6 +35,7 @@ interface Message {
   icon?: string; // ツールメッセージ用
   label?: string; // ツールメッセージ用
   command?: string; // ツールメッセージ用
+  session?: { session: any; logEntry: any } | null;
 }
 
 interface ActiveMessage {
@@ -49,6 +50,7 @@ interface SendMessageData {
   text: string;
   files?: FileInfo[];
   goal?: Goal | null;
+  session?: { session: any; logEntry: any } | null;
 }
 
 
@@ -233,6 +235,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             content: message.text,
             files: message.files || [],
             goal: message.goal || null,
+            session: message.session || null,
           }];
           // ★ 修正点: タイムスタンプでソートする
           newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
@@ -481,6 +484,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                     content: m.text || '',
                     files: m.files || [],
                     goal: m.goal || null,
+                    session: m.session || null,
                   };
                 } else if (m.role === 'tool') {
                     // マージ済みのツールオブジェクトをそのまま返す
@@ -568,7 +572,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
     setIsGeneratingResponse(true);
 
-    const { text, files, goal } = messageData;
+    const { text, files, goal, session } = messageData;
 
     const newMessage: Message = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
@@ -577,6 +581,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         content: text,
         files: files || [],
         goal: goal || null,
+        session: session || null,
         type: "text",
       };
 
@@ -589,7 +594,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       jsonrpc: '2.0',
       id: reqId,
       method: 'sendUserMessage',
-      params: { chunks: [{ text, files, goal, messageId: newMessage.id }] }
+      params: { chunks: [{ text, files, goal, messageId: newMessage.id, session }] }
     };
     sendWsMessage(req); // sendWsMessage を使用
   }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加

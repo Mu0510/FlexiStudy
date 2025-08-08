@@ -326,7 +326,7 @@ app.prepare().then(() => {
         }
 
         if (msg.method === 'sendUserMessage') {
-            const { text, files, goal, messageId } = msg.params?.chunks?.[0] || {};
+            const { text, files, goal, session, messageId } = msg.params?.chunks?.[0] || {};
             const inputText = text || '';
 
             if (ongoingText.length > 0) {
@@ -338,8 +338,8 @@ app.prepare().then(() => {
             // ★ 修正点: アシスタントの返信IDをここで生成
             currentAssistantId = `assistant-${Date.now()}`;
 
-            // Save the original message with files and goal to history for the UI
-            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [], goal: goal || null };
+            // Save the original message with files, goal, and session to history for the UI
+            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [], goal: goal || null, session: session || null };
             history.push(rec);
             
             // Broadcast the new user message to all clients
@@ -354,6 +354,10 @@ app.prepare().then(() => {
             }
             if (goal) {
                 systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- ID: ${goal.id}\n- 教科: ${goal.subject}\n- タスク: ${goal.task}${goal.details ? `\n- 詳細: ${goal.details}` : ''}`);
+            }
+            if (session) {
+                const { session: sessionData, logEntry } = session;
+                systemMessages.push(`[System]ユーザーは以下の学習セッションを共有しました：\n- セッションID: ${sessionData.session_id}\n- 教科: ${sessionData.subject}\n- イベントタイプ: ${logEntry.type}\n- 学習内容: ${logEntry.content || "休憩"}\n- 時間: ${logEntry.start_time} - ${logEntry.end_time} (${logEntry.duration_minutes}分)${logEntry.memo ? `\n- メモ: ${logEntry.memo}` : ''}${logEntry.impression ? `\n- 感想: ${logEntry.impression}` : ''}`);
             }
 
             let messageForAI = inputText;

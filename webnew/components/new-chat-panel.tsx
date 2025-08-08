@@ -40,6 +40,7 @@ interface Message {
   content: string;
   files?: FileInfo[];
   goal?: Goal | null;
+  session?: { session: any; logEntry: any } | null;
   type?: 'text' | 'tool';
   toolCallId?: string;
   status?: 'running' | 'finished' | 'error';
@@ -543,6 +544,23 @@ export function NewChatPanel({
                         <p className="text-gray-500 dark:text-gray-400 text-xs">
                           {msg.goal.subject}
                           {msg.goal.tags && msg.goal.tags.length > 0 && ` - ${msg.goal.tags.join(', ')}`}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {msg.role === 'user' && msg.session && (
+                  <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
+                    <div className="bg-gray-100 dark:bg-slate-700 rounded-xl p-3 flex items-center space-x-2 text-sm w-auto max-w-full">
+                      {msg.session.logEntry.type === "START" && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
+                      {msg.session.logEntry.type === "BREAK" && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
+                      {msg.session.logEntry.type === "RESUME" && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.session.logEntry.content || "休憩"}>
+                          {msg.session.logEntry.content || "休憩"}
+                        </p>
+                        <p className="text-gray-500 dark:text-gray-400 text-xs">
+                          {msg.session.session.subject} - {msg.session.logEntry.start_time} ({msg.session.logEntry.duration_minutes}分)
                         </p>
                       </div>
                     </div>
