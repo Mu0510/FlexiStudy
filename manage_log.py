@@ -1171,7 +1171,7 @@ def handle_execute(json_string):
         action_handler = ACTION_HANDLERS.get(action)
         if action_handler:
             # backup_databaseのような引数なしで呼び出す必要があるアクションを処理
-            if not params and action in ['db.backup', 'db.undo', 'db.redo', 'db.consolidate_break', 'db.recalculate_durations', 'data.unique_subjects', 'log.end_session']:
+            if not params and action in ['db.backup', 'db.undo', 'db.redo', 'db.consolidate_break', 'db.recalculate_durations', 'data.unique_subjects', 'log.end_session', 'data.study_time_by_subject']:
                  result = action_handler()
             else:
                  result = action_handler(params)
@@ -1263,6 +1263,10 @@ def action_goal_add_to_date(params):
 def action_data_unique_subjects():
     """ユニークな教科のリストを取得する"""
     return get_all_unique_subjects()
+
+def action_data_study_time_by_subject():
+    """教科ごとの合計学習時間を取得する"""
+    return get_study_time_by_subject()
 
 def action_log_delete(params):
     """指定されたIDの学習ログを削除する"""
@@ -1386,6 +1390,7 @@ ACTION_HANDLERS = {
     "goal.update": action_goal_update,
     "goal.delete": action_goal_delete,
     "data.unique_subjects": action_data_unique_subjects,
+    "data.study_time_by_subject": action_data_study_time_by_subject,
     "db.restore": action_db_restore,
     "db.reconstruct": action_db_reconstruct,
     "db.backup": backup_now,

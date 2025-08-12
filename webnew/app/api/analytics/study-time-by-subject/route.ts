@@ -1,42 +1,29 @@
-import { NextResponse } from 'next/server';
-import { exec } from 'child_process';
-import path from 'path';
+import { NextResponse } from "next/server";
+import { exec } from "child_process";
+import { promisify } from "util";
 
-// Define the shape of the data we expect from the Python script
-interface SubjectStudyTime {
-  subject: string;
-  minutes: number;
-}
+const execAsync = promisify(exec);
 
 export async function GET() {
-  // Path to the Python script
-  const scriptPath = path.resolve(process.cwd(), '../manage_log.py');
-  const pythonCommand = 'python3';
+  try {
+    const command = `python3 /home/geminicli/GeminiCLI/manage_log.py --api-mode execute '{"action": "data.study_time_by_subject", "params": {}}'`;
+    const { stdout, stderr } = await execAsync(command);
 
-  // The JSON payload for the execute command
-  const payload = {
-    action: 'data.study_time_by_subject',
-    params: {},
-  };
+    if (stderr) {
+      console.error(`stderr: ${stderr}`);
+      return NextResponse.json(
+        { error: "Failed to fetch study time by subject" },
+        { status: 500 }
+      );
+    }
 
-  // The full command to execute
-  const command = `${pythonCommand} ${scriptPath} --api-mode execute '${JSON.stringify(payload)}'`;
-
-  return new Promise((resolve) => {
-    exec(command, (error, stdout, stderr) => {
-      if (error) {
-        console.error(`exec error: ${error}`);
-        resolve(NextResponse.json({ error: 'Failed to execute script', details: stderr }, { status: 500 }));
-        return;
-      }
-
-      try {
-        const data: SubjectStudyTime[] = JSON.parse(stdout);
-        resolve(NextResponse.json(data));
-      } catch (parseError) {
-        console.error(`JSON parse error: ${parseError}`);
-        resolve(NextResponse.json({ error: 'Failed to parse script output', details: stdout }, { status: 500 }));
-      }
-    });
-  });
+    const data = JSON.parse(stdout);
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error(`error: ${error}`);
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
+  }
 }

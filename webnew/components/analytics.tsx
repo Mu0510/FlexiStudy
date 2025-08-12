@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BarChart3, TrendingUp, Clock, Target, Calendar, Award, BookOpen, Zap, AlertTriangle } from "lucide-react"
+import { SubjectStudyTimeChart } from "@/components/subject-study-time-chart"
 
 export function Analytics() {
   const weeklyData = [
@@ -160,6 +161,7 @@ export function Analytics() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <SubjectStudyTimeChart />
               {subjectData.map((subject, index) => (
                 <div key={index} className="p-4 bg-neutral-100 dark:bg-slate-700/50 rounded-lg">
                   <div className="flex items-center justify-between mb-3">
