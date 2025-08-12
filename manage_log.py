@@ -987,6 +987,21 @@ def get_dashboard_data(weekly_period_days=None):
         cursor.execute(weekly_time_query, params)
         weekly_time = cursor.fetchone()[0] or 0
 
+        # 今月の学習時間
+        start_of_month = today.replace(day=1)
+        cursor.execute(
+            "SELECT SUM(duration_minutes) FROM study_logs WHERE DATE(start_time) >= ? AND event_type IN ('START', 'RESUME')",
+            (start_of_month.strftime('%Y-%m-%d'),)
+        )
+        monthly_time = cursor.fetchone()[0] or 0
+
+        # 目標達成率 (1日平均6時間)
+        start_of_week_for_rate = today - datetime.timedelta(days=today.weekday())
+        days_in_week = (today - start_of_week_for_rate).days + 1
+        avg_daily_minutes = weekly_time / days_in_week if days_in_week > 0 else 0
+        daily_goal_minutes = 6 * 60
+        goal_achievement_rate = (avg_daily_minutes / daily_goal_minutes) * 100 if daily_goal_minutes > 0 else 0
+
         # 連続学習日数
         cursor.execute("SELECT DISTINCT DATE(start_time) FROM study_logs ORDER BY DATE(start_time) DESC")
         dates = [datetime.datetime.strptime(row[0], '%Y-%m-%d').date() for row in cursor.fetchall()]
@@ -1044,7 +1059,9 @@ def get_dashboard_data(weekly_period_days=None):
         "studyStats": {
             "todayTime": today_time,
             "weeklyTime": weekly_time,
+            "monthlyTime": monthly_time,
             "streak": streak,
+            "goalAchievementRate": goal_achievement_rate,
             "completedGoals": completed_goals,
             "totalGoals": total_goals
         },

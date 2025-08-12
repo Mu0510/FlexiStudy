@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { BarChart3, TrendingUp, Clock, Target, Calendar, Award, BookOpen, Zap, AlertTriangle } from "lucide-react"
+import { BarChart3, TrendingUp, Clock, Target, Calendar, Award, BookOpen, Zap, AlertTriangle, Flame } from "lucide-react"
 import { SubjectStudyTimeChart } from "@/components/subject-study-time-chart"
 import { useEffect, useState } from "react"
 
@@ -12,19 +12,37 @@ interface WeeklyData {
   time: number;
 }
 
+interface DashboardData {
+  studyStats: {
+    todayTime: number;
+    weeklyTime: number;
+    monthlyTime: number;
+    streak: number;
+    goalAchievementRate: number;
+    completedGoals: number;
+    totalGoals: number;
+  };
+  todayGoals: any[];
+  recentSessions: any[];
+}
+
 export function Analytics() {
   const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([])
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
-    fetch("/api/analytics/weekly-study-time")
-      .then((res) => res.json())
-      .then((data) => {
-        setWeeklyData(data)
+    Promise.all([
+      fetch("/api/analytics/weekly-study-time").then((res) => res.json()),
+      fetch("/api/dashboard").then((res) => res.json()),
+    ])
+      .then(([weekly, dashboard]) => {
+        setWeeklyData(weekly)
+        setDashboardData(dashboard)
         setIsLoading(false)
       })
       .catch((error) => {
-        console.error("Failed to fetch weekly data:", error)
+        console.error("Failed to fetch analytics data:", error)
         setIsLoading(false)
       })
   }, [])
@@ -37,6 +55,13 @@ export function Analytics() {
   ]
 
   const maxTime = weeklyData.length > 0 ? Math.max(...weeklyData.map((d) => d.time)) : 0
+
+  const formatTime = (minutes: number) => {
+    if (minutes < 60) return `${minutes}m`;
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${h}h ${m > 0 ? `${m}m` : ''}`.trim();
+  };
 
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
@@ -59,7 +84,7 @@ export function Analytics() {
         </div>
       </div>
 
-      {/* Summary Cards - メインカラーパレットのみ */}
+      {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="border-0 shadow-md bg-gradient-to-br from-primary-50 to-primary-100 dark:bg-slate-800 dark:from-slate-800 dark:to-slate-900">
           <CardContent className="p-4">
@@ -68,7 +93,9 @@ export function Analytics() {
                 <Clock className="w-5 h-5 text-primary-700 dark:text-primary-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-primary-800 dark:text-slate-100">18.5h</div>
+                <div className="text-2xl font-bold text-primary-800 dark:text-slate-100">
+                  {isLoading ? '...' : formatTime(dashboardData?.studyStats.weeklyTime ?? 0)}
+                </div>
                 <div className="text-sm text-primary-700 dark:text-slate-400">今週の総学習時間</div>
               </div>
             </div>
@@ -79,11 +106,13 @@ export function Analytics() {
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-secondary-200 rounded-lg dark:bg-secondary-900/50">
-                <TrendingUp className="w-5 h-5 text-secondary-700 dark:text-secondary-400" />
+                <Flame className="w-5 h-5 text-secondary-700 dark:text-secondary-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-secondary-800 dark:text-slate-100">87%</div>
-                <div className="text-sm text-secondary-700 dark:text-slate-400">平均学習効率</div>
+                <div className="text-2xl font-bold text-secondary-800 dark:text-slate-100">
+                  {isLoading ? '...' : `${dashboardData?.studyStats.streak ?? 0}日`}
+                </div>
+                <div className="text-sm text-secondary-700 dark:text-slate-400">連続学習日数</div>
               </div>
             </div>
           </CardContent>
@@ -96,7 +125,9 @@ export function Analytics() {
                 <Target className="w-5 h-5 text-accent-700 dark:text-accent-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-accent-800 dark:text-slate-100">92%</div>
+                <div className="text-2xl font-bold text-accent-800 dark:text-slate-100">
+                  {isLoading ? '...' : `${Math.round(dashboardData?.studyStats.goalAchievementRate ?? 0)}%`}
+                </div>
                 <div className="text-sm text-accent-700 dark:text-slate-400">目標達成率</div>
               </div>
             </div>
@@ -107,11 +138,13 @@ export function Analytics() {
           <CardContent className="p-4">
             <div className="flex items-center space-x-3">
               <div className="p-2 bg-neutral-300 rounded-lg dark:bg-neutral-700/50">
-                <Award className="w-5 h-5 text-neutral-700 dark:text-slate-400" />
+                <Calendar className="w-5 h-5 text-neutral-700 dark:text-slate-400" />
               </div>
               <div>
-                <div className="text-2xl font-bold text-neutral-800 dark:text-slate-100">81</div>
-                <div className="text-sm text-neutral-700 dark:text-slate-400">平均得点</div>
+                <div className="text-2xl font-bold text-neutral-800 dark:text-slate-100">
+                  {isLoading ? '...' : formatTime(dashboardData?.studyStats.monthlyTime ?? 0)}
+                </div>
+                <div className="text-sm text-neutral-700 dark:text-slate-400">今月の総学習時間</div>
               </div>
             </div>
           </CardContent>
