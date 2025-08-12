@@ -5,17 +5,29 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { BarChart3, TrendingUp, Clock, Target, Calendar, Award, BookOpen, Zap, AlertTriangle } from "lucide-react"
 import { SubjectStudyTimeChart } from "@/components/subject-study-time-chart"
+import { useEffect, useState } from "react"
+
+interface WeeklyData {
+  day: string;
+  time: number;
+}
 
 export function Analytics() {
-  const weeklyData = [
-    { day: "月", time: 112, efficiency: 85, status: "good" },
-    { day: "火", time: 95, efficiency: 78, status: "warning" },
-    { day: "水", time: 140, efficiency: 92, status: "excellent" },
-    { day: "木", time: 88, efficiency: 76, status: "warning" },
-    { day: "金", time: 156, efficiency: 89, status: "good" },
-    { day: "土", time: 203, efficiency: 94, status: "excellent" },
-    { day: "日", time: 167, efficiency: 87, status: "good" },
-  ]
+  const [weeklyData, setWeeklyData] = useState<WeeklyData[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    fetch("/api/analytics/weekly-study-time")
+      .then((res) => res.json())
+      .then((data) => {
+        setWeeklyData(data)
+        setIsLoading(false)
+      })
+      .catch((error) => {
+        console.error("Failed to fetch weekly data:", error)
+        setIsLoading(false)
+      })
+  }, [])
 
   const subjectData = [
     { subject: "数学", time: 420, sessions: 12, avgScore: 78, trend: "up" },
@@ -24,14 +36,7 @@ export function Analytics() {
     { subject: "英語", time: 250, sessions: 10, avgScore: 88, trend: "stable" },
   ]
 
-  const maxTime = Math.max(...weeklyData.map((d) => d.time))
-
-  const getEfficiencyBadge = (efficiency: number) => {
-    if (efficiency >= 90) return "border-success-200 text-success-700 bg-success-50"
-    if (efficiency >= 80) return "border-primary-200 text-primary-700 bg-primary-50"
-    if (efficiency >= 70) return "border-warning-200 text-warning-700 bg-warning-50"
-    return "border-alert-200 text-alert-700 bg-alert-50"
-  }
+  const maxTime = weeklyData.length > 0 ? Math.max(...weeklyData.map((d) => d.time)) : 0
 
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
@@ -124,29 +129,28 @@ export function Analytics() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {weeklyData.map((day, index) => (
-                  <div key={index} className="flex items-center space-x-4">
-                    <div className="w-8 text-sm font-medium text-neutral-600 dark:text-slate-400">{day.day}</div>
-                    <div className="flex-1 relative">
-                      <div className="h-8 bg-neutral-200 dark:bg-slate-700 rounded-lg overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-400 dark:to-primary-500 rounded-lg transition-all duration-500"
-                          style={{ width: `${(day.time / maxTime) * 100}%` }}
-                        />
-                      </div>
-                      <div className="absolute inset-0 flex items-center px-3">
-                        <span className="text-sm font-medium text-white">{day.time}分</span>
+              {isLoading ? (
+                <div>Loading...</div>
+              ) : (
+                <div className="space-y-4">
+                  {weeklyData.map((day, index) => (
+                    <div key={index} className="flex items-center space-x-4">
+                      <div className="w-8 text-sm font-medium text-neutral-600 dark:text-slate-400">{day.day}</div>
+                      <div className="flex-1 relative">
+                        <div className="h-8 bg-neutral-200 dark:bg-slate-700 rounded-lg overflow-hidden">
+                          <div
+                            className="h-full bg-gradient-to-r from-primary-600 to-primary-700 dark:from-primary-400 dark:to-primary-500 rounded-lg transition-all duration-500"
+                            style={{ width: `${maxTime > 0 ? (day.time / maxTime) * 100 : 0}%` }}
+                          />
+                        </div>
+                        <div className="absolute inset-0 flex items-center px-3">
+                          <span className="text-sm font-medium text-white">{day.time}分</span>
+                        </div>
                       </div>
                     </div>
-                    <div className="w-16 text-right">
-                      <Badge variant="outline" className={getEfficiencyBadge(day.efficiency)}>
-                        {day.efficiency}%
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

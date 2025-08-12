@@ -936,6 +936,28 @@ def get_study_time_by_subject():
         data = cursor.fetchall()
         return [{"subject": row[0], "minutes": row[1]} for row in data]
 
+def get_weekly_study_time():
+    """過去7日間の日ごとの合計学習時間を取得する"""
+    today = datetime.date.today()
+    data = []
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for i in range(7):
+            day = today - datetime.timedelta(days=i)
+            day_str = day.strftime('%Y-%m-%d')
+            # JSTに変換してから曜日を取得
+            day_name_en = day.strftime('%a')
+            day_map = {'Sun': '日', 'Mon': '月', 'Tue': '火', 'Wed': '水', 'Thu': '木', 'Fri': '金', 'Sat': '土'}
+            day_name_ja = day_map.get(day_name_en, '')
+
+            cursor.execute(
+                "SELECT SUM(duration_minutes) FROM study_logs WHERE DATE(start_time) = ? AND event_type IN ('START', 'RESUME')",
+                (day_str,)
+            )
+            total_minutes = cursor.fetchone()[0] or 0
+            data.append({"day": day_name_ja, "time": total_minutes})
+    return data[::-1] # 曜日順に並べるため逆順にする
+
 def get_dashboard_data(weekly_period_days=None):
     """ダッシュボード用のデータを取得して返す"""
     today = datetime.date.today()
@@ -1171,7 +1193,7 @@ def handle_execute(json_string):
         action_handler = ACTION_HANDLERS.get(action)
         if action_handler:
             # backup_databaseのような引数なしで呼び出す必要があるアクションを処理
-            if not params and action in ['db.backup', 'db.undo', 'db.redo', 'db.consolidate_break', 'db.recalculate_durations', 'data.unique_subjects', 'log.end_session', 'data.study_time_by_subject']:
+            if not params and action in ['db.backup', 'db.undo', 'db.redo', 'db.consolidate_break', 'db.recalculate_durations', 'data.unique_subjects', 'log.end_session', 'data.study_time_by_subject', 'data.weekly_study_time']:
                  result = action_handler()
             else:
                  result = action_handler(params)
@@ -1267,6 +1289,10 @@ def action_data_unique_subjects():
 def action_data_study_time_by_subject():
     """教科ごとの合計学習時間を取得する"""
     return get_study_time_by_subject()
+
+def action_data_weekly_study_time():
+    """過去7日間の日ごとの合計学習時間を取得する"""
+    return get_weekly_study_time()
 
 def action_log_delete(params):
     """指定されたIDの学習ログを削除する"""
@@ -1391,6 +1417,7 @@ ACTION_HANDLERS = {
     "goal.delete": action_goal_delete,
     "data.unique_subjects": action_data_unique_subjects,
     "data.study_time_by_subject": action_data_study_time_by_subject,
+    "data.weekly_study_time": action_data_weekly_study_time,
     "db.restore": action_db_restore,
     "db.reconstruct": action_db_reconstruct,
     "db.backup": backup_now,
