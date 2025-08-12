@@ -124,6 +124,7 @@ Options:
   - data.dashboard: Webダッシュボード用のデータを取得
     - params: {"days": int (optional)}
   - data.unique_subjects: 記録されている全ての教科名をリスト表示
+  - data.study_time_by_subject: 教科ごとの合計学習時間を取得
 
 [db] (⚠️ 注意/危険)
   - db.backup: 手動でDBバックアップを作成
@@ -919,6 +920,21 @@ def get_all_unique_subjects():
         cursor.execute("SELECT DISTINCT subject FROM study_logs WHERE subject IS NOT NULL AND subject != '' ORDER BY subject")
         subjects = [row[0] for row in cursor.fetchall()]
         return subjects
+
+def get_study_time_by_subject():
+    """教科ごとの合計学習時間を取得する"""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT subject, SUM(duration_minutes) as total_minutes
+            FROM study_logs
+            WHERE event_type IN ('START', 'RESUME') AND subject IS NOT NULL AND duration_minutes IS NOT NULL
+            GROUP BY subject
+            HAVING SUM(duration_minutes) > 0
+            ORDER BY total_minutes DESC
+        """)
+        data = cursor.fetchall()
+        return [{"subject": row[0], "minutes": row[1]} for row in data]
 
 def get_dashboard_data(weekly_period_days=None):
     """ダッシュボード用のデータを取得して返す"""
