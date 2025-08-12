@@ -359,3 +359,4 @@ study_log_20250808_114207_445184.db: Undo operation
 study_log_20250808_114433_026796.db: Before updating log entry.
 study_log_20250808_122537_764119.db: Before deleting log entry.
 study_log_20250808_122541_266361.db: Before session summary update.
+study_log_20250811_230743_504015.db: Restored from backup
