@@ -209,37 +209,41 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         onMessageReceived?.();
       } else if (msg.method === 'addMessage') {
         // ① もし前回の assistant ストリームがまだ activeMessage に残っていたら確定
-        setActiveMessage(prev => {
-          if (prev && prev.type === 'assistant') {
-            setMessages(p => {
-              if (p.some(m => m.id === prev.id)) return p; // 重複防止
-              const newMessages = [...p, { id: prev.id, ts: prev.ts, role: 'assistant', content: prev.content }];
-              newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-              return newMessages;
-            });
-            return null;   // flush 済みなのでクリア
-          }
-          return prev;
+        flushSync(() => {
+          setActiveMessage(prev => {
+            if (prev && prev.type === 'assistant') {
+              setMessages(p => {
+                if (p.some(m => m.id === prev.id)) return p; // 重複防止
+                const newMessages = [...p, { id: prev.id, ts: prev.ts, role: 'assistant', content: prev.content }];
+                newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+                return newMessages;
+              });
+              return null;   // flush 済みなのでクリア
+            }
+            return prev;
+          });
         });
 
         const { message } = msg.params;
-        setMessages(prev => {
-          // 重複を避ける
-          if (prev.some(m => m.id === message.id)) {
-            return prev;
-          }
-          const newMessages = [...prev, {
-            id: message.id,
-            ts: message.ts,
-            role: message.role,
-            content: message.text,
-            files: message.files || [],
-            goal: message.goal || null,
-            session: message.session || null,
-          }];
-          // ★ 修正点: タイムスタンプでソートする
-          newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-          return newMessages;
+        flushSync(() => {
+          setMessages(prev => {
+            // 重複を避ける
+            if (prev.some(m => m.id === message.id)) {
+              return prev;
+            }
+            const newMessages = [...prev, {
+              id: message.id,
+              ts: message.ts,
+              role: message.role,
+              content: message.text,
+              files: message.files || [],
+              goal: message.goal || null,
+              session: message.session || null,
+            }];
+            // ★ 修正点: タイムスタンプでソートする
+            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            return newMessages;
+          });
         });
         onMessageReceived?.();
       } else if (msg.method === 'pushMessage') {
