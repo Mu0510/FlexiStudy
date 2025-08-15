@@ -149,7 +149,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         setActiveMessage(prevActiveMessage => {
             // ★ 修正点: サーバーからのIDを最優先で使用する
             const currentId = prevActiveMessage?.id || incomingMessageId || msg.id || `assistant-${Date.now()}`;
-            const currentTs = prevActiveMessage?.ts || Date.now(); // 既存のtsを使うか、なければ新規作成
+            let currentTs = prevActiveMessage?.ts || Date.now(); // 既存のtsを使うか、なければ新規作成
             let newContent = prevActiveMessage?.content || '';
             let newType = prevActiveMessage?.type || 'thought';
             let newThoughtMode = prevActiveMessage?.thoughtMode || false;
