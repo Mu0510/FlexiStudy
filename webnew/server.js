@@ -110,7 +110,7 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                 if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
                     // ★ 修正点: currentAssistantId を使用
                     const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(),
-                                 role:'assistant', text:ongoingText.trimEnd() };
+                                 role:'assistant', content:ongoingText.trimEnd() };
                     history.push(rec);
                     console.log('[History] Saved assistant message (before other message): ' + JSON.stringify(rec));
                     ongoingText = '';
@@ -135,7 +135,7 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                     if (ongoingText.length > 0) {
                         // ★ 修正点: currentAssistantId を使用
                         const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(),
-                                     role:'assistant', text:ongoingText.trimEnd() };
+                                     role:'assistant', content:ongoingText.trimEnd() };
                         broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
                         ongoingText = '';
                         currentAssistantId = null; // ★ リセット
@@ -324,7 +324,7 @@ app.prepare().then(() => {
 
         if (msg.method === 'fetchHistory') {
             if (ongoingText.length > 0) {
-                const rec = { id: String(Date.now()), ts: Date.now(), role: 'assistant', text: ongoingText.trimEnd() };
+                const rec = { id: String(Date.now()), ts: Date.now(), role: 'assistant', content: ongoingText.trimEnd() };
                 history.push(rec);
                 ongoingText = '';
             }
@@ -339,7 +339,7 @@ app.prepare().then(() => {
             const inputText = text || '';
 
             if (ongoingText.length > 0) {
-                const rec = { id: String(Date.now()), ts: Date.now(), role: 'assistant', text: ongoingText.trimEnd() };
+                const rec = { id: String(Date.now()), ts: Date.now(), role: 'assistant', content: ongoingText.trimEnd() };
                 history.push(rec);
                 ongoingText = '';
             }
@@ -348,7 +348,7 @@ app.prepare().then(() => {
             currentAssistantId = `assistant-${Date.now()}`;
 
             // Save the original message with files, goal, and session to history for the UI
-            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [], goal: goal || null, session: session || null };
+            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', content: inputText, files: files || [], goal: goal || null, session: session || null };
             history.push(rec);
             
             // Broadcast the new user message to other clients

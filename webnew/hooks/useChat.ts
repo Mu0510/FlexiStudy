@@ -223,7 +223,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               id: message.id,
               ts: message.ts,
               role: message.role,
-              content: message.text,
+              content: message.content, // .text から .content に変更
               files: message.files || [],
               goal: message.goal || null,
               session: message.session || null,
@@ -473,7 +473,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                     id: m.id,
                     ts: m.ts, // タイムスタンプを正しく渡す
                     role: m.role,
-                    content: m.text || '',
+                    content: m.content || '',
                     files: m.files || [],
                     goal: m.goal || null,
                     session: m.session || null,
