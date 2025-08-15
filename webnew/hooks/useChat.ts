@@ -208,26 +208,14 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         setIsGeneratingResponse(false);
         onMessageReceived?.();
       } else if (msg.method === 'addMessage') {
-        // ① もし前回の assistant ストリームがまだ activeMessage に残っていたら確定
-        flushSync(() => {
-          setActiveMessage(prev => {
-            if (prev && prev.type === 'assistant') {
-              setMessages(p => {
-                if (p.some(m => m.id === prev.id)) return p; // 重複防止
-                const newMessages = [...p, { id: prev.id, ts: prev.ts, role: 'assistant', content: prev.content }];
-                newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
-                return newMessages;
-              });
-              return null;   // flush 済みなのでクリア
-            }
-            return prev;
-          });
-        });
-
         const { message } = msg.params;
+        
+        // 新しい方針: このハンドラは他人からのメッセージのみを受け取る。
+        // 自分のメッセージはsendMessageで先行表示済みのため、ID比較や置換は不要。
+        // 単純に受け取ったメッセージをリストに追加する。
         flushSync(() => {
           setMessages(prev => {
-            // 重複を避ける
+            // 念のため重複をチェック
             if (prev.some(m => m.id === message.id)) {
               return prev;
             }
@@ -240,7 +228,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               goal: message.goal || null,
               session: message.session || null,
             }];
-            // ★ 修正点: タイムスタンプでソートする
+            // タイムスタンプでソートして順序を保証
             newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
           });
