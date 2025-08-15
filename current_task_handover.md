@@ -1,55 +1,86 @@
-### **Gemini CLI - `manage_log.py` 設計見直しプロジェクト 引き継ぎ資料**
+# プロジェクト引き継ぎ資料
 
-**日付:** 2025年8月7日
+## 1. 現在の状況
 
-**現在のプロジェクトディレクトリ:** `/home/geminicli/GeminiCLI`
+### 1.1. プロジェクト目標
+Gemini CLIの音声インターフェース（手ぶら対話）の実装。
 
----
+### 1.2. これまでの経緯と課題 (要約)
+1.  **Python音声処理(失敗):** `pyaudio`と`webrtcvad`を直接使う方法は、ユーザー環境で解決不能なハングアップを引き起こしたため破棄。
+2.  **C++サーバーへの転換:** 安定性を求め、`whisper.cpp`に同梱されているC++製の`server.exe`を音声認識バックエンドとして利用する方針に転換。
+3.  **GPU高速化:** CPUのみでは低速だったため、OpenVINOを使い内蔵GPUでの高速化を目指す。ユーザーは`whisper.cpp`のOpenVINO対応版のビルドに成功。
+4.  **DLL問題の解決:** 起動に必要なOpenVINOのDLLファイル群を、ユーザーが`server.exe`と同じディレクトリにコピーし、解決済み。
+5.  **モデル互換性問題:**
+    *   標準の`ggml`モデルはOpenVINOバックエンドでは使用不可だった。
+    *   次に、Intel公式が提供する変換済みOpenVINOモデルをダウンロードしたが、`server.exe`のバージョンと互換性がなく`invalid model data (bad magic)`エラーで失敗。
 
-#### **1. これまでの作業概要**
-
-`manage_log.py`のコマンド体系が複雑でAIが扱いにくいという課題に対し、以下のステップで設計見直しを進めています。
-
-*   **フェーズ1: コマンド体系の統一と整理 (進行中)**
-    *   **`manage_log.py`の内部変更:**
-        *   `show_logs_json_for_date`関数を`get_logs_json_for_date`にリネームし、JSONを直接`print`する代わりにPythonの`dict`を返すように修正しました。
-        *   `get_dashboard_data`関数も同様に、JSONを直接`print`する代わりにPythonの`dict`を返すように修正しました。
-        *   `main`関数をリファクタリングし、すべてのコマンドライン引数を単一の`execute`コマンド（例: `python manage_log.py execute '{"action": "...", "params": {...}}'`）で処理するように変更しました。
-        *   古いコマンド形式（例: `python manage_log.py start ...`）との互換性を保つため、`parse_old_command`関数を新設し、古い形式の引数を新しいJSON形式に変換するレイヤーとして機能させています。
-        *   各`action_*`関数は、標準出力に直接書き込むのではなく、処理結果の`dict`を返すように修正しました。
-    *   **Webバックエンド (`webnew/app/api/`) の修正:**
-        *   `webnew/app/api/logs/[date]/route.ts` を、新しい`execute`コマンド形式（`action: "log.get"`）を使用するように修正しました。
-        *   `webnew/app/api/dashboard/route.ts` を、新しい`execute`コマンド形式（`action: "data.dashboard"`）を使用するように修正しました。
-        *   `webnew/app/api/subjects/route.ts` の修正中に、インデントと`catch`の型定義の不一致により`replace`ツールが失敗し、現在このファイルの修正を再試行する直前です。
+### 1.3. 現在の状況と最重要課題
+- **戦略の再決定:** 外部の変換済みモデルに頼るのではなく、**「自分たちの環境で、今ある`server.exe`と100%互換性のあるモデルを自作する」**という、最も確実な初期方針に回帰した。
+- **最重要課題:** モデル変換用Pythonスクリプト(`convert-whisper-to-openvino.py`)の実行に必要なライブラリ(`openvino-dev`等)が、ユーザーの最新Python 3.13環境と互換性がなく、インストールに失敗している。
 
 ---
 
-#### **2. これから行うべきこと**
+## 2. 今後の計画 (最終確定版)
 
-*   **2.1. `webnew/app/api/subjects/route.ts`の修正完了:**
-    *   現在の作業中断点です。正しいインデントと型定義で`replace`ツールを再試行し、`unique_subjects`コマンドの呼び出しを`execute`コマンド形式（`action: "data.unique_subjects"`）に修正してください。
-*   **2.2. その他の呼び出し元の特定と修正:**
-    *   プロジェクト内で`manage_log.py`を呼び出している他のファイル（特に`webnew/`以下のAPIルート）がないか再確認し、同様に`execute`コマンド形式に修正してください。
-        *   **要確認ファイル:**
-            *   `webnew/app/api/logs/route.ts` (GETリクエストで`logs_json_for_date`を呼び出している可能性があります)
-            *   `webnew/app/api/goals/move/route.ts` (POSTリクエストで`add_goal_to_date`を呼び出している可能性があります)
-            *   `webnew/server.js` (もしあれば、WebSocket経由でのコマンド実行部分を確認)
-*   **2.3. `manage_log.py`のヘルプメッセージの更新:**
-    *   すべての呼び出し元が新しい`execute`コマンド形式に移行したことを確認した後、`manage_log.py`内の`print_help()`関数を更新し、古いコマンドの記述を削除して新しい`execute`コマンドベースの利用方法のみを記載するようにしてください。
-*   **2.4. 古いコマンドハンドラの削除:**
-    *   `parse_old_command`関数が不要になった時点で（つまり、すべての呼び出し元が新しい形式に移行し、古いコマンド形式のサポートが不要になったと判断できる段階で）、この関数とそれに関連する古いコマンドハンドラを`manage_log.py`から完全に削除してください。
-*   **2.5. テストと動作確認:**
-    *   上記全ての変更後、Webダッシュボードが正常に動作するか、CLIからのコマンドが正しく実行されるかを確認してください。特に、データ表示、ログ記録、目標管理の各機能が期待通りに動くことを確認してください。
-*   **2.6. 提案2への移行準備:**
-    *   フェーズ1が完了し、システムが安定したことを確認した後、次のフェーズである「提案2：ライブラリ化とAPIサーバー化」の計画を立ててください。
+現在の最重要課題である「Python環境問題」を解決し、モデルを自作して高速なサーバーを起動するための、詳細な最終計画は以下の通りです。
+
+### ステップ1：クリーンな仮想環境の準備
+*目的：依存関係の衝突を完全に回避する。*
+
+1.  **仮想環境の非アクティブ化:**
+    ```bash
+    deactivate
+    ```
+2.  **古い仮想環境の削除:**
+    ```bash
+    rm -rf venv_openvino
+    ```
+3.  **新しい仮想環境の作成:**
+    ```bash
+    python -m venv venv_openvino
+    ```
+4.  **新しい仮想環境の有効化:**
+    ```bash
+    source venv_openvino/Scripts/activate
+    ```
+
+### ステップ2：ビルドツールのバージョンを固定してインストール【最重要】
+*目的：Python 3.13との互換性問題を回避する。*
+
+1.  **pipのアップグレード:**
+    ```bash
+    python -m pip install --upgrade pip
+    ```
+2.  **setuptoolsのバージョンを固定:**
+    ```bash
+    python -m pip install setuptools==65.5.1
+    ```
+
+### ステップ3：変換に必要なライブラリのインストール
+*目的：固定されたビルドツールの上で、変換ライブラリをインストールする。*
+
+```bash
+python -m pip install -r models/requirements-openvino.txt
+```
+
+### ステップ4：モデルの変換
+*目的：`whisper.cpp`と完全互換のOpenVINOモデルを生成する。*
+
+```bash
+python models/convert-whisper-to-openvino.py --model small --output-dir models/openvino
+```
+
+### ステップ5：自作モデルでサーバーを起動
+*目的：生成したモデルを使い、GPUで高速化されたサーバーを起動する。*
+
+1.  **実行ディレクトリへ移動:**
+    ```bash
+    cd build/bin/Release/
+    ```
+2.  **サーバー起動:**
+    ```bash
+    ./server.exe -m ../../../models/openvino/whisper-small-encoder.xml --ov-e-device GPU
+    ```
 
 ---
-
-#### **3. 注意点**
-
-*   **互換性の維持:** Webバックエンドが`manage_log.py`に強く依存しているため、呼び出し元の修正は慎重に行い、JSONの構造や引数の渡し方を間違えないように細心の注意を払ってください。
-*   **エラーハンドリング:** `child_process.exec`や`spawn`からのエラーが適切にフロントエンドに伝播されるか、修正後に確認してください。
-*   **サーバーの再起動:** Webバックエンドの変更（特にNext.jsのAPIルート）は、Next.jsサーバーの再起動が必要になる場合があります。これはユーザーが担当しますので、必要に応じてユーザーに伝えてください。
-*   **Serena系ツールの活用:** ファイル検索 (`serena__search_for_pattern`, `serena__find_file`)、内容読み込み (`serena__read_file`), 正規表現置換 (`serena__replace_regex`) など、Serena系ツールを積極的に活用して効率的に作業を進めてください。
-
----
+**次に再開する際は、上記の「ステップ1」から順に実行してください。**

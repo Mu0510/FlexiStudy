@@ -360,3 +360,16 @@ study_log_20250808_114433_026796.db: Before updating log entry.
 study_log_20250808_122537_764119.db: Before deleting log entry.
 study_log_20250808_122541_266361.db: Before session summary update.
 study_log_20250811_230743_504015.db: Restored from backup
+study_log_20250814_151525_328539.db: Daily auto backup before first study session.
+study_log_20250814_151525_329406.db: Before start session.
+study_log_20250814_151604_681615.db: For Redo
+study_log_20250814_151525_329406.db: Undo operation
+study_log_20250814_160559_109853.db: Before updating goal by global ID.
+study_log_20250814_160602_189373.db: Before updating goal by global ID.
+study_log_20250814_160630_607240.db: For Redo
+study_log_20250814_160602_189373.db: Undo operation
+study_log_20250814_160652_871207.db: For Redo
+study_log_20250814_160559_109853.db: Undo operation
+study_log_20250814_160738_737336.db: Before adding a goal to a specific date.
+study_log_20250814_161656_164590.db: Before updating goal by global ID.
+study_log_20250814_223800_344003.db: Before ending session.
