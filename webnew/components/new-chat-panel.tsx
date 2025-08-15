@@ -602,7 +602,7 @@ export function NewChatPanel({
 
         {/* Render activeMessage (thinking bubble or streaming assistant message) */}
         {activeMessage && (
-          <div className={cn("flex space-x-3", "justify-start")}>
+          <div key={`active-${activeMessage.id}`} className={cn("flex space-x-3", "justify-start")}>
             <div
               className={cn(
                 "prose prose-sm dark:prose-invert mx-auto w-[95%]",
