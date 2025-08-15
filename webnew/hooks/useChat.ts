@@ -25,6 +25,7 @@ interface Goal {
 interface Message {
   id: string;
   ts?: number;
+  seq?: number; // ★連番を追加
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   files?: FileInfo[];
@@ -41,6 +42,7 @@ interface Message {
 interface ActiveMessage {
   id: string;
   ts: number; // タイムスタンプを必須プロパティにする
+  seq?: number; // ★連番を追加
   type: 'thought' | 'assistant';
   content: string;
   thoughtMode: boolean; // chat.js の active.thoughtMode に対応
@@ -52,6 +54,15 @@ interface SendMessageData {
   goal?: Goal | null;
   session?: { session: any; logEntry: any } | null;
 }
+
+const sortMessages = (a: Message | ActiveMessage, b: Message | ActiveMessage) => {
+  const tsA = a.ts || 0;
+  const tsB = b.ts || 0;
+  if (tsA !== tsB) {
+    return tsA - tsB;
+  }
+  return (a.seq || 0) - (b.seq || 0);
+};
 
 
 function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): string {
@@ -96,7 +107,7 @@ function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): 
   return html;
 }
 
-export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void } = {}) => {
+export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void } = {}) => { 
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeMessage, setActiveMessage] = useState<ActiveMessage | null>(null);
   const activeMessageRef = useRef<ActiveMessage | null>(null);
@@ -124,19 +135,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     // WebSocketからのメッセージ処理ロジックをsubscribeで登録
     const unsubscribe = subscribe((msg: any) => {
       console.log('[DEBUG] Received WebSocket message:', msg);
-      // let msg; // JSON.parseはWebSocketContextで行われるため不要
-      // try {
-      //   msg = JSON.parse(event.data);
-      // } catch (err) {
-      //   console.error('❌ JSON parse error on chunk:', err, event.data);
-      //   return;
-      // }
 
       if (msg.method === 'streamAssistantThoughtChunk') {
         const { thought } = msg.params;
         setActiveMessage(prev => ({
           id: prev?.id || msg.id || `thought-${Date.now()}`,
           ts: prev?.ts || Date.now(), // タイムスタンプを維持または新規作成
+          seq: prev?.seq || msg.seq, // ★ seqを維持または設定
           type: 'thought',
           content: thought.trim(),
           thoughtMode: true,
@@ -147,24 +152,20 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const incomingMessageId = msg.params.messageId; // ★ サーバーからの共通IDを取得
 
         setActiveMessage(prevActiveMessage => {
-            // ★ 修正点: サーバーからのIDを最優先で使用する
             const currentId = prevActiveMessage?.id || incomingMessageId || msg.id || `assistant-${Date.now()}`;
             const currentTs = prevActiveMessage?.ts || Date.now(); // 既存のtsを使うか、なければ新規作成
+            const currentSeq = prevActiveMessage?.seq || msg.seq; // ★ seqを維持または設定
             let newContent = prevActiveMessage?.content || '';
             let newType = prevActiveMessage?.type || 'thought';
             let newThoughtMode = prevActiveMessage?.thoughtMode || false;
 
-            // If a thought arrives, update the thought content and set mode to thought.
             if (chunk?.thought !== undefined) {
                 newContent = chunk.thought.trim();
                 newType = 'thought';
                 newThoughtMode = true;
             }
 
-            // If text arrives, it might override the thought or append to existing text.
             if (chunk?.text !== undefined) {
-                // If we were in thought mode, the new text replaces the thought content.
-                // Otherwise, it appends to the existing assistant message.
                 if (newType === 'thought') {
                     newContent = chunk.text.replace(/^\n+/, '');
                 } else {
@@ -176,31 +177,32 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
             return {
                 id: currentId,
-                ts: currentTs, // タイムスタンプを維持
+                ts: currentTs,
+                seq: currentSeq, // ★ seqを返す
                 type: newType as 'thought' | 'assistant',
                 content: newContent,
                 thoughtMode: newThoughtMode,
             };
         });
 
-        if (msg.id !== undefined && ws) { // ws.current から ws に変更
-          sendWsMessage({ jsonrpc: '2.0', id: msg.id, result: null }); // sendWsMessage を使用
+        if (msg.id !== undefined && ws) {
+          sendWsMessage({ jsonrpc: '2.0', id: msg.id, result: null });
         }
         onMessageReceived?.();
       } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
         if (activeMessage) {
           setMessages(prev => {
-            // ★ 修正点: 重複を避ける
             if (prev.some(m => m.id === activeMessage.id)) {
               return prev;
             }
             const newMessages = [...prev, {
               id: activeMessage.id,
-              ts: activeMessage.ts, // activeMessageのタイムスタンプを利用
+              ts: activeMessage.ts,
+              seq: activeMessage.seq, // ★ seqを追加
               role: 'assistant',
               content: activeMessage.content,
             }];
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            newMessages.sort(sortMessages); // ★ 共通ソート関数を使用
             return newMessages;
           });
           setActiveMessage(null);
@@ -208,17 +210,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         setIsGeneratingResponse(false);
         onMessageReceived?.();
       } else if (msg.method === 'addMessage') {
-        // ① もし前回の assistant ストリームがまだ activeMessage に残っていたら確定
         flushSync(() => {
           setActiveMessage(prev => {
             if (prev && prev.type === 'assistant') {
               setMessages(p => {
-                if (p.some(m => m.id === prev.id)) return p; // 重複防止
-                const newMessages = [...p, { id: prev.id, ts: prev.ts, role: 'assistant', content: prev.content }];
-                newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+                if (p.some(m => m.id === prev.id)) return p;
+                const newMessages = [...p, { id: prev.id, ts: prev.ts, seq: prev.seq, role: 'assistant', content: prev.content }];
+                newMessages.sort(sortMessages);
                 return newMessages;
               });
-              return null;   // flush 済みなのでクリア
+              return null;
             }
             return prev;
           });
@@ -227,21 +228,20 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const { message } = msg.params;
         flushSync(() => {
           setMessages(prev => {
-            // 重複を避ける
             if (prev.some(m => m.id === message.id)) {
               return prev;
             }
             const newMessages = [...prev, {
               id: message.id,
               ts: message.ts,
+              seq: msg.seq, // ★ seqを追加
               role: message.role,
               content: message.text,
               files: message.files || [],
               goal: message.goal || null,
               session: message.session || null,
             }];
-            // ★ 修正点: タイムスタンプでソートする
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            newMessages.sort(sortMessages); // ★ 共通ソート関数を使用
             return newMessages;
           });
         });
@@ -250,11 +250,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         setMessages(prev => {
           const newMessages = [...prev, {
             id: `msg-${Date.now()}`,
-            ts: Date.now(), // タイムスタンプを追加
+            ts: Date.now(),
+            seq: msg.seq, // ★ seqを追加
             role: 'assistant',
             content: msg.params.content,
           }];
-          newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+          newMessages.sort(sortMessages);
           return newMessages;
         });
         setActiveMessage(null);
@@ -269,24 +270,23 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           setMessages(prev => {
             const newMessages = [...prev];
 
-            // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
             if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
               const currentActiveMessage = activeMessageRef.current;
-              // 重複防止
               if (!newMessages.some(m => m.id === currentActiveMessage.id)) {
                 newMessages.push({
                   id: currentActiveMessage.id,
                   ts: currentActiveMessage.ts,
+                  seq: currentActiveMessage.seq, // ★ seqを追加
                   role: 'assistant',
                   content: currentActiveMessage.content,
                 });
               }
             }
 
-            // 新しいツールメッセージを追加
             newMessages.push({
               id: toolId,
               ts: Date.now(),
+              seq: msg.seq, // ★ seqを追加
               role: 'tool',
               type: 'tool',
               toolCallId: toolId,
@@ -295,19 +295,15 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               command,
               status: 'running',
               content: 'ツールを実行中...',
-              toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId,
-              toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage,
-              toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
             });
 
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            newMessages.sort(sortMessages);
             return newMessages;
           });
-          // 状態更新後、activeMessageをクリア
           setActiveMessage(null);
         });
 
-        if (ws) { // ws.current から ws に変更
+        if (ws) {
           sendWsMessage({
             jsonrpc: '2.0',
             id: msg.id,
@@ -320,11 +316,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const { icon, label, confirmation } = msg.params;
         const command = confirmation?.command ?? '';
 
-        // 常に許可するため、すぐに許可の応答を返す
-        if (ws) { // ws.current から ws に変更
+        if (ws) {
           sendWsMessage({
             jsonrpc: '2.0',
-            id: msg.id, // 受け取ったメッセージのIDをそのまま使う
+            id: msg.id,
             result: { id: toolId, outcome: 'allow' }
           });
         }
@@ -333,24 +328,23 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           setMessages(prev => {
             const newMessages = [...prev];
 
-            // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
             if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
               const currentActiveMessage = activeMessageRef.current;
-              // 重複防止
               if (!newMessages.some(m => m.id === currentActiveMessage.id)) {
                 newMessages.push({
                   id: currentActiveMessage.id,
                   ts: currentActiveMessage.ts,
+                  seq: currentActiveMessage.seq, // ★ seqを追加
                   role: 'assistant',
                   content: currentActiveMessage.content,
                 });
               }
             }
 
-            // 新しいツールメッセージを追加
             newMessages.push({
               id: toolId,
               ts: Date.now(),
+              seq: msg.seq, // ★ seqを追加
               role: 'tool',
               type: 'tool',
               toolCallId: toolId,
@@ -359,15 +353,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               command,
               status: 'running',
               content: confirmation?.details ?? 'ツールの確認を待っています...',
-              toolCallConfirmationId: confirmation?.toolCallConfirmationId,
-              toolCallConfirmationMessage: confirmation?.toolCallConfirmationMessage,
-              toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
             });
 
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+            newMessages.sort(sortMessages);
             return newMessages;
           });
-          // 状態更新後、activeMessageをクリア
           setActiveMessage(null);
         });
         onMessageReceived?.();
@@ -380,15 +370,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             const toolMessageIndex = newMessages.findIndex(m => m.id === toolId);
 
             if (toolMessageIndex === -1) {
-                // まだメッセージが存在しない場合 (pushToolCallより先にupdateが来た場合)
-                // ここで一旦保留するロジックも考えられるが、一旦何もしない
                 console.warn(`[updateToolCall] Tool message with id ${toolId} not found.`);
                 return prevMessages;
             }
 
             const toolMessage = { ...newMessages[toolMessageIndex] };
+            toolMessage.seq = msg.seq; // ★ seqを更新
 
-            // __headerPatch が存在する場合、ヘッダー情報を更新
             if (content?.__headerPatch) {
                 const { icon, label, command } = content.__headerPatch;
                 toolMessage.icon = icon ?? toolMessage.icon;
@@ -401,7 +389,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             let processedContent = '';
             if (content) {
                 if (content.type === 'markdown') {
-                    processedContent = content.markdown; // marked.parse を削除
+                    processedContent = content.markdown;
                 } else if (content.type === 'diff') {
                     processedContent = generateContextualDiffHtml(content.oldText, content.newText);
                 } else if (typeof content === 'string') {
@@ -426,9 +414,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           const rawMessages = msg.result.messages.filter((m: any) => !historyState.current.loadedIds.has(m.id));
 
           if (rawMessages.length > 0) {
-            rawMessages.sort((a: any, b: any) => a.ts - b.ts);
+            rawMessages.sort((a: any, b: any) => {
+              if (a.ts !== b.ts) return a.ts - b.ts;
+              return (a.seq || 0) - (b.seq || 0);
+            });
 
-            // ツール呼び出しをマージする処理
             const mergedMessages: any[] = [];
             const toolCalls = new Map<string, any>();
 
@@ -438,20 +428,22 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                 toolCalls.set(toolCallId, {
                   id: toolCallId,
                   ts: m.ts,
+                  seq: m.seq, // ★ seqを追加
                   role: 'tool',
                   type: 'tool',
                   toolCallId: toolCallId,
                   icon: m.params.icon,
                   label: m.params.label,
                   command: m.params.confirmation?.command || m.params.locations?.[0]?.path || '',
-                  status: 'running', // 初期状態
-                  content: '', // 初期状態
+                  status: 'running',
+                  content: '',
                 });
               } else if (m.type === 'tool' && m.method === 'updateToolCall') {
                 const toolCallId = m.params.toolCallId ?? m.params.callId;
                 if (toolCalls.has(toolCallId)) {
                   const existingTool = toolCalls.get(toolCallId);
                   existingTool.status = m.params.status || existingTool.status;
+                  existingTool.seq = m.seq || existingTool.seq; // ★ seqを更新
                   if (m.params.content) {
                     const content = m.params.content;
                      if (content.type === 'markdown' && content.markdown) {
@@ -466,24 +458,20 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                   }
                 }
               } else {
-                // ツール呼び出し以外のメッセージ
                 mergedMessages.push(m);
               }
             }
 
-            // マージされたツール呼び出しをメッセージリストに追加
             mergedMessages.push(...Array.from(toolCalls.values()));
-
-            // タイムスタンプで最終ソート
-            mergedMessages.sort((a: any, b: any) => a.ts - b.ts);
+            mergedMessages.sort(sortMessages);
 
             setMessages(prev => {
               const updatedMessages = [...mergedMessages.map((m: any) => {
-                // 既にツール呼び出しは処理済みなので、ここでは通常のメッセージを処理
                 if (m.role === 'user' || m.role === 'assistant') {
                    return {
                     id: m.id,
-                    ts: m.ts, // タイムスタンプを正しく渡す
+                    ts: m.ts,
+                    seq: m.seq, // ★ seqを追加
                     role: m.role,
                     content: m.text || '',
                     files: m.files || [],
@@ -491,17 +479,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                     session: m.session || null,
                   };
                 } else if (m.role === 'tool') {
-                    // マージ済みのツールオブジェクトをそのまま返す
                     return m;
                 }
-                return null; // 万が一のためのnullチェック
-              }).filter(Boolean), ...prev]; // nullを除外
+                return null;
+              }).filter(Boolean), ...prev];
               
               rawMessages.forEach((m: any) => historyState.current.loadedIds.add(m.id));
               if (rawMessages.length > 0) {
                 historyState.current.oldestTs = rawMessages[0].ts;
               }
-              updatedMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+              updatedMessages.sort(sortMessages);
               return updatedMessages;
             });
           }
@@ -519,7 +506,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         setMessages(prevMessages => prevMessages.map(m => {
           if (m.id === toolId) {
             let newContent = m.content || '';
-            // タイプが'diff'の場合のdiffカラーリングを処理
             if (msg.params.chunk.type === 'diff') {
               newContent += textContent.split('\n').map((line: string) => {
                 if (line.startsWith('+')) return `<span class="add">${line}</span>`;
@@ -529,47 +515,40 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             } else {
               newContent += textContent;
             }
-            return { ...m, content: newContent };
+            return { ...m, content: newContent, seq: msg.seq || m.seq }; // ★ seqを更新
           }
           return m;
         }));
 
       } else if (msg.id !== undefined && msg.result === null) {
-        // ACPモードでは、sendUserMessage への応答 (result:null) がストリーム全体の完了を示す
-        // ★ 修正点: lastSentRequestId のチェックを外す
         console.log(`[DEBUG] Completion signal received (id: ${msg.id}). Finalizing active message.`);
 
-        // 関数型アップデートを使い、ref のタイミング問題を起こさずに activeMessage を確定させる
         setActiveMessage(prevActiveMessage => {
           if (prevActiveMessage && prevActiveMessage.type === 'assistant') {
             setMessages(p => {
               if (p.some(m => m.id === prevActiveMessage.id)) {
                 return p;
               }
-              const newMessages = [...p, { id: prevActiveMessage.id, ts: prevActiveMessage.ts, role: 'assistant', content: prevActiveMessage.content }];
-              newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+              const newMessages = [...p, { id: prevActiveMessage.id, ts: prevActiveMessage.ts, seq: prevActiveMessage.seq, role: 'assistant', content: prevActiveMessage.content }];
+              newMessages.sort(sortMessages);
               return newMessages;
             });
           }
-          // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
-          return null; // activeMessage をクリア
+          return null;
         });
 
         setIsGeneratingResponse(false);
       }
-    }); // subscribeの閉じ括弧
+    });
 
-    // クリーンアップ関数は、ws インスタンスが変更されたり、コンポーネントがアンマウントされたりする際に実行される
     return () => {
-      // ここでは ws.close() を直接呼ばない
-      // WebSocketProvider が接続のライフサイクルを管理するため
       console.log('Cleaning up useChat WebSocket listeners.');
-      unsubscribe(); // subscribeで返されたunsubscribe関数を呼び出す
+      unsubscribe();
     };
-  }, [ws, subscribe, activeMessage]); // wsとsubscribeを依存配列に追加
+  }, [ws, subscribe, activeMessage]);
 
   const sendMessage = useCallback((messageData: SendMessageData) => {
-    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) { // ws.current から ws に変更
+    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) {
       console.warn("WebSocket is not open or busy, cannot send message.");
       return;
     }
@@ -579,8 +558,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     const { text, files, goal, session } = messageData;
 
     const newMessage: Message = {
-        id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
+        id: `${Date.now()}-${Math.random().toString(36).substring(2)}`,
         ts: Date.now(),
+        // seq はサーバーで付与されるため、ここでは不要
         role: "user",
         content: text,
         files: files || [],
@@ -600,11 +580,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       method: 'sendUserMessage',
       params: { chunks: [{ text, files, goal, messageId: newMessage.id, session }] }
     };
-    sendWsMessage(req); // sendWsMessage を使用
-  }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+    sendWsMessage(req);
+  }, [ws, isGeneratingResponse, sendWsMessage]);
 
   const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
-    if (!ws) return; // ws.current から ws に変更
+    if (!ws) return;
 
     const req = {
       jsonrpc: '2.0',
@@ -612,20 +592,19 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       method: 'confirmToolCall',
       params: { toolCallId, result }
     };
-    sendWsMessage(req); // sendWsMessage を使用
+    sendWsMessage(req);
 
-    // 確認後はツールメッセージのステータスを更新
     setMessages(prev => prev.map(m => {
-      if (m.id === toolCallId) {
-        return { ...m, status: 'finished' }; // または 'confirmed' など、適切なステータスに更新
+      if (m.id === toolId) {
+        return { ...m, status: 'finished' };
       }
       return m;
     }));
 
-  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+  }, [ws, sendWsMessage]);
 
   const requestHistory = useCallback((isInitialLoad = false) => {
-    console.log('[useChat DEBUG] requestHistory called. isFetchingHistory:', historyState.current.isFetchingHistory, 'finished:', historyState.current.finished); // 追加
+    console.log('[useChat DEBUG] requestHistory called. isFetchingHistory:', historyState.current.isFetchingHistory, 'finished:', historyState.current.finished);
     if (historyState.current.isFetchingHistory || historyState.current.finished) return;
 
     historyState.current.isFetchingHistory = true;
@@ -634,7 +613,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     const limit = isInitialLoad ? 30 : 20;
 
     if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('[useChat DEBUG] Sending fetchHistory request with id:', id, 'limit:', limit, 'before:', historyState.current.oldestTs); // 追加
+      console.log('[useChat DEBUG] Sending fetchHistory request with id:', id, 'limit:', limit, 'before:', historyState.current.oldestTs);
       sendWsMessage({
         jsonrpc: '2.0',
         id,
@@ -645,10 +624,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       console.warn("WebSocket is not open, cannot fetch history.");
       historyState.current.isFetchingHistory = false;
     }
-  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+  }, [ws, sendWsMessage]);
 
   const cancelSendMessage = useCallback(() => {
-    if (!ws || !lastSentRequestId.current) return; // ws.current から ws に変更
+    if (!ws || !lastSentRequestId.current) return;
 
     const req = {
       jsonrpc: '20',
@@ -656,9 +635,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       method: 'cancelSendMessage',
       params: {}
     };
-    sendWsMessage(req); // sendWsMessage を使用
-    setIsGeneratingResponse(false); // UIを即座にリセット
-  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+    sendWsMessage(req);
+    setIsGeneratingResponse(false);
+  }, [ws, sendWsMessage]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -671,22 +650,21 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       isFetchingHistory: false,
       histReqId: 10000,
     };
-    // サーバーにもクリアを通知するWebSocketメッセージを送信
-    if (ws && ws.readyState === WebSocket.OPEN) { // ws.current から ws に変更
+    if (ws && ws.readyState === WebSocket.OPEN) {
       sendWsMessage({
         jsonrpc: '2.0',
         method: 'clearHistory',
         params: {}
       });
     }
-  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+  }, [ws, sendWsMessage]);
 
   useEffect(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('[useChat DEBUG] WebSocket is open. Requesting initial history.'); // 追加
+      console.log('[useChat DEBUG] WebSocket is open. Requesting initial history.');
       requestHistory(true);
     }
-  }, [ws, requestHistory]); // wsとrequestHistoryを依存配列に追加
+  }, [ws, requestHistory]);
 
   return {
     messages,
@@ -698,6 +676,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     cancelSendMessage,
     requestHistory,
     sendToolConfirmation,
-    clearMessages, // clearMessages をエクスポートに追加
+    clearMessages, 
   };
 }

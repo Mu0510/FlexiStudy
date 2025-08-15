@@ -15,6 +15,8 @@ const port = 3000;
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
+let messageSequence = 0;
+
 // --- Start of Gemini Process Logic (from old server.js) ---
 const GEMINI_ARGS = [
   '-m', 'gemini-2.5-flash',
@@ -29,7 +31,10 @@ let isRestartingGemini = false; // 新しいフラグ
 let currentAssistantId = null; // ★ 返信ごとに一意なIDを保持する変数
 
 function broadcast(wss, json){
+  // 連番を付与
+  json.seq = ++messageSequence;
   const str = JSON.stringify(json);
+  console.log(`[Broadcast] seq: ${json.seq}, method: ${json.method || 'N/A'}, id: ${json.id !== undefined ? json.id : 'N/A'}`);
   for (const ws of wss.clients) {
     if (ws.readyState === 1) { // WebSocket.OPEN
         ws.send(str);
