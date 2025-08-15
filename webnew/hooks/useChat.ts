@@ -174,6 +174,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                 newThoughtMode = false;
             }
 
+            // サーバーからのタイムスタンプがあれば、それで上書きする
+            if (chunk?.ts) {
+                currentTs = chunk.ts;
+            }
+
             return {
                 id: currentId,
                 ts: currentTs, // タイムスタンプを維持
