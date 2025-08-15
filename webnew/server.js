@@ -37,6 +37,15 @@ function broadcast(wss, json){
   }
 }
 
+function broadcastExcept(wss, sender, json) {
+  const str = JSON.stringify(json);
+  for (const ws of wss.clients) {
+    if (ws !== sender && ws.readyState === 1) { // WebSocket.OPEN
+      ws.send(str);
+    }
+  }
+}
+
 function _startNewGeminiProcess(wss) { // Pass wss to broadcast
   console.log(`[Gemini Process] Attempting to start new Gemini process... (Called from: ${new Error().stack.split('\n')[2].trim()})`);
   geminiProcess = spawn('sudo', ['-u', 'geminicli', 'gemini', ...GEMINI_ARGS], { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
@@ -342,9 +351,9 @@ app.prepare().then(() => {
             const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [], goal: goal || null, session: session || null };
             history.push(rec);
             
-            // Broadcast the new user message to all clients
-            console.log('[Server] Broadcasting addMessage:', JSON.stringify({ jsonrpc: '2.0', method: 'addMessage', params: { message: rec } }, null, 2));
-            broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
+            // Broadcast the new user message to other clients
+            console.log('[Server] Broadcasting addMessage to other clients:', JSON.stringify({ jsonrpc: '2.0', method: 'addMessage', params: { message: rec } }, null, 2));
+            broadcastExcept(wss, ws, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
 
             // Create the message for the AI
             let systemMessages = [];
