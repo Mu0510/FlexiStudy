@@ -158,16 +158,16 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                   return;
                 }
                 else if (msg.method === 'pushToolCall') {
+                    msg.ts = Date.now();
                     history.push({
                         ...msg,
-                        ts: msg.ts || Date.now(),
                         type: 'tool'
                     });
                 }
                 else if (msg.method === 'requestToolCallConfirmation') {
+                    msg.ts = Date.now();
                     history.push({
                         ...msg,
-                        ts: msg.ts || Date.now(),
                         type: 'tool'
                     });
 

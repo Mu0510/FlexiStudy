@@ -279,7 +279,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             // 新しいツールメッセージを追加
             newMessages.push({
               id: toolId,
-              ts: Date.now(),
+              ts: msg.ts || Date.now(),
               role: 'tool',
               type: 'tool',
               toolCallId: toolId,
@@ -343,7 +343,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             // 新しいツールメッセージを追加
             newMessages.push({
               id: toolId,
-              ts: Date.now(),
+              ts: msg.ts || Date.now(),
               role: 'tool',
               type: 'tool',
               toolCallId: toolId,
