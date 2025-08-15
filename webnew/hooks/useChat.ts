@@ -232,6 +232,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
           });
+        });
         onMessageReceived?.();
       } else if (msg.method === 'pushMessage') {
         setMessages(prev => {
