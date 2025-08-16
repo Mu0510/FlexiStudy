@@ -158,6 +158,8 @@ export function NewChatPanel({
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   // useChatフックの呼び出しを削除
   // const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
@@ -445,13 +447,22 @@ export function NewChatPanel({
       recognition.lang = 'ja-JP';
 
       recognition.onresult = (event) => {
-        let finalTranscript = '';
+        let interim = '';
+        let final = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
-            finalTranscript += event.results[i][0].transcript;
+            final += event.results[i][0].transcript;
+          } else {
+            interim += event.results[i][0].transcript;
           }
         }
-        setInput(prevInput => prevInput + finalTranscript);
+
+        setInterimTranscript(interim);
+
+        if (final) {
+          setInput(prevInput => prevInput ? prevInput + ' ' + final : prevInput + final);
+          setInterimTranscript(''); // Clear interim when final is received
+        }
       };
 
       recognition.onend = () => {
@@ -506,6 +517,7 @@ export function NewChatPanel({
       recognitionRef.current.stop();
       setIsRecording(false);
     } else {
+      setInterimTranscript(''); // Clear previous interim results
       try {
         recognitionRef.current.start();
         setIsRecording(true);
@@ -786,8 +798,14 @@ export function NewChatPanel({
 
               <Textarea
                 ref={chatInputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
+                value={input + interimTranscript}
+                onChange={(e) => {
+                  setInput(e.target.value)
+                  // Stop recognition if user types
+                  if (isRecording) {
+                    recognitionRef.current?.stop();
+                  }
+                }}
                 onKeyDown={handleKeyDown}
                 onPaste={handlePaste}
                 placeholder="システムと対話... (Alt+Enterで送信)"
