@@ -200,8 +200,6 @@ export function NewChatPanel({
     }
   }, [input]);
 
-  }, [input]);
-
   const handleSendMessage = useCallback(async () => {
     // If recording, stop it. The onend event will trigger the send.
     if (isRecording) {
