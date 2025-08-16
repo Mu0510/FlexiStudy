@@ -199,12 +199,20 @@ export function NewChatPanel({
   }, [input]);
 
   const handleSendMessage = async () => {
-    if (!input.trim() && selectedFiles.length === 0) return;
+    // Stop recording if it's active
+    if (isRecording) {
+      recognitionRef.current?.stop();
+    }
+
+    const messageToSend = (input + interimTranscript).trim();
+
+    if (!messageToSend && selectedFiles.length === 0) return;
 
     // /clear コマンドの処理
-    if (input.trim() === '/clear') {
+    if (messageToSend === '/clear') {
       clearMessages();
       setInput("");
+      setInterimTranscript("");
       setSelectedFiles([]);
       if (chatInputRef.current) {
         chatInputRef.current.focus();
@@ -293,13 +301,14 @@ export function NewChatPanel({
     }
 
     // Send message with text, file info, and goal info
-    if (input.trim() || uploadedFiles.length > 0 || selectedGoal || selectedSession) {
+    if (messageToSend || uploadedFiles.length > 0 || selectedGoal || selectedSession) {
       shouldScrollToBottomRef.current = true; // Force scroll to bottom on send
-      sendMessage({ text: input, files: uploadedFiles, goal: selectedGoal, session: selectedSession });
+      sendMessage({ text: messageToSend, files: uploadedFiles, goal: selectedGoal, session: selectedSession });
     }
 
     // Reset inputs
     setInput("");
+    setInterimTranscript("");
     setSelectedFiles([]);
     if (onClearSelectedGoal) {
       onClearSelectedGoal();
