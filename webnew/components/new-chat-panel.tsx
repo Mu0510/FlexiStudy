@@ -160,7 +160,6 @@ export function NewChatPanel({
   const [isRecording, setIsRecording] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
   // useChatフックの呼び出しを削除
   // const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
   //   onMessageReceived: () => {
