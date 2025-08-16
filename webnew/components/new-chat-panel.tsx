@@ -15,6 +15,7 @@ import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface FileInfo {
   name: string;
@@ -153,6 +154,7 @@ export function NewChatPanel({
   setSelectedFiles,
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
+  const isMobile = useIsMobile();
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -324,10 +326,16 @@ export function NewChatPanel({
     if (onClearSelectedSession) {
       onClearSelectedSession();
     }
+
     if (chatInputRef.current) {
-      chatInputRef.current.focus();
+      if (isMobile) {
+        chatInputRef.current.blur();
+      } else {
+        chatInputRef.current.focus();
+      }
     }
-  }, [isRecording, input, interimTranscript, selectedFiles, selectedGoal, selectedSession, clearMessages, sendMessage, setInput, setInterimTranscript, setSelectedFiles, onClearSelectedGoal, onClearSelectedSession]);
+    
+  }, [isRecording, input, interimTranscript, selectedFiles, selectedGoal, selectedSession, clearMessages, sendMessage, setInput, setInterimTranscript, setSelectedFiles, onClearSelectedGoal, onClearSelectedSession, isMobile]);
 
   const handleCancel = () => {
     // Cancel the AI response generation
