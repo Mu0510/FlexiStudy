@@ -157,6 +157,8 @@ export function NewChatPanel({
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   // useChatフックの呼び出しを削除
   // const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
   //   onMessageReceived: () => {
@@ -434,6 +436,47 @@ export function NewChatPanel({
     }
   }, [isOpen, isFloating]);
 
+  useEffect(() => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'ja-JP';
+
+      recognition.onresult = (event) => {
+        let finalTranscript = '';
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          }
+        }
+        setInput(prevInput => prevInput + finalTranscript);
+      };
+
+      recognition.onend = () => {
+        if (recognitionRef.current) {
+            setIsRecording(false);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech recognition error', event.error);
+        setIsRecording(false);
+      };
+      
+      recognitionRef.current = recognition;
+    }
+
+    return () => {
+        if (recognitionRef.current) {
+            recognitionRef.current.onend = null; // prevent onend from firing on unmount
+            recognitionRef.current.stop();
+            recognitionRef.current = null;
+        }
+    }
+  }, [setInput]);
+
 
   const panelVariants = {
     open: {
@@ -453,6 +496,22 @@ export function NewChatPanel({
       onMaximizeClick();
     } else if (setIsFullScreen) {
       setIsFullScreen(!isFullScreen);
+    }
+  };
+
+  const handleMicClick = () => {
+    if (!recognitionRef.current) return;
+
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsRecording(true);
+      } catch (error) {
+        console.error("Speech recognition could not start: ", error);
+      }
     }
   };
 
@@ -747,7 +806,16 @@ export function NewChatPanel({
                     </Button>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400" disabled={isGeneratingResponse || isUploading}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={cn(
+                      "w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400",
+                      isRecording && "bg-red-500/20 text-red-500 hover:bg-red-500/30 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
+                    )}
+                    disabled={isGeneratingResponse || isUploading}
+                    onClick={handleMicClick}
+                  >
                     <Mic className="w-5 h-5" />
                   </Button>
                   <Button
