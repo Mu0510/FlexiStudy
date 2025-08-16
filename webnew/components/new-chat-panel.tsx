@@ -846,7 +846,7 @@ export function NewChatPanel({
                   </Button>
                   <Button
                     onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
-                    disabled={!(isGeneratingResponse || isUploading) && !input.trim() && selectedFiles.length === 0}
+                    disabled={(isGeneratingResponse || isUploading) || (!input.trim() && !interimTranscript.trim() && selectedFiles.length === 0)}
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-full flex items-center justify-center"
                   >
                     {(isGeneratingResponse || isUploading) ? <Square className="w-2.5 h-2.5" fill="currentColor" /> : <ArrowUp className="w-4 h-4" strokeWidth={2.5} />}
