@@ -180,6 +180,8 @@ export function NewChatPanel({
   const uploadAbortControllerRef = useRef<AbortController | null>(null);
   const scrollAnchorRef = useRef<HTMLDivElement>(null); // Ref for the scroll anchor
   const shouldScrollToBottomRef = useRef(true); // 初回ロード時はスクロールしたいのでtrueに初期化
+  const shouldSendMessageOnEndRef = useRef(false);
+  const [needsToSend, setNeedsToSend] = useState(false);
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -198,12 +200,17 @@ export function NewChatPanel({
     }
   }, [input]);
 
-  const handleSendMessage = async () => {
-    // Stop recording if it's active
+  }, [input]);
+
+  const handleSendMessage = useCallback(async () => {
+    // If recording, stop it. The onend event will trigger the send.
     if (isRecording) {
+      shouldSendMessageOnEndRef.current = true;
       recognitionRef.current?.stop();
+      return;
     }
 
+    // If not recording, send immediately.
     const finalMessage = (input + interimTranscript).trim();
 
     // Clear inputs immediately
@@ -322,7 +329,7 @@ export function NewChatPanel({
     if (chatInputRef.current) {
       chatInputRef.current.focus();
     }
-  };
+  }, [isRecording, input, interimTranscript, selectedFiles, selectedGoal, selectedSession, clearMessages, sendMessage, setInput, setInterimTranscript, setSelectedFiles, onClearSelectedGoal, onClearSelectedSession]);
 
   const handleCancel = () => {
     // Cancel the AI response generation
@@ -449,6 +456,16 @@ export function NewChatPanel({
     }
   }, [isOpen, isFloating]);
 
+  // Effect to send message when triggered from recognition.onend
+  useEffect(() => {
+    if (needsToSend) {
+      // The regular handleSendMessage function will handle the logic
+      // for sending, as isRecording will be false.
+      handleSendMessage();
+      setNeedsToSend(false); // Reset the trigger
+    }
+  }, [needsToSend, handleSendMessage]);
+
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -477,8 +494,10 @@ export function NewChatPanel({
       };
 
       recognition.onend = () => {
-        if (recognitionRef.current) {
-            setIsRecording(false);
+        setIsRecording(false);
+        if (shouldSendMessageOnEndRef.current) {
+          shouldSendMessageOnEndRef.current = false;
+          setNeedsToSend(true); // Trigger the send effect
         }
       };
 
