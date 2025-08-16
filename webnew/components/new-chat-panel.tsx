@@ -198,7 +198,7 @@ export function NewChatPanel({
         textarea.style.overflowY = "hidden";
       }
     }
-  }, [input]);
+  }, [input, interimTranscript]);
 
   const handleSendMessage = useCallback(async () => {
     // If recording, stop it. The onend event will trigger the send.
