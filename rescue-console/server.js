@@ -2,7 +2,6 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const express = require('express');
-const WebSocket = require('ws');
 const pty = require('node-pty');
 const os = require('os');
 
@@ -16,12 +15,13 @@ const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
 app.prepare().then(() => {
   const server = express();
   const httpServer = createServer(server);
+  // express-wsの初期化
+  const expressWs = require('express-ws')(server, httpServer);
 
-  const wss = new WebSocket.Server({ server: httpServer, path: '/ws' });
-
-  wss.on('connection', (ws) => {
+  // WebSocketのエンドポイントを.ws()で設定
+  server.ws('/ws', (ws, req) => {
     console.log('WebSocket connected');
-    const terminals = new Map(); // この接続で開かれているターミナルを管理
+    const terminals = new Map();
 
     ws.on('message', (rawMessage) => {
       try {
@@ -49,12 +49,16 @@ app.prepare().then(() => {
             });
 
             ptyProcess.on('data', (output) => {
-              ws.send(JSON.stringify({ type: 'OUTPUT', tabId, data: output }));
+              if (ws.readyState === 1) { // OPEN
+                ws.send(JSON.stringify({ type: 'OUTPUT', tabId, data: output }));
+              }
             });
             
             ptyProcess.on('exit', ({ exitCode, signal }) => {
+              if (ws.readyState === 1) {
                 ws.send(JSON.stringify({ type: 'CLOSE', tabId, data: `Terminal exited with code ${exitCode}`}));
-                terminals.delete(tabId);
+              }
+              terminals.delete(tabId);
             });
 
             terminals.set(tabId, ptyProcess);
@@ -63,19 +67,13 @@ app.prepare().then(() => {
 
           case 'INPUT': {
             const ptyProcess = terminals.get(tabId);
-            if (ptyProcess) {
-              ptyProcess.write(data);
-            } else {
-              console.warn(`Terminal for tabId ${tabId} not found.`);
-            }
+            if (ptyProcess) ptyProcess.write(data);
             break;
           }
           
           case 'RESIZE': {
             const ptyProcess = terminals.get(tabId);
-            if (ptyProcess) {
-                ptyProcess.resize(data.cols, data.rows);
-            }
+            if (ptyProcess) ptyProcess.resize(data.cols, data.rows);
             break;
           }
 
@@ -88,35 +86,23 @@ app.prepare().then(() => {
             }
             break;
           }
-
-          default:
-            console.warn(`Unknown message type: ${type}`);
         }
       } catch (error) {
         console.error('Failed to handle WebSocket message:', error);
-        // 生の文字列データも一応処理する（後方互換性のため）
-        // この部分は最終的に削除しても良い
-        terminals.forEach(ptyProcess => ptyProcess.write(rawMessage));
       }
     });
 
     ws.on('close', () => {
       console.log('WebSocket disconnected');
-      // 接続が切れたら、関連するすべてのptyプロセスを終了
       terminals.forEach((ptyProcess, tabId) => {
         ptyProcess.kill();
         console.log(`Cleaned up terminal for tabId: ${tabId}`);
       });
       terminals.clear();
     });
-
-    ws.on('error', (err) => {
-      console.error('WebSocket error:', err);
-      terminals.forEach(ptyProcess => ptyProcess.kill());
-      terminals.clear();
-    });
   });
 
+  // Next.jsのリクエストを処理
   server.all('*', (req, res) => {
     const parsedUrl = parse(req.url, true);
     handle(req, res, parsedUrl);
