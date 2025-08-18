@@ -6,9 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Terminal as TerminalIcon, Wifi, WifiOff, GitBranch, Database, RefreshCw, Plus, Minus, X, Square, Copy } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
+// xterm関連のimportを削除
 
 // --- Interfaces ---
 interface TerminalTab {
@@ -56,7 +54,7 @@ export default function RescueConsole() {
   
   // --- Refs ---
   const ws = useRef<WebSocket | null>(null);
-  const xtermInstances = useRef<Map<string, {term: Terminal, fitAddon: FitAddon}>>(new Map());
+  const xtermInstances = useRef<Map<string, {term: any, fitAddon: any}>>(new Map()); // Use any for dynamic import types
   const terminalContainerRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
   const animationFrameRef = useRef<number>()
 
@@ -84,7 +82,6 @@ export default function RescueConsole() {
             if (type === 'OUTPUT') {
                 terminalInfo.term.write(data);
             } else if (type === 'CLOSE') {
-                // Handle server-side close
                 closeTab(windows.find(w => w.tabs.some(t => t.id === tabId))!.id, tabId, true);
             }
           }
@@ -113,11 +110,15 @@ export default function RescueConsole() {
     return () => {
       ws.current?.close();
     }
-  }, []); // Empty dependency array ensures this runs only once
+  }, []);
 
   // --- Terminal Management ---
-  const terminalRefCallback = useCallback((el: HTMLDivElement | null, tabId: string) => {
+  const terminalRefCallback = useCallback(async (el: HTMLDivElement | null, tabId: string) => {
     if (el && !xtermInstances.current.has(tabId)) {
+        const { Terminal } = await import('xterm');
+        const { FitAddon } = await import('xterm-addon-fit');
+        await import('xterm/css/xterm.css');
+
         terminalContainerRefs.current.set(tabId, el);
 
         const term = new Terminal({
@@ -218,7 +219,6 @@ export default function RescueConsole() {
   };
   
   const closeTab = (windowId: string, tabId: string, fromServer = false) => {
-    // Clean up xterm instance
     const termInfo = xtermInstances.current.get(tabId);
     if (termInfo) {
         termInfo.term.dispose();
@@ -226,16 +226,14 @@ export default function RescueConsole() {
         terminalContainerRefs.current.delete(tabId);
     }
 
-    // Send close message to server if not initiated by server
     if (!fromServer && ws.current?.readyState === WebSocket.OPEN) {
         ws.current.send(JSON.stringify({ type: 'CLOSE', tabId }));
     }
 
-    // Update React state
     setWindows(prev => prev.map(w => {
         if (w.id === windowId) {
             const newTabs = w.tabs.filter(t => t.id !== tabId);
-            if (newTabs.length === 0) return null; // Window will be removed
+            if (newTabs.length === 0) return null;
             
             let newActiveTabId = w.activeTabId;
             if (w.activeTabId === tabId) {
@@ -274,7 +272,6 @@ export default function RescueConsole() {
     )
   };
 
-  // --- UI Handlers (Drag, Resize, etc.) ---
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, windowId: string, action: "drag" | "resize", handle?: string) => {
       e.preventDefault()
@@ -343,7 +340,6 @@ export default function RescueConsole() {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
       setDragState({ isDragging: false, isResizing: false, dragStart: { x: 0, y: 0 }, windowStart: { x: 0, y: 0, width: 0, height: 0 }, resizeHandle: null })
       
-      // Fit addon on resize end
       if(dragState.isResizing) {
         const activeWindow = windows.find(w => w.zIndex === maxZIndex);
         if(activeWindow) {
@@ -377,33 +373,31 @@ export default function RescueConsole() {
     setWindows((prev) =>
       prev.map((window) => (window.id === windowId ? { ...window, isMaximized: !window.isMaximized } : window)),
     )
-    // Fit addon on maximize
     setTimeout(() => {
         const activeWindow = windows.find(w => w.id === windowId);
         if(activeWindow) {
-            const termInfo = xtermInstances.current.get(activeWindow.activeTabId);
-            try {
-                termInfo?.fitAddon.fit();
-            } catch(e) { console.error(e); }
+            activeWindow.tabs.forEach(t => {
+                const termInfo = xtermInstances.current.get(t.id);
+                try {
+                    termInfo?.fitAddon.fit();
+                } catch(e) { console.error(e); }
+            })
         }
-    }, 250); // after transition
+    }, 250);
   }
 
   const toggleMinimize = (windowId: string) => setWindows((prev) => prev.map((window) => (window.id === windowId ? { ...window, isMinimized: !window.isMinimized } : window)))
   const restoreWindow = (windowId: string) => setWindows((prev) => prev.map((window) => (window.id === windowId ? { ...window, isMinimized: false } : window)))
   
-  // --- Render ---
   const visibleWindows = windows.filter((window) => !window.isMinimized)
   const minimizedWindows = windows.filter((window) => window.isMinimized)
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
       <Card className="rounded-none border-x-0 border-t-0 shadow-sm bg-primary text-primary-foreground z-[100]">
-        {/* Header content from v0 */}
+        {/* Header content... */}
       </Card>
 
-      {/* Main Content */}
       <div className="flex-1 relative overflow-hidden">
         {visibleWindows.length === 0 && (
           <div className="h-full flex items-center justify-center">
@@ -424,17 +418,20 @@ export default function RescueConsole() {
             className={cn("shadow-lg border transition-all duration-200 rounded-lg overflow-hidden select-none bg-white flex flex-col", window.isMaximized ? "fixed inset-0 z-50 rounded-none" : "absolute")}
             style={window.isMaximized ? { top: '45px', bottom: "28px" } : { left: window.position.x, top: window.position.y, width: window.size.width, height: window.size.height, zIndex: window.zIndex }}
           >
-            {/* Resizers */}
             {!window.isMaximized && (
               <>
                 <div className="absolute top-0 left-0 w-2 h-2 cursor-nw-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "nw")} />
-                {/* ... other resizers */}
+                <div className="absolute top-0 right-0 w-2 h-2 cursor-ne-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "ne")} />
+                <div className="absolute bottom-0 left-0 w-2 h-2 cursor-sw-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "sw")} />
+                <div className="absolute bottom-0 right-0 w-2 h-2 cursor-se-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "se")} />
+                <div className="absolute top-2 left-2 right-2 h-1 cursor-n-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "n")} />
+                <div className="absolute bottom-2 left-2 right-2 h-1 cursor-s-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "s")} />
+                <div className="absolute top-2 bottom-2 left-0 w-1 cursor-w-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "w")} />
+                <div className="absolute top-2 bottom-2 right-0 w-1 cursor-e-resize" onMouseDown={(e) => handleMouseDown(e, window.id, "resize", "e")} />
               </>
             )}
             
-            {/* Window Header */}
             <div className="flex items-stretch bg-white border-b cursor-move h-8 relative" onMouseDown={(e) => { if (!(e.target as HTMLElement).closest(".no-drag")) { handleMouseDown(e, window.id, "drag") } }}>
-                {/* Tabs */}
                 <div className="flex items-center flex-1">
                     {window.tabs.map((tab) => (
                       <button key={tab.id} onClick={() => switchTab(window.id, tab.id)} className={cn("px-3 py-1.5 text-sm flex items-center gap-2 group h-8 relative border-r no-drag", tab.isActive ? "bg-gray-50" : "hover:bg-gray-50")}>
@@ -444,7 +441,6 @@ export default function RescueConsole() {
                     ))}
                     <button onClick={() => createNewTab(window.id)} className="px-2 py-1.5 h-8 hover:bg-gray-100 flex items-center justify-center no-drag"><Plus className="h-3.5 w-3.5" /></button>
                 </div>
-                {/* Window Controls */}
                 <div className="flex items-center no-drag">
                     <button onClick={() => toggleMinimize(window.id)} className="h-8 w-12 flex items-center justify-center hover:bg-gray-100"><Minus className="h-4 w-4" /></button>
                     <button onClick={() => toggleMaximize(window.id)} className="h-8 w-12 flex items-center justify-center hover:bg-gray-100"><Square className="h-3 w-3" /></button>
@@ -452,7 +448,6 @@ export default function RescueConsole() {
                 </div>
             </div>
 
-            {/* Terminal Area */}
             <div className="flex-1 overflow-hidden p-1 bg-gray-50">
                 {window.tabs.map(tab => (
                     <div key={tab.id} className="h-full w-full" style={{ display: tab.isActive ? 'block' : 'none' }}>
@@ -464,9 +459,8 @@ export default function RescueConsole() {
         ))}
       </div>
 
-      {/* Footer */}
       <div className="px-4 py-1 border-t bg-muted/20 h-7 flex items-center z-[100]">
-        {/* Footer content from v0 */}
+        {/* Footer content... */}
       </div>
     </div>
   )
