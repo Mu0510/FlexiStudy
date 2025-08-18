@@ -373,3 +373,12 @@ study_log_20250814_160559_109853.db: Undo operation
 study_log_20250814_160738_737336.db: Before adding a goal to a specific date.
 study_log_20250814_161656_164590.db: Before updating goal by global ID.
 study_log_20250814_223800_344003.db: Before ending session.
+study_log_20250817_221522_277982.db: Before adding a goal to a specific date.
+study_log_20250817_221534_966439.db: Daily auto backup before first study session.
+study_log_20250817_221534_966954.db: Before start session.
+study_log_20250817_221555_994633.db: Before break session.
+study_log_20250817_222133_021868.db: For Redo
+study_log_20250817_221555_994633.db: Undo operation
+study_log_20250817_222141_713006.db: For Redo
+study_log_20250817_221534_966954.db: Undo operation
+study_log_20250817_223903_527842.db: Before deleting goal by global ID.
