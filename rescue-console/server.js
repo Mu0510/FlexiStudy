@@ -1,7 +1,7 @@
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
-const express = require('express');
+const { WebSocketServer } = require('ws');
 const pty = require('node-pty');
 const os = require('os');
 
@@ -13,102 +13,84 @@ const port = 3001;
 const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
 
 app.prepare().then(() => {
-  const server = express();
-  const httpServer = createServer(server);
-  // express-wsの初期化
-  const expressWs = require('express-ws')(server, httpServer);
+  const server = createServer((req, res) => {
+    try {
+      const parsedUrl = parse(req.url, true);
+      handle(req, res, parsedUrl);
+    } catch (err) {
+      console.error('Error handling request:', err);
+      res.statusCode = 500;
+      res.end('internal server error');
+    }
+  });
 
-  // WebSocketのエンドポイントを.ws()で設定
-  server.ws('/ws', (ws, req) => {
+  const wss = new WebSocketServer({ noServer: true });
+
+  server.on('upgrade', (request, socket, head) => {
+    const { pathname } = parse(request.url);
+
+    if (pathname === '/ws') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
+  wss.on('connection', (ws) => {
     console.log('WebSocket connected');
     const terminals = new Map();
 
     ws.on('message', (rawMessage) => {
-      try {
-        const message = JSON.parse(rawMessage);
-        const { type, tabId, data } = message;
+        try {
+            const message = JSON.parse(rawMessage.toString());
+            const { type, tabId, data } = message;
 
-        if (!tabId) {
-          console.error('Message without tabId received:', message);
-          return;
-        }
+            if (!tabId) return;
 
-        switch (type) {
-          case 'CREATE': {
-            if (terminals.has(tabId)) {
-              console.warn(`Terminal for tabId ${tabId} already exists.`);
-              return;
+            switch (type) {
+                case 'CREATE':
+                    const ptyProcess = pty.spawn(shell, [], {
+                        name: 'xterm-color',
+                        cols: data.cols || 80,
+                        rows: data.rows || 30,
+                        cwd: process.env.HOME,
+                        env: process.env,
+                    });
+                    ptyProcess.on('data', (output) => {
+                        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'OUTPUT', tabId, data: output }));
+                    });
+                    ptyProcess.on('exit', ({ exitCode }) => {
+                        if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'CLOSE', tabId }));
+                        terminals.delete(tabId);
+                    });
+                    terminals.set(tabId, ptyProcess);
+                    break;
+                case 'INPUT':
+                    terminals.get(tabId)?.write(data);
+                    break;
+                case 'RESIZE':
+                    terminals.get(tabId)?.resize(data.cols, data.rows);
+                    break;
+                case 'CLOSE':
+                    terminals.get(tabId)?.kill();
+                    terminals.delete(tabId);
+                    break;
             }
-            console.log(`Creating terminal for tabId: ${tabId}`);
-            const ptyProcess = pty.spawn(shell, [], {
-              name: 'xterm-color',
-              cols: data.cols || 80,
-              rows: data.rows || 30,
-              cwd: process.env.HOME,
-              env: process.env,
-            });
-
-            ptyProcess.on('data', (output) => {
-              if (ws.readyState === 1) { // OPEN
-                ws.send(JSON.stringify({ type: 'OUTPUT', tabId, data: output }));
-              }
-            });
-            
-            ptyProcess.on('exit', ({ exitCode, signal }) => {
-              if (ws.readyState === 1) {
-                ws.send(JSON.stringify({ type: 'CLOSE', tabId, data: `Terminal exited with code ${exitCode}`}));
-              }
-              terminals.delete(tabId);
-            });
-
-            terminals.set(tabId, ptyProcess);
-            break;
-          }
-
-          case 'INPUT': {
-            const ptyProcess = terminals.get(tabId);
-            if (ptyProcess) ptyProcess.write(data);
-            break;
-          }
-          
-          case 'RESIZE': {
-            const ptyProcess = terminals.get(tabId);
-            if (ptyProcess) ptyProcess.resize(data.cols, data.rows);
-            break;
-          }
-
-          case 'CLOSE': {
-            const ptyProcess = terminals.get(tabId);
-            if (ptyProcess) {
-              ptyProcess.kill();
-              terminals.delete(tabId);
-              console.log(`Closed terminal for tabId: ${tabId}`);
-            }
-            break;
-          }
+        } catch (e) {
+            console.error("Error parsing message:", e);
         }
-      } catch (error) {
-        console.error('Failed to handle WebSocket message:', error);
-      }
     });
 
     ws.on('close', () => {
-      console.log('WebSocket disconnected');
-      terminals.forEach((ptyProcess, tabId) => {
-        ptyProcess.kill();
-        console.log(`Cleaned up terminal for tabId: ${tabId}`);
-      });
-      terminals.clear();
+        console.log('WebSocket disconnected');
+        terminals.forEach(p => p.kill());
+        terminals.clear();
     });
   });
 
-  // Next.jsのリクエストを処理
-  server.all('*', (req, res) => {
-    const parsedUrl = parse(req.url, true);
-    handle(req, res, parsedUrl);
-  });
-
-  httpServer.listen(port, (err) => {
+  server.listen(port, (err) => {
     if (err) throw err;
     console.log(`> Ready on http://localhost:${port}`);
   });
