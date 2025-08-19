@@ -22,7 +22,7 @@ export function makeNewWindow(opts?: Partial<TerminalWindowModel>): TerminalWind
   return {
     id, title: "Rescue Console",
     x: opts?.x ?? 80, y: opts?.y ?? 36,
-    w: opts?.w ?? 960, h: opts?.h ?? 560,
+    w: opts?.w ?? 860, h: opts?.h ?? 520,
     z: opts?.z ?? 10,
     minimized: false, maximized: false,
     tabs: [{ id: tabId, title: "メイン" }],
@@ -48,9 +48,14 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
   const termHostRef = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
   const fitAddon = useRef<FitAddon | null>(null);
+  const resizeRef = useRef<null | {
+    mode: 'e'|'s'|'se';
+    baseX: number; baseY: number;
+    baseW: number; baseH: number;
+  }>(null);
+  const MIN_W = 640, MIN_H = 360;
 
   const [dragging, setDragging] = useState(false);
-  const [resizing, setResizing] = useState<null | "se" | "e" | "s">(null);
 
   /* xterm: ライトテーマ */
   useEffect(() => {
@@ -62,22 +67,79 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
       allowTransparency: true,
       theme: { background: TERM_BG, foreground: "#222", selection: "#cde3ffaa", cursor: "#555", cursorAccent: TERM_BG },
     });
-    t.open(termHostRef.current);
 
     const fa = new FitAddon();
     t.loadAddon(fa);
-    fitAddon.current = fa;
-    // レイアウトが落ち着いた後にフィット（2フレーム後）
-    requestAnimationFrame(() => requestAnimationFrame(() => fitAddon.current?.fit()));
-
-    t.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
-    t.write("$ ");
-
-    const ro = new ResizeObserver(() => requestAnimationFrame(() => fitAddon.current?.fit()));
-    ro.observe(termHostRef.current);
-
     term.current = t;
-    return () => { ro.disconnect(); t.dispose(); term.current = null; fitAddon.current = null; };
+    fitAddon.current = fa;
+
+    // すぐ open せず、寸法が出るまで待つ
+    let raf = 0;
+    const waitAndOpen = () => {
+      const host = termHostRef.current;
+      if (!host) return;
+      const w = host.clientWidth, h = host.clientHeight;
+      if (host.isConnected && w > 0 && h > 0) {
+        t.open(host);
+        
+        t.writeln("x1b[1mRescue Console v2x1b[0m へようこそ。");
+        t.write("$ ");
+
+        let command = '';
+        t.onData(e => {
+          switch (e) {
+            case '\r': // Enter
+              if (command) {
+                t.write('\r\n');
+                fetch('/api/command', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ command }),
+                })
+                .then(res => res.json())
+                .then(data => {
+                  const output = (data.stdout || '') + (data.stderr || '') + (data.error || '');
+                  t.write(output.replace(/\n/g, '\r\n'));
+                  t.write('\r\n$ ');
+                })
+                .catch(err => {
+                  t.write('\r\n\x1b[31mError:\x1b[0m ' + err.message);
+                  t.write('\r\n$ ');
+                });
+                command = '';
+              } else {
+                t.write('\r\n$ ');
+              }
+              break;
+            case '\u007f': // Backspace
+              if (command.length > 0) {
+                t.write('\b \b');
+                command = command.slice(0, -1);
+              }
+              break;
+            default:
+              if (e >= String.fromCharCode(0x20) && e <= String.fromCharCode(0x7e) || e >= '\u00a0') {
+                command += e;
+                t.write(e);
+              }
+          }
+        });
+
+        // レイアウトが安定してから fit（2フレーム遅延）
+        requestAnimationFrame(() => requestAnimationFrame(() => fa.fit()));
+        // 以降は ResizeObserver で fit
+        const ro = new ResizeObserver(() => requestAnimationFrame(() => fa.fit()));
+        ro.observe(host);
+        // クリーンアップ
+        cleanup = () => { ro.disconnect(); t.dispose(); term.current = null; fitAddon.current = null; };
+        return;
+      }
+      raf = requestAnimationFrame(waitAndOpen);
+    };
+    let cleanup = () => {};
+    raf = requestAnimationFrame(waitAndOpen);
+
+    return () => { cancelAnimationFrame(raf); cleanup(); };
   }, []);
 
   /* Z順 */
@@ -122,55 +184,33 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
     return () => el.removeEventListener("pointerdown", down);
   }, [model.x, model.y, model.maximized, model.minimized, onChange]);
 
-  /* リサイズ（右/下/右下） */
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    let sx = 0, sy = 0, sw = 0, sh = 0, raf = 0;
-
-    const start = (dir: "se" | "e" | "s") => (e: PointerEvent) => {
-      if (model.maximized || model.minimized) return;
-      setResizing(dir);
-      sx = e.clientX; sy = e.clientY; sw = model.w; sh = model.h;
-
-      const move = (e: PointerEvent) => {
-        cancelAnimationFrame(raf);
-        raf = requestAnimationFrame(() => {
-          let nw = sw, nh = sh;
-          if (dir === "e" || dir === "se") nw = sw + (e.clientX - sx);
-          if (dir === "s" || dir === "se") nh = sh + (e.clientY - sy);
-          root.style.width  = nw + "px";
-          root.style.height = nh + "px";
-        });
-      };
-      const up = (e: PointerEvent) => {
-        setResizing(null);
-        cancelAnimationFrame(raf);
-        window.removeEventListener("pointermove", move);
-        window.removeEventListener("pointerup", up);
-        let nw = sw, nh = sh;
-        if (resizing === "e" || resizing === "se") nw = sw + (e.clientX - sx);
-        if (resizing === "s" || resizing === "se") nh = sh + (e.clientY - sy);
-        onChange({ w: nw, h: nh });
-        requestAnimationFrame(() => fitAddon.current?.fit());
-      };
-
-      window.addEventListener("pointermove", move);
-      window.addEventListener("pointerup", up, { once: true });
+  function startResizeListeners() {
+    const onMove = (e: PointerEvent) => {
+      const rs = resizeRef.current; if (!rs) return;
+      let w = rs.baseW, h = rs.baseH;
+      if (rs.mode === 'e' || rs.mode === 'se') w = Math.max(MIN_W, rs.baseW + (e.clientX - rs.baseX));
+      if (rs.mode === 's' || rs.mode === 'se') h = Math.max(MIN_H, rs.baseH + (e.clientY - rs.baseY));
+      // 反映は style 直書き（描画滑らか）→ pointerup で state 反映
+      if (rootRef.current) {
+        rootRef.current.style.width  = w + 'px';
+        rootRef.current.style.height = h + 'px';
+      }
     };
-
-    const eHandle  = root.querySelector(".resize-e")  as HTMLElement;
-    const sHandle  = root.querySelector(".resize-s")  as HTMLElement;
-    const seHandle = root.querySelector(".resize-se") as HTMLElement;
-    eHandle?.addEventListener("pointerdown", start("e"));
-    sHandle?.addEventListener("pointerdown", start("s"));
-    seHandle?.addEventListener("pointerdown", start("se"));
-    return () => {
-      eHandle?.removeEventListener("pointerdown", start("e"));
-      sHandle?.removeEventListener("pointerdown", start("s"));
-      seHandle?.removeEventListener("pointerdown", start("se"));
+    const onUp = (e: PointerEvent) => {
+      const rs = resizeRef.current; if (!rs) return;
+      resizeRef.current = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      // 最終値をcommit
+      const dx = e.clientX - rs.baseX;
+      const dy = e.clientY - rs.baseY;
+      const w = Math.max(MIN_W, rs.baseW + (rs.mode !== 's' ? dx : 0));
+      const h = Math.max(MIN_H, rs.baseH + (rs.mode !== 'e' ? dy : 0));
+      onChange({ w, h });
     };
-  }, [model.w, model.h, model.maximized, model.minimized, resizing, onChange]);
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  }
 
   /* ヘッダーボタン（−／□／×） */
   const minimize = () => onChange({ minimized: true });
@@ -292,9 +332,32 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
         <div ref={termHostRef} className="absolute inset-0" style={{ background: TERM_BG }} />
         {!isMax && (
           <>
-            <div className="resize-e  absolute right-0  top-0    h-full w-1.5 cursor-ew-resize bg-transparent" />
-            <div className="resize-s  absolute left-0   bottom-0 h-1.5 w-full cursor-ns-resize bg-transparent" />
-            <div className="resize-se absolute right-0  bottom-0 h-3   w-3   cursor-nwse-resize bg-transparent" />
+            <div
+              className="resize-e absolute right-0 top-0 h-full w-1.5 cursor-ew-resize"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                resizeRef.current = { mode:'e', baseX:e.clientX, baseY:e.clientY, baseW:model.w, baseH:model.h };
+                startResizeListeners();
+              }}
+            />
+            {/* 下（S） */}
+            <div
+              className="resize-s absolute left-0 bottom-0 h-1.5 w-full cursor-ns-resize"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                resizeRef.current = { mode:'s', baseX:e.clientX, baseY:e.clientY, baseW:model.w, baseH:model.h };
+                startResizeListeners();
+              }}
+            />
+            {/* 右下（SE） */}
+            <div
+              className="resize-se absolute right-0 bottom-0 h-3 w-3 cursor-nwse-resize"
+              onPointerDown={(e) => {
+                e.preventDefault();
+                resizeRef.current = { mode:'se', baseX:e.clientX, baseY:e.clientY, baseW:model.w, baseH:model.h };
+                startResizeListeners();
+              }}
+            />
           </>
         )}
       </div>
