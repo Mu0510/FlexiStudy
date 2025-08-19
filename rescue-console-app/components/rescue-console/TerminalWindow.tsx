@@ -73,6 +73,28 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
     term.current = t;
     fitAddon.current = fa;
 
+    const ws = new WebSocket('ws://localhost:3001');
+    
+    ws.onopen = () => {
+      t.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
+    };
+
+    ws.onmessage = (event) => {
+      t.write(event.data);
+    };
+
+    ws.onerror = (event) => {
+      t.writeln(`\r\n\x1b[31mWebSocket Error:\x1b[0m ${event.type}`);
+    };
+
+    ws.onclose = () => {
+      t.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
+    };
+
+    t.onData((data) => {
+      ws.send(data);
+    });
+
     // すぐ open せず、寸法が出るまで待つ
     let raf = 0;
     const waitAndOpen = () => {
@@ -82,56 +104,13 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
       if (host.isConnected && w > 0 && h > 0) {
         t.open(host);
         
-        t.writeln("x1b[1mRescue Console v2x1b[0m へようこそ。");
-        t.write("$ ");
-
-        let command = '';
-        t.onData(e => {
-          switch (e) {
-            case '\r': // Enter
-              if (command) {
-                t.write('\r\n');
-                fetch('/api/command', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ command }),
-                })
-                .then(res => res.json())
-                .then(data => {
-                  const output = (data.stdout || '') + (data.stderr || '') + (data.error || '');
-                  t.write(output.replace(/\n/g, '\r\n'));
-                  t.write('\r\n$ ');
-                })
-                .catch(err => {
-                  t.write('\r\n\x1b[31mError:\x1b[0m ' + err.message);
-                  t.write('\r\n$ ');
-                });
-                command = '';
-              } else {
-                t.write('\r\n$ ');
-              }
-              break;
-            case '\u007f': // Backspace
-              if (command.length > 0) {
-                t.write('\b \b');
-                command = command.slice(0, -1);
-              }
-              break;
-            default:
-              if (e >= String.fromCharCode(0x20) && e <= String.fromCharCode(0x7e) || e >= '\u00a0') {
-                command += e;
-                t.write(e);
-              }
-          }
-        });
-
         // レイアウトが安定してから fit（2フレーム遅延）
         requestAnimationFrame(() => requestAnimationFrame(() => fa.fit()));
         // 以降は ResizeObserver で fit
         const ro = new ResizeObserver(() => requestAnimationFrame(() => fa.fit()));
         ro.observe(host);
         // クリーンアップ
-        cleanup = () => { ro.disconnect(); t.dispose(); term.current = null; fitAddon.current = null; };
+        cleanup = () => { ro.disconnect(); t.dispose(); term.current = null; fitAddon.current = null; ws.close(); };
         return;
       }
       raf = requestAnimationFrame(waitAndOpen);
