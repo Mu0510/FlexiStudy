@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { Terminal } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
+import { AttachAddon } from "xterm-addon-attach";
 import "xterm/css/xterm.css";
 
 export type TerminalWindowModel = {
@@ -59,66 +60,69 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
 
   /* xterm: ライトテーマ */
   useEffect(() => {
-    if (!termHostRef.current || term.current) return;
-    const t = new Terminal({
-      convertEol: true,
-      fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-      fontSize: 13,
-      allowTransparency: true,
-      theme: { background: TERM_BG, foreground: "#222", selection: "#cde3ffaa", cursor: "#555", cursorAccent: TERM_BG },
+    if (!termHostRef.current) return;
+
+    // StrictModeでアンマウントされてもいいように、インスタンスはrefに保持
+    // 2回目のマウントでは、初期化済みのインスタンスを再利用する
+    if (!term.current) {
+      console.log("Initializing terminal for the first time...");
+      const t = new Terminal({
+        convertEol: true,
+        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        fontSize: 13,
+        allowTransparency: true,
+        theme: { background: TERM_BG, foreground: "#222", selection: "#cde3ffaa", cursor: "#555", cursorAccent: TERM_BG },
+      });
+      const fa = new FitAddon();
+      const ws = new WebSocket(`ws://${window.location.hostname}:3001`);
+      const attachAddon = new AttachAddon(ws);
+
+      t.loadAddon(fa);
+      t.loadAddon(attachAddon);
+
+      ws.onopen = () => t.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
+      ws.onerror = (e) => t.writeln(`\r\n\x1b[31mWebSocket Error: ${e.type}\x1b[0m`);
+      ws.onclose = () => t.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
+
+      term.current = t;
+      fitAddon.current = fa;
+    }
+
+    const host = termHostRef.current;
+    const t = term.current;
+    const fa = fitAddon.current!;
+
+    // ターミナルがまだDOMにアタッチされていない場合、ResizeObserverで待機
+    if (!t.element) {
+      const observer = new ResizeObserver(([entry]) => {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          console.log("Terminal host is ready, opening terminal.");
+          observer.disconnect(); // 一度きりのため、すぐに監視解除
+          t.open(host);
+          t.focus();
+          fa.fit();
+        }
+      });
+      observer.observe(host);
+
+      return () => {
+        console.log("Cleaning up initial observer.");
+        observer.disconnect();
+      };
+    }
+
+    // ウィンドウリサイズ時の追従
+    const windowResizeObserver = new ResizeObserver(() => {
+      requestAnimationFrame(() => fa.fit());
     });
+    windowResizeObserver.observe(host);
 
-    const fa = new FitAddon();
-    t.loadAddon(fa);
-    term.current = t;
-    fitAddon.current = fa;
-
-    const ws = new WebSocket(`ws://${window.location.hostname}:3001`);
-    
-    ws.onopen = () => {
-      t.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
+    return () => {
+      console.log("TerminalWindow unmounted, cleaning up.");
+      windowResizeObserver.disconnect();
+      // term.current と fitAddon.current は StrictMode の再マウント時に再利用するため、ここでは破棄しない
+      // 実際のコンポーネント破棄時のクリーンアップは、Reactが適切に行う
     };
-
-    ws.onmessage = (event) => {
-      t.write(event.data);
-    };
-
-    ws.onerror = (event) => {
-      t.writeln(`\r\n\x1b[31mWebSocket Error:\x1b[0m ${event.type}`);
-    };
-
-    ws.onclose = () => {
-      t.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
-    };
-
-    t.onData((data) => {
-      ws.send(data);
-    });
-
-    // すぐ open せず、寸法が出るまで待つ
-    let raf = 0;
-    const waitAndOpen = () => {
-      const host = termHostRef.current;
-      if (!host) return;
-      const w = host.clientWidth, h = host.clientHeight;
-      if (host.isConnected && w > 0 && h > 0) {
-        t.open(host);
-        
-        // レイアウトが安定してから fit（2フレーム遅延）
-        requestAnimationFrame(() => requestAnimationFrame(() => fa.fit()));
-        // 以降は ResizeObserver で fit
-        const ro = new ResizeObserver(() => requestAnimationFrame(() => fa.fit()));
-        ro.observe(host);
-        // クリーンアップ
-        cleanup = () => { ro.disconnect(); t.dispose(); term.current = null; fitAddon.current = null; ws.close(); };
-        return;
-      }
-      raf = requestAnimationFrame(waitAndOpen);
-    };
-    let cleanup = () => {};
-    raf = requestAnimationFrame(waitAndOpen);
-
-    return () => { cancelAnimationFrame(raf); cleanup(); };
   }, []);
 
   /* Z順 */

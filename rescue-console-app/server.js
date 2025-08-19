@@ -26,11 +26,13 @@ wss.on('connection', (ws) => {
 
   // xterm.js -> pty
   ws.on('message', (message) => {
+    
     ptyProcess.write(message);
   });
 
   // pty -> xterm.js
   ptyProcess.on('data', (data) => {
+    
     ws.send(data);
   });
 
