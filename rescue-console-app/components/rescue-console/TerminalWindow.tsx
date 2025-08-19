@@ -73,7 +73,7 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
     term.current = t;
     fitAddon.current = fa;
 
-    const ws = new WebSocket('ws://localhost:3001');
+    const ws = new WebSocket(`ws://${window.location.hostname}:3001`);
     
     ws.onopen = () => {
       t.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
