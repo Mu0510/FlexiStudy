@@ -1,10 +1,10 @@
-"use client";
-
+'use client';
 import React, { useMemo, useState } from "react";
-import { Dot } from "lucide-react";
 import { AppChrome } from "./AppChrome";
 import { TerminalWindow, makeNewWindow, TerminalWindowModel } from "./TerminalWindow";
+import { Dot } from 'lucide-react';
 
+type PanelState = null | { kind:'git'|'backup'|'restore'; view?:string };
 type ConnStatus = "connected" | "connecting" | "disconnected";
 
 export default function RescueConsoleApp() {
@@ -13,6 +13,7 @@ export default function RescueConsoleApp() {
   ]);
   const [zCounter, setZ] = useState(10);
   const [status, setStatus] = useState<ConnStatus>("connected"); // ← 実装側でWSに連動
+  const [panel, setPanel] = useState<PanelState>(null);
 
   const minimized = useMemo(() => windows.filter(w => w.minimized), [windows]);
   const maxZ = useMemo(
@@ -40,6 +41,7 @@ export default function RescueConsoleApp() {
   return (
     <AppChrome
       onNewWindow={newWindow}
+      onOpenPanel={(k, view) => setPanel({ kind:k, view })}
       footerLeft={
         <>
           {minimized.map(m => (
@@ -69,30 +71,135 @@ export default function RescueConsoleApp() {
         </>
       }
     >
-      {/* デスクトップ面（ヘッダー/フッターの間で絶対配置） */}
+      {/* デスクトップ面 */}
       <div className="absolute inset-0 select-none">
-        {windows.length === 0 && (
-          <div className="h-full grid place-items-center">
+        {windows.length === 0 && (<div className="h-full grid place-items-center">
             <button
               onClick={newWindow}
               className="rounded-md border border-neutral-200 px-4 py-2 text-sm hover:bg-neutral-50 active:bg-neutral-100"
             >
               新しいウィンドウを開く
             </button>
-          </div>
-        )}
-
-        {windows.map(w => (
-          <TerminalWindow
+          </div>)}
+        {windows.map(w => (<TerminalWindow
             key={w.id}
             model={w}
             isTop={w.z === maxZ && !w.minimized}
             onFocus={() => bringFront(w.id)}
             onChange={(p) => patch(w.id, p)}
             onClose={() => close(w.id)}
-          />
-        ))}
+           />))}
       </div>
+
+     {/* 画面全体ポップアップ（最前面 / ヘッダーも覆う） */}
+      {panel && (
+        <FullScreenPanel kind={panel.kind} initialView={panel.view} onClose={() => setPanel(null)} />
+      )}
     </AppChrome>
+  );
+}
+
+function FullScreenPanel({ kind, initialView, onClose }:{
+  kind:'git'|'backup'|'restore'; initialView?:string; onClose:()=>void;
+}) {
+  return (
+    <div className="fixed inset-0 z-[70]">
+      <div
+        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="absolute inset-0 grid place-items-center p-4">
+        <div className="w-[min(880px,92vw)] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+          {/* ヘッダー */}
+          <div className="h-14 flex items-center justify-between px-5 border-b border-slate-200">
+            <div className="text-xl font-semibold">
+              {kind === 'git' ? 'Git' : kind === 'backup' ? 'バックアップ' : '復元'}
+            </div>
+            <button
+              onClick={onClose}
+              className="h-8 w-8 grid place-items-center rounded hover:bg-slate-100 active:bg-slate-200"
+              aria-label="閉じる"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* 本文（アクションの“メニュー→フォーム”をここで切替） */}
+          <div className="p-5">
+            {kind === 'git' && <GitPanel initialView={initialView} />}
+            {kind === 'backup' && <BackupPanel />}
+            {kind === 'restore' && <RestorePanel />}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---- 各パネル（ダミーUI） ---- */
+
+function SectionTitle({children}:{children:React.ReactNode}) {
+  return <div className="text-sm font-semibold text-slate-600 mb-2">{children}</div>;
+}
+function ActionItem({icon, label, onClick}:{icon:React.ReactNode;label:string;onClick:()=>void}) {
+  return (
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 active:bg-slate-100 text-left"
+    >
+      <span className="opacity-70">{icon}</span>
+      <span className="font-medium">{label}</span>
+    </button>
+  );
+}
+
+function GitPanel({initialView}:{initialView?:string}) {
+  const [view, setView] = useState<'menu'|'commit'|'status'>((initialView==='commit' || initialView==='status') ? (initialView as any) : 'menu');
+  return view === 'menu' ? (
+    <div className="space-y-3">
+      <SectionTitle>Git 操作</SectionTitle>
+      <ActionItem icon="⎇" label="ブランチ状態" onClick={() => setView('status')} />
+      <ActionItem icon="＋" label="コミット" onClick={() => setView('commit')} />
+      <ActionItem icon="⟳" label="プル" onClick={() => alert('pull: 未実装')} />
+      <ActionItem icon="⧉" label="プッシュ" onClick={() => alert('push: 未実装')} />
+    </div>
+  ) : view === 'commit' ? (
+    <div className="space-y-4">
+      <SectionTitle>コミットメッセージ</SectionTitle>
+      <textarea
+        placeholder="変更内容を入力してください…"
+        className="w-full h-36 rounded-md border border-slate-200 bg-slate-50/50 p-3 outline-none focus:ring-2 focus:ring-slate-300"
+      />
+      <div className="flex items-center justify-end">
+        <button className="rounded-md px-5 py-2 bg-slate-900 text-white hover:brightness-95">コミット実行</button>
+      </div>
+    </div>
+  ) : (
+    <div className="space-y-4">
+      <SectionTitle>現在のブランチ</SectionTitle>
+      <div className="rounded-md border border-slate-200 p-3 text-sm bg-slate-50/50">
+        main（ダミー）<br/> 直近コミット: abcdef…（ダミー）
+      </div>
+    </div>
+  );
+}
+
+function BackupPanel() {
+  return (
+    <div className="space-y-3">
+      <SectionTitle>バックアップ</SectionTitle>
+      <ActionItem icon="☰" label="バックアップ一覧" onClick={() => alert('list backups: 未実装')} />
+      <ActionItem icon="＋" label="バックアップ作成…" onClick={() => alert('create backup: 未実装')} />
+    </div>
+  );
+}
+
+function RestorePanel() {
+  return (
+    <div className="space-y-3">
+      <SectionTitle>復元</SectionTitle>
+      <ActionItem icon="⟲" label="最新に復元" onClick={() => alert('restore latest: 未実装')} />
+      <ActionItem icon="…" label="バックアップを選択…" onClick={() => alert('choose: 未実装')} />
+    </div>
   );
 }
