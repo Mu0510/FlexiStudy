@@ -1,57 +1,62 @@
-// server.js
+const { createServer } = require('http');
+const { parse } = require('url');
+const next = require('next');
+const { WebSocketServer } = require('ws');
 const os = require('os');
-const http = require('http');
-const WebSocket = require('ws');
 const pty = require('node-pty');
 
-const server = http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'text/plain' });
-  res.end('WebSocket server is running');
-});
+const dev = process.env.NODE_ENV !== 'production';
+const app = next({ dev });
+const handle = app.getRequestHandler();
 
-const wss = new WebSocket.Server({ server });
+const port = process.env.PORT || 3000;
 
-const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-
-wss.on('connection', (ws) => {
-  console.log('Client connected');
-
-  const ptyProcess = pty.spawn(shell, [], {
-    name: 'xterm-color',
-    cols: 80,
-    rows: 30,
-    cwd: process.env.HOME,
-    env: process.env
+app.prepare().then(() => {
+  const httpServer = createServer((req, res) => {
+    const parsedUrl = parse(req.url, true);
+    handle(req, res, parsedUrl);
   });
 
-  // xterm.js -> pty
-  ws.on('message', (message) => {
-    
-    ptyProcess.write(message);
+  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+  const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
+
+  wss.on('connection', (ws) => {
+    console.log('Client connected to WebSocket');
+
+    const ptyProcess = pty.spawn(shell, [], {
+      name: 'xterm-color',
+      cols: 80,
+      rows: 30,
+      cwd: process.env.HOME,
+      env: process.env,
+    });
+
+    ws.on('message', (message) => {
+      ptyProcess.write(message.toString());
+    });
+
+    ptyProcess.onData((data) => {
+      ws.send(data);
+    });
+
+    ptyProcess.on('exit', ({ exitCode, signal }) => {
+      console.log(`PTY process exited with code ${exitCode}, signal ${signal}`);
+      ws.close();
+    });
+
+    ws.on('close', () => {
+      console.log('Client disconnected from WebSocket');
+      ptyProcess.kill();
+    });
+
+    ws.on('error', (err) => {
+      console.error('WebSocket error:', err);
+    });
   });
 
-  // pty -> xterm.js
-  ptyProcess.on('data', (data) => {
-    
-    ws.send(data);
+  httpServer.listen(port, (err) => {
+    if (err) throw err;
+    console.log(`> Ready on http://localhost:${port}`);
   });
-
-  ptyProcess.on('exit', (code, signal) => {
-    console.log(`pty process exited with code ${code}, signal ${signal}`);
-    ws.close();
-  });
-  
-  ws.on('close', () => {
-    console.log('Client disconnected');
-    ptyProcess.kill();
-  });
-
-  ws.on('error', (err) => {
-    console.error('WebSocket error:', err);
-  });
-});
-
-const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
-  console.log(`WebSocket server listening on port ${PORT}`);
 });

@@ -47,8 +47,7 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
   const rootRef = useRef<HTMLDivElement>(null);
   const tabbarRef = useRef<HTMLDivElement>(null);
   const termHostRef = useRef<HTMLDivElement>(null);
-  const term = useRef<Terminal | null>(null);
-  const fitAddon = useRef<FitAddon | null>(null);
+  const terminals = useRef<Map<string, { term: Terminal, fitAddon: FitAddon, ws: WebSocket }>>(new Map());
   const resizeRef = useRef<null | {
     mode: 'e'|'s'|'se';
     baseX: number; baseY: number;
@@ -58,72 +57,89 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
 
   const [dragging, setDragging] = useState(false);
 
-  /* xterm: ライトテーマ */
   useEffect(() => {
-    if (!termHostRef.current) return;
-
-    // StrictModeでアンマウントされてもいいように、インスタンスはrefに保持
-    // 2回目のマウントでは、初期化済みのインスタンスを再利用する
-    if (!term.current) {
-      console.log("Initializing terminal for the first time...");
-      const t = new Terminal({
-        convertEol: true,
-        fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
-        fontSize: 13,
-        allowTransparency: true,
-        theme: { background: TERM_BG, foreground: "#222", selection: "#cde3ffaa", cursor: "#555", cursorAccent: TERM_BG },
-      });
-      const fa = new FitAddon();
-      const ws = new WebSocket(`ws://${window.location.hostname}:3001`);
-      const attachAddon = new AttachAddon(ws);
-
-      t.loadAddon(fa);
-      t.loadAddon(attachAddon);
-
-      ws.onopen = () => t.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
-      ws.onerror = (e) => t.writeln(`\r\n\x1b[31mWebSocket Error: ${e.type}\x1b[0m`);
-      ws.onclose = () => t.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
-
-      term.current = t;
-      fitAddon.current = fa;
-    }
-
     const host = termHostRef.current;
-    const t = term.current;
-    const fa = fitAddon.current!;
-
-    // ターミナルがまだDOMにアタッチされていない場合、ResizeObserverで待機
-    if (!t.element) {
-      const observer = new ResizeObserver(([entry]) => {
-        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-          console.log("Terminal host is ready, opening terminal.");
-          observer.disconnect(); // 一度きりのため、すぐに監視解除
-          t.open(host);
-          t.focus();
-          fa.fit();
-        }
-      });
-      observer.observe(host);
-
-      return () => {
-        console.log("Cleaning up initial observer.");
-        observer.disconnect();
-      };
-    }
-
-    // ウィンドウリサイズ時の追従
-    const windowResizeObserver = new ResizeObserver(() => {
-      requestAnimationFrame(() => fa.fit());
+    if (!host) return;
+  
+    // 新しいタブが追加されたか確認
+    model.tabs.forEach(tab => {
+      if (!terminals.current.has(tab.id)) {
+        // 新しいTerminalインスタンスを作成
+        const term = new Terminal({
+          convertEol: true,
+          fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+          fontSize: 13,
+          allowTransparency: true,
+          theme: { background: TERM_BG, foreground: "#222", selection: "#cde3ffaa", cursor: "#555", cursorAccent: TERM_BG },
+        });
+        const fitAddon = new FitAddon();
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+        const wsUrl = `${protocol}://${window.location.host}/ws`;
+        const ws = new WebSocket(wsUrl);
+        const attachAddon = new AttachAddon(ws);
+  
+        term.loadAddon(fitAddon);
+        term.loadAddon(attachAddon);
+  
+        ws.onopen = () => term.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
+        ws.onerror = (e) => term.writeln(`\r\n\x1b[31mWebSocket Error: ${e.type}\x1b[0m`);
+        ws.onclose = () => term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
+  
+        terminals.current.set(tab.id, { term, fitAddon, ws });
+      }
     });
-    windowResizeObserver.observe(host);
-
+  
+    // 削除されたタブのインスタンスを破棄
+    const currentTabIds = new Set(model.tabs.map(t => t.id));
+    for (const [tabId, { term, ws }] of terminals.current.entries()) {
+      if (!currentTabIds.has(tabId)) {
+        term.dispose();
+        ws.close();
+        terminals.current.delete(tabId);
+      }
+    }
+  
+    // アクティブなタブのターミナルをホストにアタッチ
+    const activeTerminal = terminals.current.get(model.activeTabId);
+    if (activeTerminal && host) {
+      // 既存の子要素をクリア
+      while (host.firstChild) {
+        host.removeChild(host.firstChild);
+      }
+      activeTerminal.term.open(host);
+      activeTerminal.fitAddon.fit();
+      activeTerminal.term.focus();
+    }
+  
+    // ウィンドウリサイズ時の追従
+    const resizeObserver = new ResizeObserver(() => {
+      const active = terminals.current.get(model.activeTabId);
+      if (active) {
+        requestAnimationFrame(() => active.fitAddon.fit());
+      }
+    });
+    if (host) {
+      resizeObserver.observe(host);
+    }
+  
     return () => {
-      console.log("TerminalWindow unmounted, cleaning up.");
-      windowResizeObserver.disconnect();
-      // term.current と fitAddon.current は StrictMode の再マウント時に再利用するため、ここでは破棄しない
-      // 実際のコンポーネント破棄時のクリーンアップは、Reactが適切に行う
+      if (host) {
+        resizeObserver.unobserve(host);
+      }
+    };
+  }, [model.tabs, model.activeTabId]);
+  
+  // コンポーネントのアンマウント時にすべてのターミナルを破棄
+  useEffect(() => {
+    return () => {
+      for (const { term, ws } of terminals.current.values()) {
+        term.dispose();
+        ws.close();
+      }
+      terminals.current.clear();
     };
   }, []);
+
 
   /* Z順 */
   const onPointerDown = () => onFocus();
