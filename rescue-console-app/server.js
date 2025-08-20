@@ -26,6 +26,10 @@ console.log(`Safe Mode is active. Allowed directory: ${allowedBaseDir}`);
  * @returns {boolean} 安全なパスであればtrue、そうでなければfalse
  */
 function isPathSafe(userPath) {
+  // ユーザーパスが提供されていない、または空の場合は安全と見なす（例: `cd` のみ）
+  if (!userPath) {
+    return true;
+  }
   const resolvedPath = path.normalize(path.resolve(allowedBaseDir, userPath));
   const relativePath = path.relative(allowedBaseDir, resolvedPath);
   return !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
@@ -51,6 +55,7 @@ app.prepare().then(() => {
   wss.on('connection', (ws) => {
     console.log('Client connected to WebSocket');
     ws.isSafeMode = true; // デフォルトで安全モードを有効に
+    let commandInputBuffer = ''; // ★ 接続ごとにコマンド入力バッファを初期化
 
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-color',
@@ -60,61 +65,78 @@ app.prepare().then(() => {
       env: process.env,
     });
 
-    // --- コマンドインターセプター ---
-    function handleTerminalCommand(message) {
-      try {
-        const data = JSON.parse(message);
-        
-        if (data.type === 'setSafeMode') {
-          ws.isSafeMode = !!data.enabled;
-          console.log(`Safe Mode for a client set to: ${ws.isSafeMode}`);
-          ws.send(`\r\n\x1b[32mSafe Mode is now ${ws.isSafeMode ? 'ON' : 'OFF'}.\x1b[0m\r\n`);
-          return;
-        }
-
-        // ターミナル入力（ペイロード）を処理
-        const command = data.payload || '';
-        const trimmedCommand = command.trim();
-
-        if (ws.isSafeMode) {
-          // --- 安全モード時の検証 ---
-          if (trimmedCommand.startsWith('rm ')) {
-            const msg = `\r\n\x1b[33mWarning: The 'rm' command is disabled in Safe Mode.\r\nPlease use the 'trash' command instead.\x1b[0m\r\n`;
-            ws.send(msg);
-            return;
-          }
-
-          if (command.includes('study_log.db') && !command.includes('manage_log.py')) {
-            const msg = `\r\n\x1b[31mError: Direct access to 'study_log.db' is not allowed in Safe Mode.\r\nPlease use 'python3 manage_log.py'.\x1b[0m\r\n`;
-            ws.send(msg);
-            return;
-          }
-
-          const pathRegex = /([~\/.]|\.\.)[\w\/.-]+/g;
-          const potentialPaths = command.match(pathRegex) || [];
-          for (const p of potentialPaths) {
-            if (!isPathSafe(p)) {
-              const msg = `\r\n\x1b[31mError: Safe Mode is enabled. Access to path "${p}" is denied.\x1b[0m\r\n`;
-              ws.send(msg);
-              return;
-            }
-          }
-        }
-        
-        ptyProcess.write(command);
-
-      } catch (e) {
-        // JSONではないプレーンな文字列メッセージも処理（後方互換性のため）
-        ptyProcess.write(message);
-      }
-    }
-
-    ws.on('message', (message) => {
-      handleTerminalCommand(message.toString());
-    });
-
+    // ptyからの出力をクライアントに送信
     ptyProcess.onData((data) => {
       ws.send(data);
+    });
+
+    // クライアントからのメッセージを処理
+    ws.on('message', (message) => {
+      const messageStr = message.toString();
+
+      // --- 1. JSON形式の制御メッセージか判定 ---
+      try {
+        const data = JSON.parse(messageStr);
+        if (data.type === 'setSafeMode') {
+          ws.isSafeMode = !!data.enabled;
+          commandInputBuffer = ''; // モード切替時にバッファをリセット
+          console.log(`Safe Mode for a client set to: ${ws.isSafeMode}`);
+          ws.send(`\r\n\x1b[32mSafe Mode is now ${ws.isSafeMode ? 'ON' : 'OFF'}.\x1b[0m\r\n`);
+        }
+        return; // JSONメッセージはここで処理終了
+      } catch (e) {
+        // JSONでなければ生のターミナル入力として処理を続ける
+      }
+
+      // --- 2. 安全モードが有効な場合の処理 ---
+      if (ws.isSafeMode) {
+        // Enterキー（改行）が押された場合、バッファのコマンドを検証
+        if (messageStr === '\r') {
+          const commandToVerify = commandInputBuffer.trim();
+          commandInputBuffer = ''; // 検証前にバッファをクリア
+
+          if (commandToVerify) {
+            const commandParts = commandToVerify.split(/\s+/);
+            const mainCommand = commandParts[0];
+
+            // --- 検証ロジック開始 ---
+            // `rm` のチェック
+            if (/\brm\b/.test(commandToVerify)) {
+              ws.send('\r\n\x1b[33m[Safe Mode] The \'rm\' command is disabled. Please use \'trash\' instead.\x1b[0m\r\n');
+              ptyProcess.write('\x03'); // Ctrl+Cで入力をキャンセル
+              return;
+            }
+
+            // `study_log.db` のチェック
+            if (commandToVerify.includes('study_log.db') && !commandToVerify.startsWith('python3 manage_log.py')) {
+              ws.send('\r\n\x1b[31m[Safe Mode] Direct access to \'study_log.db\' is not allowed.\x1b[0m\r\n');
+              ptyProcess.write('\x03'); // Ctrl+Cで入力をキャンセル
+              return;
+            }
+
+            // `cd` のチェック
+            if (mainCommand === 'cd') {
+              const targetPath = commandParts[1];
+              if (!isPathSafe(targetPath)) {
+                ws.send(`\r\n\x1b[31m[Safe Mode] Access to path "${targetPath || ''}" is denied.\x1b[0m\r\n`);
+                ptyProcess.write('\x03'); // Ctrl+Cで入力をキャンセル
+                return;
+              }
+            }
+            // --- 検証ロジック終了 ---
+          }
+        } else if (messageStr.charCodeAt(0) === 127) {
+          // Backspaceが押された場合、バッファから一文字削除
+          commandInputBuffer = commandInputBuffer.slice(0, -1);
+        } else if (messageStr.charCodeAt(0) >= 32 || messageStr === '\t') {
+          // 表示可能な文字とタブのみバッファに追加
+          commandInputBuffer += messageStr;
+        }
+      }
+
+      // --- 3. ptyプロセスにメッセージを書き込み ---
+      // 安全モードでブロックされなかったすべての入力（安全モードOFF時を含む）をptyに渡す
+      ptyProcess.write(messageStr);
     });
 
     ptyProcess.on('exit', ({ exitCode, signal }) => {

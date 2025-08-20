@@ -258,6 +258,22 @@ function SettingsPanel({ animationEnabled, onAnimationSettingChange, safeMode, o
   safeMode: boolean;
   onSafeModeChange: (enabled: boolean) => void;
 }) {
+
+  const handleSafeModeToggle = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newSafeMode = e.target.checked;
+    if (!newSafeMode) {
+      if (window.confirm(
+        '安全モードを無効にすると、Geminiの操作範囲が現在のディレクトリ外に及ぶ可能性があります。\n' +
+        '破壊的なコマンド（rmなど）も実行できてしまいます。\n\n' +
+        '本当に安全モードを無効にしますか？'
+      )) {
+        onSafeModeChange(false);
+      }
+    } else {
+      onSafeModeChange(true);
+    }
+  };
+
   return (
     <div className="space-y-3">
       <SectionTitle>設定</SectionTitle>
@@ -270,15 +286,20 @@ function SettingsPanel({ animationEnabled, onAnimationSettingChange, safeMode, o
           className="ml-auto h-5 w-5 rounded-md"
         />
       </label>
-      <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 text-left cursor-pointer">
-        <span className="font-medium">安全モード</span>
-        <input
-          type="checkbox"
-          checked={safeMode}
-          onChange={(e) => onSafeModeChange(e.target.checked)}
-          className="ml-auto h-5 w-5 rounded-md"
-        />
-      </label>
+      <div className="rounded-lg border border-slate-200 px-3 py-2">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <span className="font-medium">安全モード</span>
+          <input
+            type="checkbox"
+            checked={safeMode}
+            onChange={handleSafeModeToggle}
+            className="ml-auto h-5 w-5 rounded-md"
+          />
+        </label>
+        <p className="text-xs text-slate-500 mt-2">
+          有効にすると、危険なコマンド (rm) や許可されていないディレクトリへのアクセスをブロックします。
+        </p>
+      </div>
     </div>
   );
 }
