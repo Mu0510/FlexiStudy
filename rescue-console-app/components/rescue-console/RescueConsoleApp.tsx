@@ -97,19 +97,21 @@ export default function RescueConsoleApp() {
             onChange={(p) => patch(w.id, p)}
             onClose={() => close(w.id)}
             onMinimize={() => {
-              // まず `minimizing` フラグを立ててタスクバーボタンをレンダリングさせる
-              patch(w.id, { minimizing: true });
-              
-              // DOM更新後（次のフレーム）にボタン位置を取得してアニメーションを開始
-              requestAnimationFrame(() => {
-                const btn = document.getElementById(`minimized-btn-${w.id}`);
-                if (btn) {
-                  patch(w.id, { animationTargetRect: btn.getBoundingClientRect() });
-                } else {
-                  // ターゲットが見つからない場合はアニメーションなしで最小化
-                  patch(w.id, { minimizing: false, minimized: true });
-                }
-              });
+              if (animationEnabled) {
+                // アニメーションありの場合
+                patch(w.id, { minimizing: true });
+                requestAnimationFrame(() => {
+                  const btn = document.getElementById(`minimized-btn-${w.id}`);
+                  if (btn) {
+                    patch(w.id, { animationTargetRect: btn.getBoundingClientRect() });
+                  } else {
+                    patch(w.id, { minimizing: false, minimized: true });
+                  }
+                });
+              } else {
+                // アニメーションなしの場合
+                patch(w.id, { minimized: true, minimizing: false });
+              }
             }}
            />))}
       </div>
