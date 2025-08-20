@@ -73,19 +73,30 @@ app.prepare().then(() => {
     // クライアントからのメッセージを処理
     ws.on('message', (message) => {
       const messageStr = message.toString();
+      // console.log(`[Debug] Received: "${messageStr}", Code: ${messageStr.charCodeAt(0)}`); // デバッグ完了につきコメントアウト
 
       // --- 1. JSON形式の制御メッセージか判定 ---
+      let isControlMessage = false;
       try {
         const data = JSON.parse(messageStr);
-        if (data.type === 'setSafeMode') {
-          ws.isSafeMode = !!data.enabled;
-          commandInputBuffer = ''; // モード切替時にバッファをリセット
-          console.log(`Safe Mode for a client set to: ${ws.isSafeMode}`);
-          ws.send(`\r\n\x1b[32mSafe Mode is now ${ws.isSafeMode ? 'ON' : 'OFF'}.\x1b[0m\r\n`);
+        // オブジェクトであり、かつtypeプロパティを持つものだけを制御メッセージとみなす
+        if (typeof data === 'object' && data !== null && data.type) {
+          isControlMessage = true;
+          if (data.type === 'setSafeMode') {
+            ws.isSafeMode = !!data.enabled;
+            commandInputBuffer = ''; // モード切替時にバッファをリセット
+            console.log(`Safe Mode for a client set to: ${ws.isSafeMode}`);
+            ws.send(`\r\n\x1b[32mSafe Mode is now ${ws.isSafeMode ? 'ON' : 'OFF'}.\x1b[0m\r\n`);
+          }
+          // 他の制御メッセージタイプがあればここに追加
         }
-        return; // JSONメッセージはここで処理終了
       } catch (e) {
-        // JSONでなければ生のターミナル入力として処理を続ける
+        // パースに失敗したら、それは確実に制御メッセージではない
+      }
+
+      // 制御メッセージだった場合は、ここで処理を終了
+      if (isControlMessage) {
+        return;
       }
 
       // --- 2. 安全モードが有効な場合の処理 ---
@@ -135,7 +146,7 @@ app.prepare().then(() => {
       }
 
       // --- 3. ptyプロセスにメッセージを書き込み ---
-      // 安全モードでブロックされなかったすべての入力（安全モードOFF時を含む）をptyに渡す
+      // 制御メッセージでなく、かつ安全モードの検証を通過したすべての入力をptyに渡す
       ptyProcess.write(messageStr);
     });
 
