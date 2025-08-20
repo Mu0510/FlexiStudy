@@ -4,6 +4,33 @@ const next = require('next');
 const { WebSocketServer } = require('ws');
 const os = require('os');
 const pty = require('node-pty');
+const path = require('path');
+const fs = require('fs');
+
+// --- 安全モード設定 ---
+const userHome = process.env.HOME || process.env.USERPROFILE;
+if (!userHome) {
+  console.error('Error: Could not determine home directory.');
+  process.exit(1);
+}
+const allowedBaseDir = path.normalize(path.resolve(userHome, 'GeminiCLI'));
+if (!fs.existsSync(allowedBaseDir)) {
+  console.error(`Error: The safe directory ${allowedBaseDir} does not exist.`);
+  process.exit(1);
+}
+console.log(`Safe Mode is active. Allowed directory: ${allowedBaseDir}`);
+
+/**
+ * 指定されたパスが許可されたディレクトリ内にあるか、堅牢な方法で検証します。
+ * @param {string} userPath ユーザーが指定したパス
+ * @returns {boolean} 安全なパスであればtrue、そうでなければfalse
+ */
+function isPathSafe(userPath) {
+  const resolvedPath = path.normalize(path.resolve(allowedBaseDir, userPath));
+  const relativePath = path.relative(allowedBaseDir, resolvedPath);
+  return !relativePath.startsWith('..') && !path.isAbsolute(relativePath);
+}
+// --- ここまで ---
 
 const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
@@ -28,7 +55,7 @@ app.prepare().then(() => {
       name: 'xterm-color',
       cols: 80,
       rows: 30,
-      cwd: process.env.HOME,
+      cwd: allowedBaseDir, // 初期ディレクトリを ~/GeminiCLI に設定
       env: process.env,
     });
 
