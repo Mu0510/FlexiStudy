@@ -36,6 +36,7 @@ export function makeNewWindow(opts?: Partial<TerminalWindowModel>): TerminalWind
 type Props = {
   model: TerminalWindowModel;
   isTop: boolean;
+  safeMode: boolean;
   onChange: (patch: Partial<TerminalWindowModel>) => void;
   onClose: () => void;
   onFocus: () => void;
@@ -47,7 +48,7 @@ const TAB_H = 32;
 const TERM_BG = "#f5f7fa";           // 端末 & アクティブタブの灰
 const TOP_GUARD = 0;                 // デスクトップ内の最上端（= ヘッダー下）
 
-export function TerminalWindow({ model, isTop, onChange, onClose, onFocus, onMinimize, animationEnabled }: Props) {
+export function TerminalWindow({ model, isTop, safeMode, onChange, onClose, onFocus, onMinimize, animationEnabled }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const tabbarRef = useRef<HTMLDivElement>(null);
   const termHostRef = useRef<HTMLDivElement>(null);
@@ -86,7 +87,11 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus, onMin
         term.loadAddon(fitAddon);
         term.loadAddon(attachAddon);
   
-        ws.onopen = () => term.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
+        ws.onopen = () => {
+          term.writeln("\x1b[1mRescue Console v2\x1b[0m へようこそ。");
+          // 接続時に現在のSafeModeを送信
+          ws.send(JSON.stringify({ type: 'setSafeMode', enabled: safeMode }));
+        }
         ws.onerror = (e) => term.writeln(`\r\n\x1b[31mWebSocket Error: ${e.type}\x1b[0m`);
         ws.onclose = () => term.writeln('\r\n\x1b[31mConnection closed.\x1b[0m');
   
@@ -132,7 +137,15 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus, onMin
         resizeObserver.unobserve(host);
       }
     };
-  }, [model.tabs, model.activeTabId]);
+  }, [model.tabs, model.activeTabId, safeMode]);
+
+  // safeModeプロパティの変更を監視し、WebSocket経由でサーバーに通知する
+  useEffect(() => {
+    const activeTerminal = terminals.current.get(model.activeTabId);
+    if (activeTerminal?.ws && activeTerminal.ws.readyState === WebSocket.OPEN) {
+      activeTerminal.ws.send(JSON.stringify({ type: 'setSafeMode', enabled: safeMode }));
+    }
+  }, [safeMode, model.activeTabId]);
   
   // コンポーネントのアンマウント時にすべてのターミナルを破棄
   useEffect(() => {

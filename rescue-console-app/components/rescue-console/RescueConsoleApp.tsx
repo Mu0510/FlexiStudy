@@ -15,6 +15,7 @@ export default function RescueConsoleApp() {
   const [status, setStatus] = useState<ConnStatus>("connected"); // ← 実装側でWSに連動
   const [panel, setPanel] = useState<PanelState>(null);
   const [animationEnabled, setAnimationEnabled] = useState(true);
+  const [safeMode, setSafeMode] = useState(true);
 
   const taskbarItems = useMemo(() => windows.filter(w => w.minimized || w.minimizing || w.restoring), [windows]);
   const maxZ = useMemo(
@@ -88,17 +89,19 @@ export default function RescueConsoleApp() {
               新しいウィンドウを開く
             </button>
           </div>)}
-        {windows.map(w => (<TerminalWindow
+        {windows.map(w => {
+        const isTop = w.z === maxZ && !w.minimized;
+        return (<TerminalWindow
             key={w.id}
             model={w}
-            isTop={w.z === maxZ && !w.minimized}
+            isTop={isTop}
             animationEnabled={animationEnabled}
+            safeMode={safeMode}
             onFocus={() => bringFront(w.id)}
             onChange={(p) => patch(w.id, p)}
             onClose={() => close(w.id)}
             onMinimize={() => {
               if (animationEnabled) {
-                // アニメーションありの場合
                 patch(w.id, { minimizing: true });
                 requestAnimationFrame(() => {
                   const btn = document.getElementById(`minimized-btn-${w.id}`);
@@ -109,11 +112,11 @@ export default function RescueConsoleApp() {
                   }
                 });
               } else {
-                // アニメーションなしの場合
                 patch(w.id, { minimized: true, minimizing: false });
               }
             }}
-           />))}
+           />)
+        })}
       </div>
 
      {/* 画面全体ポップアップ（最前面 / ヘッダーも覆う） */}
@@ -124,18 +127,22 @@ export default function RescueConsoleApp() {
           onClose={() => setPanel(null)}
           animationEnabled={animationEnabled}
           onAnimationSettingChange={setAnimationEnabled}
+          safeMode={safeMode}
+          onSafeModeChange={setSafeMode}
         />
       )}
     </AppChrome>
   );
 }
 
-function FullScreenPanel({ kind, initialView, onClose, animationEnabled, onAnimationSettingChange }: {
+function FullScreenPanel({ kind, initialView, onClose, animationEnabled, onAnimationSettingChange, safeMode, onSafeModeChange }: {
   kind: 'git' | 'backup' | 'restore' | 'settings';
   initialView?: string;
   onClose: () => void;
   animationEnabled: boolean;
   onAnimationSettingChange: (enabled: boolean) => void;
+  safeMode: boolean;
+  onSafeModeChange: (enabled: boolean) => void;
 }) {
   return (
     <div className="fixed inset-0 z-[70]">
@@ -164,7 +171,12 @@ function FullScreenPanel({ kind, initialView, onClose, animationEnabled, onAnima
             {kind === 'git' && <GitPanel initialView={initialView} />}
             {kind === 'backup' && <BackupPanel />}
             {kind === 'restore' && <RestorePanel />}
-            {kind === 'settings' && <SettingsPanel animationEnabled={animationEnabled} onAnimationSettingChange={onAnimationSettingChange} />}
+            {kind === 'settings' && <SettingsPanel
+                                      animationEnabled={animationEnabled}
+                                      onAnimationSettingChange={onAnimationSettingChange}
+                                      safeMode={safeMode}
+                                      onSafeModeChange={onSafeModeChange}
+                                     />}
           </div>
         </div>
       </div>
@@ -177,7 +189,7 @@ function FullScreenPanel({ kind, initialView, onClose, animationEnabled, onAnima
 function SectionTitle({children}:{children:React.ReactNode}) {
   return <div className="text-sm font-semibold text-slate-600 mb-2">{children}</div>;
 }
-function ActionItem({icon, label, onClick}:{icon:React.ReactNode;label:string;onClick:()=>void}) {
+function ActionItem({icon, label, onClick}:{icon:React.Node;label:string;onClick:()=>void}) {
   return (
     <button
       onClick={onClick}
@@ -240,9 +252,11 @@ function RestorePanel() {
   );
 }
 
-function SettingsPanel({ animationEnabled, onAnimationSettingChange }: {
+function SettingsPanel({ animationEnabled, onAnimationSettingChange, safeMode, onSafeModeChange }: {
   animationEnabled: boolean;
   onAnimationSettingChange: (enabled: boolean) => void;
+  safeMode: boolean;
+  onSafeModeChange: (enabled: boolean) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -253,6 +267,15 @@ function SettingsPanel({ animationEnabled, onAnimationSettingChange }: {
           type="checkbox"
           checked={animationEnabled}
           onChange={(e) => onAnimationSettingChange(e.target.checked)}
+          className="ml-auto h-5 w-5 rounded-md"
+        />
+      </label>
+      <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 text-left cursor-pointer">
+        <span className="font-medium">安全モード</span>
+        <input
+          type="checkbox"
+          checked={safeMode}
+          onChange={(e) => onSafeModeChange(e.target.checked)}
           className="ml-auto h-5 w-5 rounded-md"
         />
       </label>
