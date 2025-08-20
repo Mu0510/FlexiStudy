@@ -50,6 +50,7 @@ app.prepare().then(() => {
 
   wss.on('connection', (ws) => {
     console.log('Client connected to WebSocket');
+    ws.isSafeMode = true; // デフォルトで安全モードを有効に
 
     const ptyProcess = pty.spawn(shell, [], {
       name: 'xterm-color',
@@ -60,22 +61,52 @@ app.prepare().then(() => {
     });
 
     // --- コマンドインターセプター ---
-    function handleTerminalCommand(command) {
-      const trimmedCommand = command.trim();
-      if (trimmedCommand.startsWith('rm ')) {
-        const message = `\r\n\x1b[33mWarning: The 'rm' command is disabled for safety.\r\nPlease use the 'trash' command instead to move files to the trash bin.\x1b[0m\r\n`;
-        ws.send(message);
-        return;
-      }
+    function handleTerminalCommand(message) {
+      try {
+        const data = JSON.parse(message);
+        
+        if (data.type === 'setSafeMode') {
+          ws.isSafeMode = !!data.enabled;
+          console.log(`Safe Mode for a client set to: ${ws.isSafeMode}`);
+          ws.send(`\r\n\x1b[32mSafe Mode is now ${ws.isSafeMode ? 'ON' : 'OFF'}.\x1b[0m\r\n`);
+          return;
+        }
 
-      if (command.includes('study_log.db') && !command.includes('manage_log.py')) {
-        const message = `\r\n\x1b[31mError: Direct access to 'study_log.db' is not allowed.\r\nPlease use 'python3 manage_log.py' to interact with the database.\x1b[0m\r\n`;
-        ws.send(message);
-        return;
-      }
+        // ターミナル入力（ペイロード）を処理
+        const command = data.payload || '';
+        const trimmedCommand = command.trim();
 
-      // TODO: ここに他の検証ロジックを実装
-      ptyProcess.write(command);
+        if (ws.isSafeMode) {
+          // --- 安全モード時の検証 ---
+          if (trimmedCommand.startsWith('rm ')) {
+            const msg = `\r\n\x1b[33mWarning: The 'rm' command is disabled in Safe Mode.\r\nPlease use the 'trash' command instead.\x1b[0m\r\n`;
+            ws.send(msg);
+            return;
+          }
+
+          if (command.includes('study_log.db') && !command.includes('manage_log.py')) {
+            const msg = `\r\n\x1b[31mError: Direct access to 'study_log.db' is not allowed in Safe Mode.\r\nPlease use 'python3 manage_log.py'.\x1b[0m\r\n`;
+            ws.send(msg);
+            return;
+          }
+
+          const pathRegex = /([~\/.]|\.\.)[\w\/.-]+/g;
+          const potentialPaths = command.match(pathRegex) || [];
+          for (const p of potentialPaths) {
+            if (!isPathSafe(p)) {
+              const msg = `\r\n\x1b[31mError: Safe Mode is enabled. Access to path "${p}" is denied.\x1b[0m\r\n`;
+              ws.send(msg);
+              return;
+            }
+          }
+        }
+        
+        ptyProcess.write(command);
+
+      } catch (e) {
+        // JSONではないプレーンな文字列メッセージも処理（後方互換性のため）
+        ptyProcess.write(message);
+      }
     }
 
     ws.on('message', (message) => {
