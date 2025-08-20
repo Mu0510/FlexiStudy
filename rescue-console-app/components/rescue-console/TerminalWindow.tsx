@@ -12,9 +12,11 @@ export type TerminalWindowModel = {
   title: string;
   x: number; y: number; w: number; h: number; z: number;
   minimized: boolean; maximized: boolean;
+  minimizing?: boolean;
+  animationTargetRect?: DOMRect;
+  prev?: { x: number; y: number; w: number; h: number };
   tabs: { id: string; title: string }[];
   activeTabId: string;
-  prev?: { x: number; y: number; w: number; h: number };
 };
 
 export function makeNewWindow(opts?: Partial<TerminalWindowModel>): TerminalWindowModel {
@@ -37,13 +39,15 @@ type Props = {
   onChange: (patch: Partial<TerminalWindowModel>) => void;
   onClose: () => void;
   onFocus: () => void;
+  onMinimize: () => void;
+  animationEnabled?: boolean;
 };
 
 const TAB_H = 32;
 const TERM_BG = "#f5f7fa";           // 端末 & アクティブタブの灰
 const TOP_GUARD = 0;                 // デスクトップ内の最上端（= ヘッダー下）
 
-export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Props) {
+export function TerminalWindow({ model, isTop, onChange, onClose, onFocus, onMinimize, animationEnabled }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const tabbarRef = useRef<HTMLDivElement>(null);
   const termHostRef = useRef<HTMLDivElement>(null);
@@ -56,6 +60,7 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
   const MIN_W = 640, MIN_H = 360;
 
   const [dragging, setDragging] = useState(false);
+  const [animationStyle, setAnimationStyle] = useState<React.CSSProperties>({});
 
   useEffect(() => {
     const host = termHostRef.current;
@@ -140,6 +145,39 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
     };
   }, []);
 
+  // 最小化アニメーション
+  useEffect(() => {
+    const winEl = rootRef.current;
+    if (!winEl || !animationEnabled || !model.minimizing || !model.animationTargetRect) return;
+
+    const winRect = winEl.getBoundingClientRect();
+    const targetRect = model.animationTargetRect;
+
+    const originX = (targetRect.x + targetRect.width / 2 - winRect.left) / winRect.width;
+    const originY = (targetRect.y + targetRect.height / 2 - winRect.top) / winRect.height;
+
+    const translateX = targetRect.x - winRect.left - (winRect.width * originX) + (targetRect.width / 2);
+    const translateY = targetRect.y - winRect.top - (winRect.height * originY) + (targetRect.height / 2);
+
+    const scaleX = targetRect.width / winRect.width;
+    const scaleY = targetRect.height / winRect.height;
+
+    setAnimationStyle({
+      transition: 'transform 0.15s ease-in, opacity 0.15s ease-in',
+      transformOrigin: `${originX * 100}% ${originY * 100}%`,
+      transform: `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`,
+      opacity: 0,
+    });
+
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (e.propertyName === 'transform') {
+        winEl.removeEventListener('transitionend', onTransitionEnd);
+        onChange({ minimized: true, minimizing: false, animationTargetRect: undefined });
+        setAnimationStyle({}); // アニメーションスタイルをリセット
+      }
+    };
+    winEl.addEventListener('transitionend', onTransitionEnd);
+  }, [model.minimizing, model.animationTargetRect, animationEnabled, onChange]);
 
   /* Z順 */
   const onPointerDown = () => onFocus();
@@ -212,7 +250,6 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
   }
 
   /* ヘッダーボタン（−／□／×） */
-  const minimize = () => onChange({ minimized: true });
   const maximize = () => {
     if (model.maximized) return;
     const parent = rootRef.current?.parentElement;
@@ -236,7 +273,7 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
     const h = Math.min(pv.h, parent.clientHeight);
     const x = pv.x;                          // 左右・下はみ出しOK
     const y = Math.max(TOP_GUARD, pv.y);     // 上だけガード
-    onChange({ maximized: false, minimized: false, x, y, w, h, prev: null });
+    onChange({ maximized: false, minimized: false, x, y, w, h, prev: undefined });
   };
 
   /* タブ */
@@ -262,18 +299,29 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
     return () => window.removeEventListener("rc-global", handler as EventListener);
   }, [isTop]);
 
-  if (model.minimized) return null;
-
   const isMax = model.maximized;
   const style: React.CSSProperties = isMax
     ? { left: 0, top: 0, width: "100%", height: "100%" }
     : { left: model.x, top: model.y, width: model.w, height: model.h };
 
+  if (animationEnabled) {
+    style.transition = 'transform 0.2s ease-in, opacity 0.2s ease-in';
+    if (model.minimized) {
+      style.transform = `translateY(200px) scale(0.1)`;
+      style.opacity = 0;
+      style.pointerEvents = 'none';
+    }
+  } else {
+    if (model.minimized) {
+      style.display = 'none';
+    }
+  }
+
   return (
     <div
       ref={rootRef}
       onPointerDown={onPointerDown}
-      style={{ ...style, zIndex: model.z, transform: "translateZ(0)", willChange: "transform" }}
+      style={{ ...style, zIndex: model.z, transformOrigin: 'bottom left', ...animationStyle }}
       className="absolute rounded-lg border border-neutral-200 bg-white shadow-md overflow-hidden"
     >
       {/* タブ帯（ウィンドウヘッダーは作らない） */}
@@ -316,7 +364,7 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
         <div className="flex-none w-14 sm:w-16 md:w-20 h-full" title="ドラッグで移動"></div>
 
         <div className="h-8 flex flex-none" data-drag-cancel="true">
-          <WinBtn label="最小化" onClick={minimize} />
+          <WinBtn label="最小化" onClick={onMinimize} />
           {isMax ? (
             <WinBtn label="元に戻す" onClick={restore} symbol="restore" />
           ) : (
@@ -328,7 +376,7 @@ export function TerminalWindow({ model, isTop, onChange, onClose, onFocus }: Pro
 
       {/* 本体：ターミナル（アクティブタブと同色で境界ゼロ） */}
       <div className="relative" style={{ height: `calc(100% - ${TAB_H}px)` }}>
-        <div ref={termHostRef} className="absolute inset-0" style={{ background: TERM_BG }} />
+        <div ref={termHostRef} className="absolute inset-0 p-2" style={{ background: TERM_BG }} />
         {!isMax && (
           <>
             <div
@@ -398,7 +446,7 @@ function WinBtn({ label, onClick, symbol, danger }: { label: string; onClick: ()
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={[
+      className={[ 
         "h-8 w-9 grid place-items-center",
         danger ? "hover:bg-red-50 active:bg-red-100" : "hover:bg-slate-50 active:bg-slate-200"
       ].join(" ")}

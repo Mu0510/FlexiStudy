@@ -1,6 +1,6 @@
 'use client';
 
-import { Dot, Plus, GitBranch, RotateCcw, Database, GitCommit, GitPullRequest, Upload, List } from "lucide-react";
+import { Dot, Plus, GitBranch, RotateCcw, Database, GitCommit, GitPullRequest, Upload, List, Settings } from "lucide-react";
 import React, { useEffect, useRef, useState } from "react";
 
  export function AppChrome({
@@ -11,13 +11,13 @@ import React, { useEffect, useRef, useState } from "react";
    children,
  }: {
    onNewWindow: () => void;
-   onOpenPanel: (k: 'git' | 'backup' | 'restore', view?: string) => void;
+   onOpenPanel: (k: 'git' | 'backup' | 'restore' | 'settings', view?: string) => void;
    footerLeft: React.ReactNode;
    footerRight: React.ReactNode;
    children: React.ReactNode;
  }) {
-  const [menu, setMenu] = useState<null | { kind:'git'|'backup'|'restore'; x:number; y:number }>(null);
-  const openMenu = (kind:'git'|'backup'|'restore', el:HTMLElement) => {
+  const [menu, setMenu] = useState<null | { kind:'git'|'backup'|'settings'; x:number; y:number }>(null);
+  const openMenu = (kind:'git'|'backup'|'settings', el:HTMLElement) => {
     const r = el.getBoundingClientRect();
     setMenu({ kind, x: r.left, y: r.bottom + 8 });
   };
@@ -39,8 +39,8 @@ import React, { useEffect, useRef, useState } from "react";
               onClick={(e) => openMenu('git', e.currentTarget as HTMLElement)} />
             <ToolBtn icon={<Database  className="size-4" />} label="バックアップ"
               onClick={(e) => openMenu('backup', e.currentTarget as HTMLElement)} />
-            <ToolBtn icon={<RotateCcw className="size-4" />} label="復元"
-              onClick={(e) => openMenu('restore', e.currentTarget as HTMLElement)} />
+            <ToolBtn icon={<Settings className="size-4" />} label="設定"
+              onClick={(e) => openMenu('settings', e.currentTarget as HTMLElement)} />
              <div className="w-px h-5 bg-white/15 mx-1" />
              <ToolBtn icon={<Plus className="size-4" />} label="新規" onClick={onNewWindow} />
            </div>
@@ -69,10 +69,12 @@ import React, { useEffect, useRef, useState } from "react";
               ? [
                   { icon:<List className="size-4" />, label:'バックアップ一覧', onSelect:()=>{ closeMenu(); onOpenPanel('backup','list'); } },
                   { icon:<Plus className="size-4" />, label:'バックアップ作成…', onSelect:()=>{ closeMenu(); onOpenPanel('backup','create'); } },
-                ]
-              : [
+                  { type: 'divider' },
                   { icon:<RotateCcw className="size-4" />, label:'最新に復元',      onSelect:()=>{ closeMenu(); onOpenPanel('restore','latest'); } },
                   { icon:<List className="size-4" />,      label:'バックアップを選択…', onSelect:()=>{ closeMenu(); onOpenPanel('restore','choose'); } },
+                ]
+              : [ // settings
+                  { icon:<Settings className="size-4" />, label:'アニメーション設定', onSelect:()=>{ closeMenu(); onOpenPanel('settings','animation'); } },
                 ]
           }
         />
@@ -106,7 +108,7 @@ function Dropdown({
   x, y, items, onClose,
 }:{
   x:number; y:number;
-  items:{icon:React.ReactNode; label:string; onSelect:()=>void;}[];
+  items:({icon:React.ReactNode; label:string; onSelect:()=>void;} | { type: 'divider' })[];
   onClose:()=>void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -122,15 +124,20 @@ function Dropdown({
   return (
     <div className="fixed z-[60]" style={{ left, top: y }}>
       <div ref={ref} className="w-[260px] rounded-xl bg-white shadow-xl border border-slate-200 p-1">
-        {items.map((it, i) => (
-          <button key={i}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 active:bg-slate-100 text-slate-900 text-[15px]"
-            onClick={it.onSelect}
-          >
-            <span className="text-slate-700">{it.icon}</span>
-            <span>{it.label}</span>
-          </button>
-        ))}
+        {items.map((it, i) => {
+          if ('type' in it && it.type === 'divider') {
+            return <div key={i} className="h-px bg-slate-200 my-1" />;
+          }
+          return (
+            <button key={i}
+              className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-50 active:bg-slate-100 text-slate-900 text-[15px]"
+              onClick={it.onSelect}
+            >
+              <span className="text-slate-700">{it.icon}</span>
+              <span>{it.label}</span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

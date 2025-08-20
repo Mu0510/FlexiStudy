@@ -4,7 +4,7 @@ import { AppChrome } from "./AppChrome";
 import { TerminalWindow, makeNewWindow, TerminalWindowModel } from "./TerminalWindow";
 import { Dot } from 'lucide-react';
 
-type PanelState = null | { kind:'git'|'backup'|'restore'; view?:string };
+type PanelState = null | { kind:'git'|'backup'|'restore'|'settings'; view?:string };
 type ConnStatus = "connected" | "connecting" | "disconnected";
 
 export default function RescueConsoleApp() {
@@ -14,8 +14,9 @@ export default function RescueConsoleApp() {
   const [zCounter, setZ] = useState(10);
   const [status, setStatus] = useState<ConnStatus>("connected"); // ← 実装側でWSに連動
   const [panel, setPanel] = useState<PanelState>(null);
+  const [animationEnabled, setAnimationEnabled] = useState(true);
 
-  const minimized = useMemo(() => windows.filter(w => w.minimized), [windows]);
+  const taskbarItems = useMemo(() => windows.filter(w => w.minimized || w.minimizing || w.restoring), [windows]);
   const maxZ = useMemo(
     () => Math.max(0, ...windows.filter(w => !w.minimized).map(w => w.z)),
     [windows]
@@ -44,11 +45,17 @@ export default function RescueConsoleApp() {
       onOpenPanel={(k, view) => setPanel({ kind:k, view })}
       footerLeft={
         <>
-          {minimized.map(m => (
+          {taskbarItems.map(m => (
             <button
               key={m.id}
-              onClick={() => patch(m.id, { minimized: false })}
-              className="rounded px-2 py-0.5 border border-neutral-200 hover:bg-neutral-50 active:bg-neutral-100"
+              id={`minimized-btn-${m.id}`}
+              onClick={() => {
+                patch(m.id, { minimized: false, restoring: true });
+                setTimeout(() => {
+                  patch(m.id, { restoring: false });
+                }, 150); // アニメーションの時間に合わせる
+              }}
+              className={`rounded px-2 py-0.5 border border-neutral-200 hover:bg-neutral-50 active:bg-neutral-100 taskbar-btn ${m.minimizing ? 'will-appear' : ''} ${m.restoring ? 'will-disappear' : ''}`}
               title={m.title}
             >
               {m.title}
@@ -85,22 +92,48 @@ export default function RescueConsoleApp() {
             key={w.id}
             model={w}
             isTop={w.z === maxZ && !w.minimized}
+            animationEnabled={animationEnabled}
             onFocus={() => bringFront(w.id)}
             onChange={(p) => patch(w.id, p)}
             onClose={() => close(w.id)}
+            onMinimize={() => {
+              // まず `minimizing` フラグを立ててタスクバーボタンをレンダリングさせる
+              patch(w.id, { minimizing: true });
+              
+              // DOM更新後（次のフレーム）にボタン位置を取得してアニメーションを開始
+              requestAnimationFrame(() => {
+                const btn = document.getElementById(`minimized-btn-${w.id}`);
+                if (btn) {
+                  patch(w.id, { animationTargetRect: btn.getBoundingClientRect() });
+                } else {
+                  // ターゲットが見つからない場合はアニメーションなしで最小化
+                  patch(w.id, { minimizing: false, minimized: true });
+                }
+              });
+            }}
            />))}
       </div>
 
      {/* 画面全体ポップアップ（最前面 / ヘッダーも覆う） */}
       {panel && (
-        <FullScreenPanel kind={panel.kind} initialView={panel.view} onClose={() => setPanel(null)} />
+        <FullScreenPanel
+          kind={panel.kind}
+          initialView={panel.view}
+          onClose={() => setPanel(null)}
+          animationEnabled={animationEnabled}
+          onAnimationSettingChange={setAnimationEnabled}
+        />
       )}
     </AppChrome>
   );
 }
 
-function FullScreenPanel({ kind, initialView, onClose }:{
-  kind:'git'|'backup'|'restore'; initialView?:string; onClose:()=>void;
+function FullScreenPanel({ kind, initialView, onClose, animationEnabled, onAnimationSettingChange }: {
+  kind: 'git' | 'backup' | 'restore' | 'settings';
+  initialView?: string;
+  onClose: () => void;
+  animationEnabled: boolean;
+  onAnimationSettingChange: (enabled: boolean) => void;
 }) {
   return (
     <div className="fixed inset-0 z-[70]">
@@ -113,7 +146,7 @@ function FullScreenPanel({ kind, initialView, onClose }:{
           {/* ヘッダー */}
           <div className="h-14 flex items-center justify-between px-5 border-b border-slate-200">
             <div className="text-xl font-semibold">
-              {kind === 'git' ? 'Git' : kind === 'backup' ? 'バックアップ' : '復元'}
+              {kind === 'git' ? 'Git' : kind === 'backup' ? 'バックアップ' : kind === 'settings' ? '設定' : '復元'}
             </div>
             <button
               onClick={onClose}
@@ -129,6 +162,7 @@ function FullScreenPanel({ kind, initialView, onClose }:{
             {kind === 'git' && <GitPanel initialView={initialView} />}
             {kind === 'backup' && <BackupPanel />}
             {kind === 'restore' && <RestorePanel />}
+            {kind === 'settings' && <SettingsPanel animationEnabled={animationEnabled} onAnimationSettingChange={onAnimationSettingChange} />}
           </div>
         </div>
       </div>
@@ -200,6 +234,26 @@ function RestorePanel() {
       <SectionTitle>復元</SectionTitle>
       <ActionItem icon="⟲" label="最新に復元" onClick={() => alert('restore latest: 未実装')} />
       <ActionItem icon="…" label="バックアップを選択…" onClick={() => alert('choose: 未実装')} />
+    </div>
+  );
+}
+
+function SettingsPanel({ animationEnabled, onAnimationSettingChange }: {
+  animationEnabled: boolean;
+  onAnimationSettingChange: (enabled: boolean) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <SectionTitle>設定</SectionTitle>
+      <label className="flex items-center gap-3 rounded-lg border border-slate-200 px-3 py-2 hover:bg-slate-50 text-left cursor-pointer">
+        <span className="font-medium">ウィンドウのアニメーション</span>
+        <input
+          type="checkbox"
+          checked={animationEnabled}
+          onChange={(e) => onAnimationSettingChange(e.target.checked)}
+          className="ml-auto h-5 w-5 rounded-md"
+        />
+      </label>
     </div>
   );
 }
