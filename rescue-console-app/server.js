@@ -59,8 +59,27 @@ app.prepare().then(() => {
       env: process.env,
     });
 
+    // --- コマンドインターセプター ---
+    function handleTerminalCommand(command) {
+      const trimmedCommand = command.trim();
+      if (trimmedCommand.startsWith('rm ')) {
+        const message = `\r\n\x1b[33mWarning: The 'rm' command is disabled for safety.\r\nPlease use the 'trash' command instead to move files to the trash bin.\x1b[0m\r\n`;
+        ws.send(message);
+        return;
+      }
+
+      if (command.includes('study_log.db') && !command.includes('manage_log.py')) {
+        const message = `\r\n\x1b[31mError: Direct access to 'study_log.db' is not allowed.\r\nPlease use 'python3 manage_log.py' to interact with the database.\x1b[0m\r\n`;
+        ws.send(message);
+        return;
+      }
+
+      // TODO: ここに他の検証ロジックを実装
+      ptyProcess.write(command);
+    }
+
     ws.on('message', (message) => {
-      ptyProcess.write(message.toString());
+      handleTerminalCommand(message.toString());
     });
 
     ptyProcess.onData((data) => {
