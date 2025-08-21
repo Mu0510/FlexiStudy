@@ -263,9 +263,10 @@ function SettingsPanel({ animationEnabled, onAnimationSettingChange, safeMode, o
     const newSafeMode = e.target.checked;
     if (!newSafeMode) {
       if (window.confirm(
-        '安全モードを無効にすると、Geminiの操作範囲が現在のディレクトリ外に及ぶ可能性があります。\n' +
-        '破壊的なコマンド（rmなど）も実行できてしまいます。\n\n' +
-        '本当に安全モードを無効にしますか？'
+        `安全モードを無効にすると、現在のシェルが管理者権限で再起動されます。
+Geminiの操作範囲が現在のディレクトリ外に及び、破壊的なコマンド（rmなど）も実行できてしまいます。
+
+本当によろしいですか？`
       )) {
         onSafeModeChange(false);
       }
