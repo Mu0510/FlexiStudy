@@ -1,6 +1,7 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
+import type { DateRange } from 'react-day-picker'
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
@@ -11,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { DailyGoalsCard } from "@/components/daily-goals-card";
 import { Skeleton } from "@/components/ui/skeleton"
-import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb } from "lucide-react"
+import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb, Calendar as CalendarIcon, SlidersHorizontal, X } from "lucide-react"
 
 // Define the types for our data to ensure type safety
 interface Goal {
@@ -94,7 +95,8 @@ const RecordsSkeleton = () => (
 );
 
 import { useWebSocket } from "@/context/WebSocketContext";
-import { getSubjectStyle } from "@/lib/utils";
+import { getSubjectStyle, cn } from "@/lib/utils";
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 
 
@@ -105,6 +107,36 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const isMobile = useIsMobile();
   const isToday = new Date(selectedDate).toDateString() === new Date().toDateString();
   const { subscribe } = useWebSocket();
+
+  // --- Search states ---
+  const [searchInput, setSearchInput] = useState("");
+  const [searchType, setSearchType] = useState<'all'|'entry'|'goal'|'summary'>('all');
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [results, setResults] = useState<any[]>([]);
+  const [totalResults, setTotalResults] = useState<number>(0);
+  const [nextOffset, setNextOffset] = useState<number>(0);
+  const [hasMore, setHasMore] = useState<boolean>(false);
+  const [tagSuggestions, setTagSuggestions] = useState<Array<{name:string, source:string, count:number}>>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsTimer = useRef<any>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [isRangeOpen, setIsRangeOpen] = useState(false);
+  const latestSearchReqId = useRef(0);
+  const [hasSearched, setHasSearched] = useState(false);
+
+  // 展開条件をまとめて判定
+  const isExpanded = (
+    isSearchFocused ||
+    searchInput.trim().length > 0 ||
+    !!dateRange?.from ||
+    !!dateRange?.to ||
+    searchType !== 'all' ||
+    results.length > 0 ||
+    isRangeOpen
+  );
 
   useEffect(() => {
     console.log('[StudyRecords] Subscribing to WebSocket updates.');
@@ -179,6 +211,98 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
       setDatePickerOpen(false);
     }
   };
+
+  // ---- Search helpers ----
+  const extractTagsFromInput = (input: string) => {
+    const tokens = input.split(/\s+/).filter(Boolean);
+    const tags = tokens.filter(t => t.startsWith('#')).map(t => t.substring(1));
+    const q = tokens.filter(t => !t.startsWith('#')).join(' ');
+    return { q, tags };
+  };
+
+  const fetchSearch = async (reset = true, opts?: { type?: 'all'|'entry'|'goal'|'summary', range?: DateRange | undefined, input?: string }) => {
+    const reqId = ++latestSearchReqId.current;
+    const effectiveType = opts?.type ?? searchType;
+    const effectiveRange = opts?.range ?? dateRange;
+    const rawInput = opts?.input ?? searchInput;
+    const { q, tags } = extractTagsFromInput(rawInput);
+    const params = new URLSearchParams();
+    params.set('type', effectiveType);
+    if (q) params.set('q', q);
+    if (tags.length) params.set('tags', tags.join(','));
+    const fmt = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+    if (effectiveRange?.from) params.set('from', fmt(effectiveRange.from));
+    if (effectiveRange?.to) params.set('to', fmt(effectiveRange.to));
+    params.set('match', 'all');
+    params.set('limit', '20');
+    params.set('offset', reset ? '0' : String(nextOffset));
+
+    setHasSearched(true);
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const res = await fetch(`/api/search?${params.toString()}`);
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      // 応答の競合を防ぐ（最新のリクエストのみ反映）
+      if (reqId === latestSearchReqId.current) {
+        setTotalResults(data.total || 0);
+        setHasMore(!!data.hasMore);
+        setNextOffset(data.nextOffset || 0);
+        setResults(reset ? (data.items || []) : [...results, ...(data.items || [])]);
+      }
+    } catch (e: any) {
+      if (reqId === latestSearchReqId.current) {
+        setSearchError(e.message || '検索に失敗しました');
+      }
+    } finally {
+      if (reqId === latestSearchReqId.current) {
+        setSearching(false);
+      }
+    }
+  };
+
+  const requestSuggestions = async (prefix: string) => {
+    try {
+      const res = await fetch(`/api/tags?prefix=${encodeURIComponent(prefix)}&limit=8`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setTagSuggestions(data.tags || []);
+      setShowSuggestions(true);
+    } catch {}
+  };
+
+  const onSearchInputChange = (v: string) => {
+    setSearchInput(v);
+    if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current);
+    const prefix = /(^|\s)#([\w\u0080-\uFFFF\-]*)$/.exec(v)?.[2] || null;
+    if (prefix !== null) {
+      suggestionsTimer.current = setTimeout(() => requestSuggestions(prefix), 150);
+    } else {
+      setShowSuggestions(false);
+    }
+  };
+
+  const insertTagSuggestion = (name: string) => {
+    const v = searchInput;
+    const m = /(^|\s)#([\w\u0080-\uFFFF\-]*)$/.exec(v);
+    if (!m) return;
+    const start = v.slice(0, m.index) + (m[1] || '');
+    const newVal = `${start}#${name} `;
+    setSearchInput(newVal);
+    setShowSuggestions(false);
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
+  // Label helper for type select (shows placeholder text for 'all')
+  const getTypeLabel = (t: 'all'|'entry'|'goal'|'summary') => (
+    t === 'entry' ? '学習ログ' : t === 'goal' ? '目標' : t === 'summary' ? 'サマリー' : '種別指定'
+  );
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -290,7 +414,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">セッション詳細</h4>
                   <div className="space-y-3">
                     {session.logs.map((detail, index) => (
-                      <div key={index} className="flex items-center space-x-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                      <div id={`log-${detail.id}`} key={index} className="flex items-center space-x-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
                         <div className="flex items-center space-x-3 w-28 flex-shrink-0">
                           <div 
                             className="cursor-pointer hover:opacity-80 transition-opacity flex items-center space-x-2"
@@ -348,21 +472,273 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   return (
     <div className="space-y-6 pt-16 lg:pt-0">
       {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+      <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between space-y-4 lg:space-y-0">
         <div>
           <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">学習記録</h1>
           <p className="text-slate-600 dark:text-slate-400 mt-1">あなたの学習履歴を詳細に確認できます</p>
         </div>
         <div className="flex items-center space-x-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-400 w-4 h-4" />
-            <Input placeholder="学習内容を検索..." className="pl-10 w-64 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600 dark:placeholder:text-slate-400" />
+          {/* Search block */}
+          <div className="relative w-[clamp(14rem,30vw,24rem)]">
+            <div
+              className={`group/search rounded-md border border-input bg-background transition-all py-0 px-1`}
+              onFocusCapture={() => setIsSearchFocused(true)}
+              onBlurCapture={(e) => {
+                const rt = e.relatedTarget as Node | null;
+                if (isRangeOpen) return;
+                if (!rt || !(e.currentTarget as HTMLElement).contains(rt)) {
+                  setIsSearchFocused(false);
+                }
+              }}
+            >
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-400 w-4 h-4" />
+                <Input
+                  ref={searchInputRef}
+                  value={searchInput}
+                  onChange={(e) => onSearchInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if ((e.key === 'Enter' || e.key === 'Tab') && showSuggestions && tagSuggestions.length > 0) {
+                  e.preventDefault();
+                  insertTagSuggestion(tagSuggestions[0].name);
+                  return;
+                }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  fetchSearch(true);
+                }
+              }}
+               onFocus={() => setIsSearchFocused(true)}
+                  placeholder="#タグ や キーワードで検索..."
+              className="h-9 pl-10 w-full bg-transparent border-0 shadow-none focus:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:ring-0 focus:outline-none dark:text-slate-200 placeholder:text-slate-400"
+                />
+                {showSuggestions && tagSuggestions.length > 0 && (
+                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg max-h-60 overflow-auto">
+                    {tagSuggestions.map((t, idx) => (
+                      <button
+                        key={t.name + idx}
+                        type="button"
+                        onClick={() => insertTagSuggestion(t.name)}
+                        className="w-full text-left px-3 py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50"
+                      >
+                        <span className="text-slate-800 dark:text-slate-100">#{t.name}</span>
+                        <span className="ml-2 text-xs text-slate-500">{t.count}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+            </div>
           </div>
+          {/* Filter is outside the search block (independent) */}
           <Button variant="outline" size="sm">
             <Filter className="w-4 h-4 mr-2" />
             フィルター
           </Button>
         </div>
+      </div>
+
+      {/* Search results */}
+      <div className="space-y-2">
+        {(hasSearched || searching || results.length > 0 || searchError) && (
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2">
+                  {/* Count first */}
+                  <div className="text-sm text-slate-600 dark:text-slate-400 mr-1">
+                    {searchError ? (
+                      <span className="text-destructive">検索エラー: {searchError}</span>
+                    ) : (
+                      <span>
+                        {searching ? '検索中…' : `表示中 ${results.length}件 / 全 ${totalResults}件`}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Type selector (pill) */}
+                  <Select
+                    value={searchType as any}
+                    onValueChange={(val) => { const v = (val as any) || 'all'; setSearchType(v); fetchSearch(true, { type: v }); }}
+                  >
+                    <SelectTrigger
+                      className={cn(
+                        "relative h-8 w-auto px-3 text-sm rounded-full justify-start gap-2 transition-colors duration-150 [&>svg]:hidden font-light focus:outline-none focus:ring-0 focus:ring-offset-0",
+                        searchType !== 'all'
+                          ? "pr-6 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
+                          : "border-transparent bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
+                      )}
+                    >
+                      <span className="inline-flex items-center"><SlidersHorizontal className="w-4 h-4" /></span>
+                      <span>{getTypeLabel(searchType as any)}</span>
+                      {searchType !== 'all' && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label="種別指定をクリア"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-600/70 pointer-events-auto z-10"
+                          onPointerDownCapture={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSearchType('all');
+                            fetchSearch(true, { type: 'all' });
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSearchType('all');
+                              fetchSearch(true, { type: 'all' });
+                            }
+                          }}
+                        >
+                          <X className="w-3 h-3" />
+                        </span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">すべて</SelectItem>
+                      <SelectItem value="entry">学習ログ</SelectItem>
+                      <SelectItem value="goal">目標</SelectItem>
+                      <SelectItem value="summary">サマリー</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Range picker (pill) */}
+                  <Popover open={isRangeOpen} onOpenChange={setIsRangeOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "group relative h-8 px-3 rounded-full justify-start gap-2 transition-colors duration-150 font-light",
+                          (dateRange?.from || dateRange?.to)
+                            ? "pr-6 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
+                            : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
+                        )}
+                      >
+                        <CalendarIcon className="w-4 h-4 transition-colors duration-150 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
+                        {dateRange?.from && dateRange?.to
+                          ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth()+1).padStart(2,'0')}-${String(dateRange.from.getDate()).padStart(2,'0')} 〜 ${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth()+1).padStart(2,'0')}-${String(dateRange.to.getDate()).padStart(2,'0')}`
+                          : dateRange?.from ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth()+1).padStart(2,'0')}-${String(dateRange.from.getDate()).padStart(2,'0')}〜`
+                          : '期間指定'}
+                        {(dateRange?.from || dateRange?.to) && (
+                          <button
+                            type="button"
+                            aria-label="期間指定をクリア"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-600/70"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setDateRange(undefined);
+                              setIsRangeOpen(false);
+                              fetchSearch(true, { range: undefined });
+                            }}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-2" align="start">
+                      <Calendar
+                        mode="range"
+                        selected={dateRange as any}
+                        onSelect={(range: any) => {
+                          setDateRange(range);
+                          if (range?.from && range?.to) {
+                            setIsRangeOpen(false);
+                            fetchSearch(true, { range });
+                          }
+                        }}
+                        numberOfMonths={1}
+                        captionLayout="dropdown-buttons"
+                        initialFocus
+                      />
+                      <div className="flex items-center justify-end pt-2">
+                        <Button variant="ghost" size="sm" onClick={() => { setDateRange(undefined); setIsRangeOpen(false); fetchSearch(true, { range: undefined }); }}>クリア</Button>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+
+                  
+                </div>
+
+                <div className="flex items-center gap-1">
+                  <Button
+                    aria-label="検索結果を閉じる"
+                    title="検索結果を閉じる"
+                    variant="ghost"
+                    size="icon"
+                    className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700"
+                    onClick={() => {
+                      setHasSearched(false);
+                      setSearchError(null);
+                      setResults([]);
+                      setTotalResults(0);
+                      setHasMore(false);
+                      setNextOffset(0);
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              <div className="mt-3 space-y-2">
+                {results.map((item, idx) => (
+                  <div key={idx} className="p-3 rounded-md bg-slate-50 dark:bg-slate-700/40 flex items-start justify-between">
+                    <div className="pr-3">
+                      <div className="text-xs text-slate-500 mb-1">{item.kind.toUpperCase()} ・ {item.date}</div>
+                      <div className="text-slate-800 dark:text-slate-100 font-medium">{item.subject || '(no subject)'}</div>
+                      <div className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{item.preview}</div>
+                      {item._expanded && (
+                        <div className="mt-2 text-xs text-slate-500">詳細表示（今後拡張）</div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const p = results.slice();
+                          p[idx]._expanded = !p[idx]._expanded;
+                          setResults(p);
+                        }}
+                      >
+                        詳細
+                      </Button>
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => {
+                          onDateChange(item.date);
+                          setTimeout(() => {
+                            const el = document.getElementById(`log-${item.id}`);
+                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }, 600);
+                        }}
+                      >
+                        該当へジャンプ
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {hasMore && (
+                  <div className="flex justify-center mt-2">
+                    <Button variant="outline" size="sm" disabled={searching} onClick={() => fetchSearch(false)}>
+                      さらに読み込む
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Date Navigation & Summary */}

@@ -1096,6 +1096,276 @@ def recalculate_all_durations():
     logger.info("すべてのログの学習時間を再計算しました。")
 
 
+# --- タグ抽出・検索（新規） ---
+import re
+
+HASHTAG_RE = re.compile(r"#([\w\u0080-\uFFFF\-]+)")
+
+def _extract_hashtags_from_text(text):
+    if not text:
+        return []
+    return [m.group(1) for m in HASHTAG_RE.finditer(text)]
+
+def _make_preview(*fields, max_len=120):
+    for f in fields:
+        if f and isinstance(f, str):
+            s = f.strip()
+            if s:
+                return (s[:max_len] + ("…" if len(s) > max_len else ""))
+    return ""
+
+def get_all_tags(prefix=None, limit=None):
+    """goals.tags と各テキストフィールドからハッシュタグを集計して返す。
+    返却: {"tags": [{"name": str, "source": "goal"|"entry"|"summary", "count": int} ...]}
+    """
+    prefix = (prefix or "").strip()
+    try:
+        limit_val = int(limit) if (limit is not None and str(limit).isdigit()) else None
+    except Exception:
+        limit_val = None
+
+    counts = {}
+    sources = {}
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # goals.tags（JSON配列）
+        cursor.execute("SELECT tags FROM goals WHERE tags IS NOT NULL AND tags != ''")
+        for (tags_json,) in cursor.fetchall():
+            try:
+                arr = json.loads(tags_json)
+                if isinstance(arr, list):
+                    for t in arr:
+                        name = str(t).strip()
+                        if not name:
+                            continue
+                        counts[name] = counts.get(name, 0) + 1
+                        sources[name] = 'goal'
+            except Exception:
+                continue
+
+        # study_logs の text フィールドから #tag を抽出
+        cursor.execute("SELECT content, summary, memo, impression FROM study_logs")
+        for content, summary, memo, impression in cursor.fetchall():
+            text = "\n".join([x for x in [content, summary, memo, impression] if x])
+            for name in _extract_hashtags_from_text(text):
+                counts[name] = counts.get(name, 0) + 1
+                sources.setdefault(name, 'entry')
+
+        # daily_summaries.summary から #tag 抽出
+        cursor.execute("SELECT summary FROM daily_summaries WHERE summary IS NOT NULL AND summary != ''")
+        for (summary,) in cursor.fetchall():
+            for name in _extract_hashtags_from_text(summary):
+                counts[name] = counts.get(name, 0) + 1
+                sources.setdefault(name, 'summary')
+
+    items = []
+    for name, cnt in counts.items():
+        if prefix and not name.startswith(prefix):
+            continue
+        items.append({
+            "name": name,
+            "source": sources.get(name, 'entry'),
+            "count": cnt
+        })
+
+    # count desc, then name asc
+    items.sort(key=lambda x: (-x["count"], x["name"]))
+    if limit_val is not None and limit_val >= 0:
+        items = items[:limit_val]
+    return {"tags": items}
+
+def _within_range(date_str, start=None, end=None):
+    if not date_str:
+        return False
+    try:
+        d = datetime.datetime.strptime(date_str, '%Y-%m-%d').date()
+    except Exception:
+        try:
+            d = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S').date()
+        except Exception:
+            return False
+    if start and d < start:
+        return False
+    if end and d > end:
+        return False
+    return True
+
+def search_data(params):
+    """全期間/範囲・タイプ・テキスト・タグで横断検索する。
+    params: {
+      from: 'YYYY-MM-DD' | None,
+      to: 'YYYY-MM-DD' | None,
+      type: 'all'|'entry'|'goal'|'summary',
+      q: str | None,
+      tags: list[str] | comma-separated str | None,
+      match: 'all'|'any',
+      limit: int (default 20),
+      offset: int (default 0)
+    }
+    返却: { total, items, hasMore, nextOffset }
+    """
+    q = (params.get('q') or '').strip()
+    typ = (params.get('type') or 'all').lower()
+    match = (params.get('match') or 'all').lower()
+    limit = params.get('limit')
+    offset = params.get('offset')
+    try:
+        limit = int(limit) if limit is not None else 20
+    except Exception:
+        limit = 20
+    try:
+        offset = int(offset) if offset is not None else 0
+    except Exception:
+        offset = 0
+
+    # date range
+    start = params.get('from') or params.get('start')
+    end = params.get('to') or params.get('end')
+    start_d = None
+    end_d = None
+    try:
+        if start:
+            start_d = datetime.datetime.strptime(start, '%Y-%m-%d').date()
+        if end:
+            end_d = datetime.datetime.strptime(end, '%Y-%m-%d').date()
+    except Exception:
+        # 無効な日付は無視
+        start_d = start_d
+        end_d = end_d
+
+    # tags normalization
+    raw_tags = params.get('tags')
+    if isinstance(raw_tags, str):
+        tag_list = [t.strip() for t in raw_tags.split(',') if t.strip()]
+    elif isinstance(raw_tags, list):
+        tag_list = [str(t).strip() for t in raw_tags if str(t).strip()]
+    else:
+        tag_list = []
+
+    items = []
+
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+
+        def _matches_q(texts):
+            hay = "\n".join([t for t in texts if t])
+            if q and (q not in hay):
+                return False
+            return True
+
+        def _tags_match_in_text(hay: str) -> bool:
+            if not tag_list:
+                return True
+            tags_in_text = set(_extract_hashtags_from_text(hay))
+            if match == 'all':
+                return all(t in tags_in_text for t in tag_list)
+            else:
+                return any(t in tags_in_text for t in tag_list)
+
+        def _tags_match_in_goal(goal_tags) -> bool:
+            if not tag_list:
+                return True
+            if not isinstance(goal_tags, list):
+                goal_tags = []
+            if match == 'all':
+                return all(t in goal_tags for t in tag_list)
+            else:
+                return any(t in goal_tags for t in tag_list)
+
+        def _append_entry(row):
+            # 日付抽出
+            date_only = row['start_time'][:10] if row['start_time'] else None
+            if not _within_range(date_only, start_d, end_d):
+                return
+            texts = [row['subject'], row['content'], row['summary'], row['memo'], row['impression']]
+            if not _matches_q(texts):
+                return
+            hay = "\n".join([t for t in texts if t])
+            if not _tags_match_in_text(hay):
+                return
+            items.append({
+                'kind': 'entry',
+                'id': row['id'],
+                'date': date_only,
+                'subject': row['subject'],
+                'preview': _make_preview(row['summary'], row['content'], row['memo'], row['impression'])
+            })
+
+        def _append_goal(row):
+            date_only = row['date']
+            if not _within_range(date_only, start_d, end_d):
+                return
+            tags_list = []
+            if row['tags']:
+                try:
+                    tags_list = json.loads(row['tags'])
+                except Exception:
+                    tags_list = []
+            texts = [row['subject'], row['task'], row['details']]
+            if not _matches_q(texts):
+                return
+            if not _tags_match_in_goal(tags_list):
+                return
+            items.append({
+                'kind': 'goal',
+                'id': row['id'],
+                'date': date_only,
+                'subject': row['subject'],
+                'preview': _make_preview(row['task'], row['details'])
+            })
+
+        def _append_summary(row):
+            date_only = row['date']
+            if not _within_range(date_only, start_d, end_d):
+                return
+            texts = [row['summary']]
+            if not _matches_q(texts):
+                return
+            hay = "\n".join([t for t in texts if t])
+            if not _tags_match_in_text(hay):
+                return
+            items.append({
+                'kind': 'summary',
+                'id': row['date'],
+                'date': date_only,
+                'preview': _make_preview(row['summary'])
+            })
+
+        # entry
+        if typ in ('all', 'entry'):
+            cursor.execute("SELECT id, subject, content, summary, memo, impression, start_time FROM study_logs")
+            for row in cursor.fetchall():
+                _append_entry(row)
+
+        # goal
+        if typ in ('all', 'goal'):
+            cursor.execute("SELECT id, date, subject, task, details, tags FROM goals")
+            for row in cursor.fetchall():
+                _append_goal(row)
+
+        # summary
+        if typ in ('all', 'summary'):
+            cursor.execute("SELECT date, summary FROM daily_summaries")
+            for row in cursor.fetchall():
+                _append_summary(row)
+
+    # 日付降順、同日の場合は kind/ID 降順の簡易順序
+    items.sort(key=lambda x: (x['date'] or '', x['kind'], str(x['id'])), reverse=True)
+    total = len(items)
+    sliced = items[offset: offset + limit]
+    has_more = (offset + limit) < total
+    next_offset = offset + limit if has_more else offset
+
+    return {
+        'total': total,
+        'items': sliced,
+        'hasMore': has_more,
+        'nextOffset': next_offset
+    }
+
+
 def reconstruct_from_json(json_data_str):
     """JSONデータからデータベースを再構築し、結果を返す"""
     try:
@@ -1435,6 +1705,9 @@ ACTION_HANDLERS = {
     "data.unique_subjects": action_data_unique_subjects,
     "data.study_time_by_subject": action_data_study_time_by_subject,
     "data.weekly_study_time": action_data_weekly_study_time,
+    # new: tags + search
+    "data.tags": lambda params: get_all_tags(params.get("prefix"), params.get("limit")),
+    "data.search": lambda params: search_data(params),
     "db.restore": action_db_restore,
     "db.reconstruct": action_db_reconstruct,
     "db.backup": backup_now,
