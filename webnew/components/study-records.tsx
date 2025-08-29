@@ -126,6 +126,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const [isRangeOpen, setIsRangeOpen] = useState(false);
   const latestSearchReqId = useRef(0);
   const [hasSearched, setHasSearched] = useState(false);
+  const [lastQWords, setLastQWords] = useState<string[]>([]);
+  const [lastTags, setLastTags] = useState<string[]>([]);
 
   // 展開条件をまとめて判定
   const isExpanded = (
@@ -215,8 +217,13 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   // ---- Search helpers ----
   const extractTagsFromInput = (input: string) => {
     const tokens = input.split(/\s+/).filter(Boolean);
-    const tags = tokens.filter(t => t.startsWith('#')).map(t => t.substring(1));
-    const q = tokens.filter(t => !t.startsWith('#')).join(' ');
+    const stripPunct = (s: string) => s.replace(/[、。.,!?:;)\]\}＞＞〉》」』】］）]+$/u, '');
+    const isTagToken = (t: string) => t.startsWith('#') || t.startsWith('＃');
+    const tags = tokens
+      .filter(isTagToken)
+      .map(t => stripPunct(t.substring(1)))
+      .filter(Boolean);
+    const q = tokens.filter(t => !isTagToken(t)).join(' ');
     return { q, tags };
   };
 
@@ -226,6 +233,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     const effectiveRange = opts?.range ?? dateRange;
     const rawInput = opts?.input ?? searchInput;
     const { q, tags } = extractTagsFromInput(rawInput);
+    const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
     const params = new URLSearchParams();
     params.set('type', effectiveType);
     if (q) params.set('q', q);
@@ -251,6 +259,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
       const data = await res.json();
       // 応答の競合を防ぐ（最新のリクエストのみ反映）
       if (reqId === latestSearchReqId.current) {
+        setLastQWords(qWords);
+        setLastTags(tags);
         setTotalResults(data.total || 0);
         setHasMore(!!data.hasMore);
         setNextOffset(data.nextOffset || 0);
@@ -267,6 +277,38 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     }
   };
 
+  // --- Highlight helpers ---
+  const escapeReg = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const buildHighlightRegex = () => {
+    const terms: string[] = [];
+    // tags -> match with leading '#'
+    lastTags.forEach(t => terms.push(`#${escapeReg(t)}`));
+    // q words
+    lastQWords.forEach(w => terms.push(escapeReg(w)));
+    if (terms.length === 0) return null;
+    return new RegExp(`(${terms.join('|')})`, 'g');
+  };
+
+  const renderHighlighted = (text: string) => {
+    if (!text) return text;
+    const re = buildHighlightRegex();
+    if (!re) return text;
+    const parts: Array<string|JSX.Element> = [];
+    let lastIndex = 0;
+    text.replace(re, (match, _p1, offset) => {
+      if (offset > lastIndex) parts.push(text.slice(lastIndex, offset));
+      parts.push(
+        <mark key={`hl-${offset}`} className="bg-yellow-200 dark:bg-yellow-600/40 text-inherit rounded px-0.5">
+          {match}
+        </mark>
+      );
+      lastIndex = offset + match.length;
+      return match;
+    });
+    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    return parts;
+  };
+
   const requestSuggestions = async (prefix: string) => {
     try {
       const res = await fetch(`/api/tags?prefix=${encodeURIComponent(prefix)}&limit=8`);
@@ -280,7 +322,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const onSearchInputChange = (v: string) => {
     setSearchInput(v);
     if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current);
-    const prefix = /(^|\s)#([\w\u0080-\uFFFF\-]*)$/.exec(v)?.[2] || null;
+    const prefix = /(^|\s)[#＃]([\w\u0080-\uFFFF\-]*)$/.exec(v)?.[2] || null;
     if (prefix !== null) {
       suggestionsTimer.current = setTimeout(() => requestSuggestions(prefix), 150);
     } else {
@@ -290,7 +332,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
 
   const insertTagSuggestion = (name: string) => {
     const v = searchInput;
-    const m = /(^|\s)#([\w\u0080-\uFFFF\-]*)$/.exec(v);
+    const m = /(^|\s)[#＃]([\w\u0080-\uFFFF\-]*)$/.exec(v);
     if (!m) return;
     const start = v.slice(0, m.index) + (m[1] || '');
     const newVal = `${start}#${name} `;
@@ -694,8 +736,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   <div key={idx} className="p-3 rounded-md bg-slate-50 dark:bg-slate-700/40 flex items-start justify-between">
                     <div className="pr-3">
                       <div className="text-xs text-slate-500 mb-1">{item.kind.toUpperCase()} ・ {item.date}</div>
-                      <div className="text-slate-800 dark:text-slate-100 font-medium">{item.subject || '(no subject)'}</div>
-                      <div className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{item.preview}</div>
+                      <div className="text-slate-800 dark:text-slate-100 font-medium">{renderHighlighted(item.subject || '(no subject)')}</div>
+                      <div className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{renderHighlighted(item.preview)}</div>
                       {item._expanded && (
                         <div className="mt-2 text-xs text-slate-500">詳細表示（今後拡張）</div>
                       )}

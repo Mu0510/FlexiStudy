@@ -1099,7 +1099,8 @@ def recalculate_all_durations():
 # --- タグ抽出・検索（新規） ---
 import re
 
-HASHTAG_RE = re.compile(r"#([\w\u0080-\uFFFF\-]+)")
+# 半角/全角シャープの両方を許可
+HASHTAG_RE = re.compile(r"[#＃]([\w\u0080-\uFFFF\-]+)")
 
 def _extract_hashtags_from_text(text):
     if not text:
@@ -1219,6 +1220,12 @@ def search_data(params):
     except Exception:
         offset = 0
 
+    # キーワード（半角空白で分割し AND 条件）
+    try:
+        q_words = [w for w in re.split(r"\s+", q) if w]
+    except Exception:
+        q_words = [q] if q else []
+
     # date range
     start = params.get('from') or params.get('start')
     end = params.get('to') or params.get('end')
@@ -1251,8 +1258,10 @@ def search_data(params):
 
         def _matches_q(texts):
             hay = "\n".join([t for t in texts if t])
-            if q and (q not in hay):
-                return False
+            # AND: すべての語が含まれること
+            for w in q_words:
+                if w not in hay:
+                    return False
             return True
 
         def _tags_match_in_text(hay: str) -> bool:
