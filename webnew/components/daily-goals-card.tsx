@@ -33,9 +33,10 @@ interface DailyGoalsCardProps {
   onMoveGoal?: (goal: Goal) => void;
   onSelectGoal?: (goal: Goal) => void; // onStartGoal を onSelectGoal に変更
   subjectColors?: Record<string, string>;
+  highlightGoalIds?: Set<string | number>;
 }
 
-export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal, onSelectGoal, subjectColors = {} }: DailyGoalsCardProps) {
+export function DailyGoalsCard({ goals, stats, title = "今日の目標", className, isToday = true, onMoveGoal, onSelectGoal, subjectColors = {}, highlightGoalIds }: DailyGoalsCardProps) {
   if (!goals || goals.length === 0) {
     return (
       <Card className={className}>
@@ -72,7 +73,8 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
         {goals.map((goal, index) => (
           <div
             key={goal.id || index}
-            className="flex items-center space-x-3 p-3 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors"
+            id={`goal-${goal.id}`}
+            className={`flex items-center space-x-3 p-3 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-700/50 transition-colors transition-shadow duration-700 ${highlightGoalIds && highlightGoalIds.has(goal.id) ? 'bg-yellow-50 dark:bg-yellow-900/30 ring-2 ring-yellow-400' : ''}`}
           >
             {goal.completed ? (
               <CheckCircle2 className="w-5 h-5 text-success-700 dark:text-success-500" />

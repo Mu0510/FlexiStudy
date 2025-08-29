@@ -128,6 +128,10 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const [hasSearched, setHasSearched] = useState(false);
   const [lastQWords, setLastQWords] = useState<string[]>([]);
   const [lastTags, setLastTags] = useState<string[]>([]);
+  const [pendingJump, setPendingJump] = useState<{ date: string; id?: any; logId?: number; kind?: string } | null>(null);
+  const [highlightLogIds, setHighlightLogIds] = useState<Set<number>>(new Set());
+  const [highlightGoalIds, setHighlightGoalIds] = useState<Set<string | number>>(new Set());
+  const [highlightSummaryDate, setHighlightSummaryDate] = useState<string | null>(null);
 
   // 展開条件をまとめて判定
   const isExpanded = (
@@ -319,6 +323,78 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     } catch {}
   };
 
+  // Handle jump after data loads: expand session and scroll + temporary highlight
+  useEffect(() => {
+    if (!pendingJump) return;
+    if (selectedDate !== pendingJump.date) return;
+    if (!logData || !logData.sessions) return;
+
+    if (pendingJump.kind === 'entry' && pendingJump.logId) {
+      const target = pendingJump.logId;
+      const targetSession = logData.sessions.find((s: any) => s.logs?.some((l: any) => l.id === target));
+      if (!targetSession) return; // wait for data
+
+      const ensureOpen = () => {
+        setTimeout(() => {
+          const el = document.getElementById(`log-${target}`);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setHighlightLogIds(prev => new Set(prev).add(target));
+            setTimeout(() => {
+              setHighlightLogIds(prev => {
+                const n = new Set(prev);
+                n.delete(target);
+                return n;
+              });
+            }, 2000);
+            setPendingJump(null);
+          }
+        }, 50);
+      };
+
+      if (!openSessions[targetSession.session_id]) {
+        setOpenSessions(prev => ({ ...prev, [targetSession.session_id]: true }));
+        ensureOpen();
+      } else {
+        ensureOpen();
+      }
+      return;
+    }
+
+    if (pendingJump.kind === 'goal' && pendingJump.id) {
+      const gid = pendingJump.id;
+      setTimeout(() => {
+        const el = document.getElementById(`goal-${gid}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightGoalIds(prev => new Set(prev).add(gid));
+          setTimeout(() => {
+            setHighlightGoalIds(prev => {
+              const n = new Set(prev);
+              n.delete(gid);
+              return n;
+            });
+          }, 2000);
+          setPendingJump(null);
+        }
+      }, 50);
+      return;
+    }
+
+    if (pendingJump.kind === 'summary') {
+      setTimeout(() => {
+        const el = document.getElementById(`summary-${pendingJump.date}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setHighlightSummaryDate(pendingJump.date);
+          setTimeout(() => setHighlightSummaryDate(null), 2000);
+          setPendingJump(null);
+        }
+      }, 50);
+      return;
+    }
+  }, [logData, pendingJump, selectedDate, openSessions]);
+
   const onSearchInputChange = (v: string) => {
     setSearchInput(v);
     if (suggestionsTimer.current) clearTimeout(suggestionsTimer.current);
@@ -456,7 +532,14 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   <h4 className="font-semibold text-slate-800 dark:text-slate-100 mb-3">セッション詳細</h4>
                   <div className="space-y-3">
                     {session.logs.map((detail, index) => (
-                      <div id={`log-${detail.id}`} key={index} className="flex items-center space-x-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg">
+                      <div
+                        id={`log-${detail.id}`}
+                        key={index}
+                        className={cn(
+                          "flex items-center space-x-4 p-3 bg-slate-50 dark:bg-slate-700/50 rounded-lg transition-shadow duration-700",
+                          highlightLogIds.has(detail.id) && "ring-2 ring-yellow-400 bg-yellow-50 dark:bg-yellow-900/30"
+                        )}
+                      >
                         <div className="flex items-center space-x-3 w-28 flex-shrink-0">
                           <div 
                             className="cursor-pointer hover:opacity-80 transition-opacity flex items-center space-x-2"
@@ -758,11 +841,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                         variant="default"
                         size="sm"
                         onClick={() => {
+                          setPendingJump({ date: item.date, id: item.id, logId: item.kind === 'entry' ? item.id : undefined, kind: item.kind });
                           onDateChange(item.date);
-                          setTimeout(() => {
-                            const el = document.getElementById(`log-${item.id}`);
-                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                          }, 600);
                         }}
                       >
                         該当へジャンプ
@@ -838,7 +918,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
                     <h3 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2 pl-1">この日のまとめ</h3>
-                    <p className="text-slate-600 dark:text-slate-400 whitespace-pre-wrap pl-1">{logData.daily_summary.summary || 'サマリーはありません。'}</p>
+                    <p id={`summary-${selectedDate}`} className={cn("text-slate-600 dark:text-slate-400 whitespace-pre-wrap pl-1 transition-colors transition-shadow duration-700", highlightSummaryDate === selectedDate && "bg-yellow-50 dark:bg-yellow-900/30 ring-2 ring-yellow-400 rounded")}>{logData.daily_summary.summary || 'サマリーはありません。'}</p>
                   </div>
                   <div className="flex flex-col justify-center space-y-4">
                     <div>
@@ -869,6 +949,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                   onMoveGoal={handleMoveGoal}
                   onSelectGoal={onSelectGoal}
                   subjectColors={subjectColors}
+                  highlightGoalIds={highlightGoalIds}
                 />
               </div>
             </>
