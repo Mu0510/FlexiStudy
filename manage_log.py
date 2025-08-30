@@ -1379,6 +1379,8 @@ def search_data(params):
                 'id': row['id'],
                 'date': date_only,
                 'subject': row['subject'],
+                'content': row['content'],
+                'type': row['event_type'],
                 'preview': _make_preview(row['summary'], row['content'], row['memo'], row['impression']),
                 'snippets': snippets,
                 'score': score,
@@ -1468,7 +1470,7 @@ def search_data(params):
 
         # entry
         if typ in ('all', 'entry'):
-            cursor.execute("SELECT id, subject, content, summary, memo, impression, start_time FROM study_logs")
+            cursor.execute("SELECT id, subject, content, summary, memo, impression, start_time, event_type FROM study_logs")
             for row in cursor.fetchall():
                 _append_entry(row)
 

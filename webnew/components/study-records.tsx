@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { DailyGoalsCard } from "@/components/daily-goals-card";
 import { Skeleton } from "@/components/ui/skeleton"
-import { Clock, BookOpen, Search, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb, Calendar as CalendarIcon, SlidersHorizontal, ArrowUpDown, X } from "lucide-react"
+import { Clock, BookOpen, Search, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb, Calendar as CalendarIcon, SlidersHorizontal, ArrowUpDown, X, BookUser, Tag } from "lucide-react"
 
 // Define the types for our data to ensure type safety
 interface Goal {
@@ -1418,29 +1418,63 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
               </div>
               <div className="mt-3 space-y-2">
                 {results.map((item, idx) => {
-                  const title = item.kind === 'summary'
-                    ? `${formatJPMonthDay(item.date)}のまとめ`
-                    : (item.subject || '(no subject)');
+                  const mainTitle =
+                    (item.kind === 'goal' && item.task) ||
+                    (item.kind === 'entry' && (item.type === 'BREAK' ? '休憩' : item.content || item.subject || '(内容なし)')) ||
+                    (item.kind === 'summary' && `${formatJPMonthDay(item.date)}のまとめ`) ||
+                    item.preview ||
+                    '(タイトルなし)';
+
                   const snippets = Array.isArray(item.snippets) && item.snippets.length > 0
                     ? item.snippets.slice(0, 2)
                     : null;
                   return (
                     <div key={idx} className="p-3 rounded-md bg-slate-50 dark:bg-slate-700/40 flex items-start justify-between">
-                      <div className="pr-3">
+                      <div className="pr-3 flex-grow min-w-0">
                         <div className="text-xs text-slate-500 mb-1">{item.kind.toUpperCase()} ・ {item.date}</div>
-                        <div className="text-slate-800 dark:text-slate-100 font-medium">{renderHighlighted(title)}</div>
-                        {snippets ? (
-                          <div className="mt-1 space-y-1">
-                            {snippets.map((sn: any, i: number) => (
-                              <div key={i} className="flex items-start text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
-                                {sn.field !== 'title' && <SnippetIcon field={sn.field} />}
-                                <span className="flex-1">{renderHighlighted(sn.text)}</span>
+                        <div className="text-slate-800 dark:text-slate-100 font-medium truncate" title={mainTitle}>{renderHighlighted(mainTitle)}</div>
+
+                        {/* Sub-contents: Subject and Tags */}
+                        <div className="flex items-center flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-600 dark:text-slate-400">
+                          {(() => {
+                            const renderedSubject = item.subject ? renderHighlighted(item.subject) : null;
+                            if (renderedSubject && Array.isArray(renderedSubject)) {
+                              return (
+                                <div className="flex items-center">
+                                  <BookUser className="w-3.5 h-3.5 mr-1.5" />
+                                  <span>{renderedSubject}</span>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                          {item.kind === 'goal' && item.tags && item.tags.length > 0 && (
+                            <div className="flex items-center">
+                              <Tag className="w-3.5 h-3.5 mr-1.5" />
+                              <div className="flex flex-wrap gap-1">
+                                {item.tags.map((tag: string, i: number) => (
+                                  <Badge key={i} variant="secondary" className="px-1.5 py-0.5 text-xs font-normal">{renderHighlighted(`#${tag}`)}</Badge>
+                                ))}
                               </div>
-                            ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Snippets: memo and impression only */}
+                        {snippets && (
+                          <div className="mt-2 space-y-1">
+                            {snippets
+                              .filter((sn: any) => sn.field === 'memo' || sn.field === 'impression' || sn.field === 'session_summary')
+                              .map((sn: any, i: number) => (
+                                <div key={i} className="flex items-start text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                                  <SnippetIcon field={sn.field} />
+                                  <span className="flex-1">{renderHighlighted(sn.text)}</span>
+                                </div>
+                              ))
+                            }
                           </div>
-                        ) : (
-                          <div className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{renderHighlighted(item.preview)}</div>
                         )}
+
                         {item._expanded && (
                           <div className="mt-2 text-xs text-slate-500">詳細表示（今後拡張）</div>
                         )}
