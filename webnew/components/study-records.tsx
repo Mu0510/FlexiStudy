@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { DailyGoalsCard } from "@/components/daily-goals-card";
 import { Skeleton } from "@/components/ui/skeleton"
-import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb, Calendar as CalendarIcon, SlidersHorizontal, ArrowUpDown, X } from "lucide-react"
+import { Clock, BookOpen, Search, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb, Calendar as CalendarIcon, SlidersHorizontal, ArrowUpDown, X } from "lucide-react"
 
 // Define the types for our data to ensure type safety
 interface Goal {
@@ -124,7 +124,8 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const suggestionsTimer = useRef<any>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const [isRangeOpen, setIsRangeOpen] = useState(false);
+  const [isRangeOpenSm, setIsRangeOpenSm] = useState(false);
+  const [isRangeOpenMd, setIsRangeOpenMd] = useState(false);
   const latestSearchReqId = useRef(0);
   const [hasSearched, setHasSearched] = useState(false);
   const [lastQWords, setLastQWords] = useState<string[]>([]);
@@ -133,6 +134,103 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const [highlightLogIds, setHighlightLogIds] = useState<Set<number>>(new Set());
   const [highlightGoalIds, setHighlightGoalIds] = useState<Set<string | number>>(new Set());
   const [highlightSummaryDate, setHighlightSummaryDate] = useState<string | null>(null);
+  const [rangeAnchor, setRangeAnchor] = useState<{ mode: 'to' | 'from'; date: Date } | null>(null);
+  const keepRangeOpen = !!rangeAnchor || (!!dateRange?.from && !dateRange?.to);
+  const preventCloseUntilRef = useRef<number>(0);
+  const [showQuickMd, setShowQuickMd] = useState(false);
+  const [showQuickSm, setShowQuickSm] = useState(false);
+  const [pendingRangeMd, setPendingRangeMd] = useState<DateRange | undefined>(undefined);
+  const [pendingRangeSm, setPendingRangeSm] = useState<DateRange | undefined>(undefined);
+  const mdCalRef = useRef<HTMLDivElement | null>(null);
+  const smCalRef = useRef<HTMLDivElement | null>(null);
+  const [mdCalWidth, setMdCalWidth] = useState<number | undefined>(undefined);
+  const [smCalWidth, setSmCalWidth] = useState<number | undefined>(undefined);
+
+  const sameDay = (a?: Date, b?: Date) => !!a && !!b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const MIN_DATE = new Date(1900, 0, 1);
+  const MAX_DATE = new Date(9999, 11, 31);
+
+  const formatRangeLabel = (rng?: DateRange) => {
+    if (rng?.from && rng?.to) {
+      const from = `${rng.from.getFullYear()}-${String(rng.from.getMonth()+1).padStart(2,'0')}-${String(rng.from.getDate()).padStart(2,'0')}`;
+      const to = `${rng.to.getFullYear()}-${String(rng.to.getMonth()+1).padStart(2,'0')}-${String(rng.to.getDate()).padStart(2,'0')}`;
+      // Single day: show just the date
+      if (sameDay(rng.from as Date, rng.to as Date)) return from;
+      // If using infinite sentinels, normalize label
+      if (sameDay(rng.from as Date, MIN_DATE)) return `〜 ${to}`;
+      if (sameDay(rng.to as Date, MAX_DATE)) return `${from} 〜`;
+      return `${from} 〜 ${to}`;
+    }
+    if (rng?.from) {
+      const from = `${rng.from.getFullYear()}-${String(rng.from.getMonth()+1).padStart(2,'0')}-${String(rng.from.getDate()).padStart(2,'0')}`;
+      return `${from}〜`;
+    }
+    if ((rng as any)?.to) {
+      const toD = (rng as any).to as Date;
+      const to = `${toD.getFullYear()}-${String(toD.getMonth()+1).padStart(2,'0')}-${String(toD.getDate()).padStart(2,'0')}`;
+      return `〜 ${to}`;
+    }
+    return '期間指定';
+  };
+
+  const isSingleDayRange = (rng?: DateRange) => !!rng?.from && (!rng?.to || sameDay(rng.from as Date, rng.to as Date));
+  const isInfUntilRange = (rng?: DateRange) => !!rng?.from && sameDay(rng.from as Date, MIN_DATE);
+  const isInfFromRange = (rng?: DateRange) => !!rng?.to && sameDay(rng.to as Date, MAX_DATE);
+
+  const normalizeRange = (applied?: DateRange): DateRange | undefined => {
+    if (!applied) return undefined;
+    if (applied.from && !applied.to) {
+      return { from: applied.from, to: applied.from } as any;
+    }
+    if (applied.from && applied.to) {
+      if (sameDay(applied.from as Date, MIN_DATE)) {
+        return { to: applied.to } as any;
+      }
+      if (sameDay(applied.to as Date, MAX_DATE)) {
+        return { from: applied.from } as any;
+      }
+      return applied;
+    }
+    return undefined;
+  };
+
+  const applyPendingAndCloseMd = () => {
+    const normalized = normalizeRange(pendingRangeMd);
+    if (normalized) {
+      setDateRange(normalized);
+      fetchSearch(true, { range: normalized as any });
+    }
+    setIsRangeOpenMd(false);
+  };
+
+  const applyPendingAndCloseSm = () => {
+    const normalized = normalizeRange(pendingRangeSm);
+    if (normalized) {
+      setDateRange(normalized);
+      fetchSearch(true, { range: normalized as any });
+    }
+    setIsRangeOpenSm(false);
+  };
+
+  useEffect(() => {
+    const node = mdCalRef.current;
+    if (!node) return;
+    const ro = new (window as any).ResizeObserver((entries: any) => {
+      for (const e of entries) setMdCalWidth(Math.ceil(e.contentRect.width));
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [isRangeOpenMd]);
+
+  useEffect(() => {
+    const node = smCalRef.current;
+    if (!node) return;
+    const ro = new (window as any).ResizeObserver((entries: any) => {
+      for (const e of entries) setSmCalWidth(Math.ceil(e.contentRect.width));
+    });
+    ro.observe(node);
+    return () => ro.disconnect();
+  }, [isRangeOpenSm]);
 
   // 展開条件をまとめて判定
   const isExpanded = (
@@ -142,7 +240,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     !!dateRange?.to ||
     searchType !== 'all' ||
     results.length > 0 ||
-    isRangeOpen
+    isRangeOpenSm || isRangeOpenMd
   );
 
   useEffect(() => {
@@ -235,7 +333,9 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const fetchSearch = async (reset = true, opts?: { type?: 'all'|'entry'|'goal'|'summary', range?: DateRange | undefined, input?: string, order?: 'relevance'|'newest'|'oldest' }) => {
     const reqId = ++latestSearchReqId.current;
     const effectiveType = opts?.type ?? searchType;
-    const effectiveRange = opts?.range ?? dateRange;
+    // Use provided range even if undefined (to explicitly clear)
+    const hasRangeKey = !!opts && Object.prototype.hasOwnProperty.call(opts, 'range');
+    const effectiveRange = hasRangeKey ? opts!.range : dateRange;
     const rawInput = opts?.input ?? searchInput;
     const effectiveOrder = opts?.order ?? sortOrder;
     const { q, tags } = extractTagsFromInput(rawInput);
@@ -629,22 +729,30 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
           <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100">学習記録</h1>
           <p className="text-slate-600 dark:text-slate-400 mt-1">あなたの学習履歴を詳細に確認できます</p>
         </div>
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 w-full md:w-auto">
           {/* Search block */}
-          <div className="relative w-[clamp(14rem,30vw,24rem)]">
+          <div className="relative w-full max-w-[24rem] md:w-[clamp(14rem,30vw,24rem)] md:max-w-none md:flex-none">
             <div
               className={`group/search rounded-md border border-input bg-background transition-all py-0 px-1`}
               onFocusCapture={() => setIsSearchFocused(true)}
               onBlurCapture={(e) => {
                 const rt = e.relatedTarget as Node | null;
-                if (isRangeOpen) return;
+                if (isRangeOpenSm || isRangeOpenMd) return;
                 if (!rt || !(e.currentTarget as HTMLElement).contains(rt)) {
                   setIsSearchFocused(false);
                 }
               }}
             >
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 dark:text-slate-400 w-4 h-4" />
+                <button
+                  type="button"
+                  aria-label="検索"
+                  title="検索"
+                  className="absolute left-1.5 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-md hover:bg-slate-100 dark:hover:bg-slate-700/60"
+                  onClick={() => { fetchSearch(true); searchInputRef.current?.focus(); }}
+                >
+                  <Search className="text-slate-400 dark:text-slate-400 w-4 h-4 pointer-events-none" />
+                </button>
                 <Input
                   ref={searchInputRef}
                   value={searchInput}
@@ -683,11 +791,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
 
             </div>
           </div>
-          {/* Filter is outside the search block (independent) */}
-          <Button variant="outline" size="sm">
-            <Filter className="w-4 h-4 mr-2" />
-            フィルター
-          </Button>
+          {/* Filter button removed */}
         </div>
       </div>
 
@@ -696,9 +800,9 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
         {(hasSearched || searching || results.length > 0 || searchError) && (
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
             <CardContent className="p-4">
-              <div className="flex items-center justify-between gap-3 flex-wrap">
-                <div className="flex items-center gap-2">
-                  {/* Count first */}
+              <div className="space-y-2">
+                {/* Small screens: 1st row = count + close */}
+                <div className="flex items-center justify-between md:hidden">
                   <div className="text-sm text-slate-600 dark:text-slate-400 mr-1">
                     {searchError ? (
                       <span className="text-destructive">検索エラー: {searchError}</span>
@@ -708,8 +812,339 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       </span>
                     )}
                   </div>
+                  <Button
+                    aria-label="検索結果を閉じる"
+                    title="検索結果を閉じる"
+                    variant="ghost"
+                    size="icon"
+                    className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700"
+                    onClick={() => {
+                      setHasSearched(false);
+                      setSearchError(null);
+                      setResults([]);
+                      setTotalResults(0);
+                      setHasMore(false);
+                      setNextOffset(0);
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
 
+                {/* Large screens: single-line layout (count + pills on left, close on right) */}
+                <div className="hidden md:flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm text-slate-600 dark:text-slate-400 mr-1">
+                      {searchError ? (
+                        <span className="text-destructive">検索エラー: {searchError}</span>
+                      ) : (
+                        <span>
+                          {searching ? '検索中…' : `表示中 ${results.length}件 / 全 ${totalResults}件`}
+                        </span>
+                      )}
+                    </div>
+                    {/* Type selector (pill) */}
+                    <div className="order-1">
+                    <Select
+                      value={searchType as any}
+                      onValueChange={(val) => { const v = (val as any) || 'all'; setSearchType(v); fetchSearch(true, { type: v }); }}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "relative h-8 w-auto px-3 text-sm rounded-full justify-start gap-2 transition-colors duration-150 [&>svg]:hidden font-light focus:outline-none focus:ring-0 focus:ring-offset-0",
+                          searchType !== 'all'
+                            ? "pr-8 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
+                            : "border-transparent bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
+                        )}
+                      >
+                        <span className="inline-flex items-center"><SlidersHorizontal className="w-4 h-4" /></span>
+                        <span>{getTypeLabel(searchType as any)}</span>
+                        {searchType !== 'all' && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            aria-label="種別指定をクリア"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-600/70 z-20 pointer-events-auto leading-none"
+                            onPointerDownCapture={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSearchType('all');
+                              fetchSearch(true, { type: 'all' });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSearchType('all');
+                                fetchSearch(true, { type: 'all' });
+                              }
+                            }}
+                          >
+                            <span className="flex items-center justify-center w-full h-full pointer-events-none">
+                              <X className="w-3 h-3" aria-hidden="true" />
+                            </span>
+                          </span>
+                        )}
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">すべて</SelectItem>
+                        <SelectItem value="entry">学習ログ</SelectItem>
+                        <SelectItem value="goal">目標</SelectItem>
+                        <SelectItem value="summary">サマリー</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    </div>
+
+                    {/* Order selector */}
+                    <div className="order-3">
+                    <Select
+                      value={sortOrder}
+                      onValueChange={(val) => {
+                        const v = (val as any) as 'relevance'|'newest'|'oldest';
+                        setSortOrder(v);
+                        fetchSearch(true, { order: v });
+                      }}
+                    >
+                      <SelectTrigger
+                        className={cn(
+                          "relative h-8 w-auto px-3 text-sm rounded-full justify-start gap-2 transition-colors duration-150 [&>svg]:hidden font-light focus:outline-none focus:ring-0 focus:ring-offset-0",
+                          sortOrder !== 'relevance'
+                            ? "pr-8 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
+                            : "border-transparent bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
+                        )}
+                      >
+                        <span className="inline-flex items-center"><ArrowUpDown className="w-4 h-4" /></span>
+                        <span>{sortOrder === 'relevance' ? '関連度' : sortOrder === 'newest' ? '新しい順' : '古い順'}</span>
+                        {sortOrder !== 'relevance' && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            aria-label="並び替えをクリア"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-600/70 z-20 pointer-events-auto leading-none"
+                            onPointerDownCapture={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                            }}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSortOrder('relevance');
+                              fetchSearch(true, { order: 'relevance' });
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setSortOrder('relevance');
+                                fetchSearch(true, { order: 'relevance' });
+                              }
+                            }}
+                          >
+                            <span className="flex items-center justify-center w-full h-full pointer-events-none">
+                              <X className="w-3 h-3" aria-hidden="true" />
+                            </span>
+                          </span>
+                        )}
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="relevance">関連度</SelectItem>
+                        <SelectItem value="newest">新しい順</SelectItem>
+                        <SelectItem value="oldest">古い順</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    </div>
+
+                    {/* Range picker (pill) */}
+                    <div className="order-2">
+                    <Popover
+                      modal
+                      open={isRangeOpenMd}
+                      onOpenChange={(o) => {
+                        // prevent implicit close; only close via OK or header X
+                        if (o) setIsRangeOpenMd(true); else setIsRangeOpenMd(false);
+                      }}
+                    >
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "group relative h-8 px-3 rounded-full justify-start gap-2 transition-colors duration-150 font-light",
+                            (dateRange?.from || dateRange?.to)
+                              ? "pr-6 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
+                              : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
+                          )}
+                          onClick={() => { setPendingRangeMd(dateRange); setIsRangeOpenMd(true); }}
+                        >
+                          <CalendarIcon className="w-4 h-4 transition-colors duration-150 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
+                          {formatRangeLabel(dateRange as any)}
+                          {(dateRange?.from || dateRange?.to) && (
+                            <span
+                              role="button"
+                              aria-label="期間指定をクリア"
+                              tabIndex={0}
+                              className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-600/70"
+                              onPointerDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setPendingRangeMd(undefined);
+                                setDateRange(undefined);
+                                setRangeAnchor(null);
+                                setShowQuickMd(false);
+                                setIsRangeOpenMd(false);
+                                fetchSearch(true, { range: undefined });
+                              }}
+                              onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setPendingRangeMd(undefined);
+                                setDateRange(undefined);
+                                setShowQuickMd(false);
+                                setRangeAnchor(null);
+                                setIsRangeOpenMd(false);
+                                fetchSearch(true, { range: undefined });
+                              }
+                            }}
+                            >
+                              <X className="w-3 h-3" />
+                            </span>
+                          )}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent
+                        className="p-2 w-fit max-w-[95vw]"
+                        align="start"
+                        onInteractOutside={(e) => { applyPendingAndCloseMd(); }}
+                      >
+                        <div ref={mdCalRef}>
+                          <Calendar
+                            mode="range"
+                            selected={pendingRangeMd as any}
+                            onSelect={(range: any) => {
+                            if (rangeAnchor && (range?.from || range?.to)) {
+                              const anchor = rangeAnchor.date;
+                              let picked: Date | undefined = undefined;
+                              if (range?.from && range?.to) {
+                                picked = sameDay(range.from, anchor) ? range.to : range.from;
+                              } else {
+                                picked = range.from || range.to;
+                              }
+                              if (picked) {
+                                const from = rangeAnchor.mode === 'from' ? anchor : picked;
+                                const to = rangeAnchor.mode === 'from' ? picked : anchor;
+                                const f = new Date(Math.min(from.getTime(), to.getTime()));
+                                const t = new Date(Math.max(from.getTime(), to.getTime()));
+                                setPendingRangeMd({ from: f, to: t } as any);
+                                setRangeAnchor(null);
+                                return;
+                              }
+                            }
+                            setPendingRangeMd(range);
+                            }}
+                            numberOfMonths={1}
+                            captionLayout="dropdown-buttons"
+                            initialFocus
+                          />
+                        </div>
+                        {/* Anchor actions row (single day selection) */}
+                        {(isSingleDayRange(pendingRangeMd) || rangeAnchor || isInfUntilRange(pendingRangeMd) || isInfFromRange(pendingRangeMd)) && (
+                          <div className="mt-2 grid grid-cols-2 gap-2 w-full" style={{ width: mdCalWidth ? `${mdCalWidth}px` : undefined }}>
+                            <Button
+                              variant={(rangeAnchor?.mode === 'to' || isInfUntilRange(pendingRangeMd)) ? 'default' : 'outline'}
+                              aria-pressed={rangeAnchor?.mode === 'to' || isInfUntilRange(pendingRangeMd)}
+                              size="sm"
+                              className="w-full text-xs"
+                              onClick={() => {
+                              const pr = pendingRangeMd;
+                              // base day: for "until" infinite, use 'to'; otherwise prefer 'from'
+                              const base = (pr && isInfUntilRange(pr)) ? (pr.to as Date) : ((pr?.from as Date) || (pr?.to as Date));
+                              if (!base) return;
+                              if (rangeAnchor?.mode === 'to' || isInfUntilRange(pr)) {
+                                // toggle off -> single day
+                                setRangeAnchor(null);
+                                setPendingRangeMd({ from: base, to: base } as any);
+                              } else {
+                                setRangeAnchor({ mode: 'to', date: base });
+                                setPendingRangeMd({ from: MIN_DATE, to: base } as any);
+                              }
+                            }}>〜この日まで</Button>
+                            <Button
+                              variant={(rangeAnchor?.mode === 'from' || isInfFromRange(pendingRangeMd)) ? 'default' : 'outline'}
+                              aria-pressed={rangeAnchor?.mode === 'from' || isInfFromRange(pendingRangeMd)}
+                              size="sm"
+                              className="w-full text-xs"
+                              onClick={() => {
+                              const pr = pendingRangeMd;
+                              // base day: if current is "until" infinite, use its concrete end (pr.to); otherwise prefer pr.from then pr.to
+                              const base = (pr && isInfUntilRange(pr)) ? (pr.to as Date) : ((pr?.from as Date) || (pr?.to as Date));
+                              if (!base) return;
+                              if (rangeAnchor?.mode === 'from' || isInfFromRange(pr)) {
+                                setRangeAnchor(null);
+                                setPendingRangeMd({ from: base, to: base } as any);
+                              } else {
+                                setRangeAnchor({ mode: 'from', date: base });
+                                setPendingRangeMd({ from: base, to: MAX_DATE } as any);
+                              }
+                            }}>この日から〜</Button>
+                          </div>
+                        )}
+                        {/* Bottom row: Clear and OK */}
+                        <div className="mt-2 grid grid-cols-2 gap-2 w-full" style={{ width: mdCalWidth ? `${mdCalWidth}px` : undefined }}>
+                          <Button variant="ghost" size="sm" className="w-full" onClick={() => { setPendingRangeMd(undefined); setRangeAnchor(null); /* defer search until OK/outside */ }}>クリア</Button>
+                          <Button variant="default" size="sm" className="w-full" onClick={() => {
+                            let applied: DateRange | undefined = pendingRangeMd;
+                            if (applied?.from && !applied?.to) {
+                              applied = { from: applied.from, to: applied.from } as any;
+                            }
+                            let normalized: DateRange | undefined = applied;
+                            if (applied?.from && applied?.to) {
+                              if (sameDay(applied.from as Date, MIN_DATE)) {
+                                normalized = { to: applied.to } as any;
+                              } else if (sameDay(applied.to as Date, MAX_DATE)) {
+                                normalized = { from: applied.from } as any;
+                              }
+                            }
+                            setDateRange(normalized);
+                            fetchSearch(true, { range: normalized as any });
+                            setIsRangeOpenMd(false);
+                          }}>OK</Button>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Button
+                      aria-label="検索結果を閉じる"
+                      title="検索結果を閉じる"
+                      variant="ghost"
+                      size="icon"
+                      className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700"
+                      onClick={() => {
+                        setHasSearched(false);
+                        setSearchError(null);
+                        setResults([]);
+                        setTotalResults(0);
+                        setHasMore(false);
+                        setNextOffset(0);
+                      }}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+              </div>
+
+                {/* Small screens: 2nd row = pills */}
+                <div className="flex items-center gap-2 flex-wrap md:hidden">
                   {/* Type selector (pill) */}
+                  <div className="order-1">
                   <Select
                     value={searchType as any}
                     onValueChange={(val) => { const v = (val as any) || 'all'; setSearchType(v); fetchSearch(true, { type: v }); }}
@@ -762,8 +1197,10 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       <SelectItem value="summary">サマリー</SelectItem>
                     </SelectContent>
                   </Select>
+                  </div>
 
                   {/* Order selector */}
+                  <div className="order-3">
                   <Select
                     value={sortOrder}
                     onValueChange={(val) => {
@@ -776,7 +1213,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       className={cn(
                         "relative h-8 w-auto px-3 text-sm rounded-full justify-start gap-2 transition-colors duration-150 [&>svg]:hidden font-light focus:outline-none focus:ring-0 focus:ring-offset-0",
                         sortOrder !== 'relevance'
-                          ? "pr-8 border text-purple-600 dark:text-purple-300 border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 dark:hover:bg-purple-900/50 bg-transparent"
+                          ? "pr-8 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
                           : "border-transparent bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
                       )}
                     >
@@ -819,9 +1256,15 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       <SelectItem value="oldest">古い順</SelectItem>
                     </SelectContent>
                   </Select>
+                  </div>
 
                   {/* Range picker (pill) */}
-                  <Popover open={isRangeOpen} onOpenChange={setIsRangeOpen}>
+                  <div className="order-2">
+                  <Popover
+                    modal
+                    open={isRangeOpenSm}
+                    onOpenChange={(o) => { if (o) setIsRangeOpenSm(true); else setIsRangeOpenSm(false); }}
+                  >
                     <PopoverTrigger asChild>
                       <Button
                         variant="ghost"
@@ -832,73 +1275,146 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                             ? "pr-6 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
                             : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
                         )}
+                        onClick={() => { setPendingRangeSm(dateRange); setIsRangeOpenSm(true); }}
                       >
                         <CalendarIcon className="w-4 h-4 transition-colors duration-150 group-hover:text-gray-700 dark:group-hover:text-gray-300" />
-                        {dateRange?.from && dateRange?.to
-                          ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth()+1).padStart(2,'0')}-${String(dateRange.from.getDate()).padStart(2,'0')} 〜 ${dateRange.to.getFullYear()}-${String(dateRange.to.getMonth()+1).padStart(2,'0')}-${String(dateRange.to.getDate()).padStart(2,'0')}`
-                          : dateRange?.from ? `${dateRange.from.getFullYear()}-${String(dateRange.from.getMonth()+1).padStart(2,'0')}-${String(dateRange.from.getDate()).padStart(2,'0')}〜`
-                          : '期間指定'}
+                        {formatRangeLabel(dateRange as any)}
                         {(dateRange?.from || dateRange?.to) && (
-                          <button
-                            type="button"
+                          <span
+                            role="button"
                             aria-label="期間指定をクリア"
-                            className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-600/70"
-                            onMouseDown={(e) => {
+                            tabIndex={0}
+                            className="absolute right-1 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-600/70"
+                            onPointerDownCapture={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                            onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
+                              setPendingRangeSm(undefined);
                               setDateRange(undefined);
-                              setIsRangeOpen(false);
+                              setShowQuickSm(false);
+                              setRangeAnchor(null);
+                              setIsRangeOpenSm(false);
                               fetchSearch(true, { range: undefined });
                             }}
+                            onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setPendingRangeSm(undefined);
+                              setDateRange(undefined);
+                              setShowQuickSm(false);
+                              setRangeAnchor(null);
+                              setIsRangeOpenSm(false);
+                              fetchSearch(true, { range: undefined });
+                            }
+                          }}
                           >
                             <X className="w-3 h-3" />
-                          </button>
+                          </span>
                         )}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-2" align="start">
-                      <Calendar
-                        mode="range"
-                        selected={dateRange as any}
-                        onSelect={(range: any) => {
-                          setDateRange(range);
-                          if (range?.from && range?.to) {
-                            setIsRangeOpen(false);
-                            fetchSearch(true, { range });
+                    <PopoverContent
+                      className="p-2 w-fit max-w-[95vw]"
+                      align="start"
+                      onInteractOutside={(e) => { applyPendingAndCloseSm(); }}
+                    >
+                      <div ref={smCalRef}>
+                        <Calendar
+                          mode="range"
+                          selected={pendingRangeSm as any}
+                          onSelect={(range: any) => {
+                          if (rangeAnchor && (range?.from || range?.to)) {
+                            const anchor = rangeAnchor.date;
+                            let picked: Date | undefined = undefined;
+                            if (range?.from && range?.to) {
+                              picked = sameDay(range.from, anchor) ? range.to : range.from;
+                            } else {
+                              picked = range.from || range.to;
+                            }
+                            if (picked) {
+                              const from = rangeAnchor.mode === 'from' ? anchor : picked;
+                              const to = rangeAnchor.mode === 'from' ? picked : anchor;
+                              const f = new Date(Math.min(from.getTime(), to.getTime()));
+                              const t = new Date(Math.max(from.getTime(), to.getTime()));
+                              setPendingRangeSm({ from: f, to: t } as any);
+                              setRangeAnchor(null);
+                              return;
+                            }
                           }
+                          setPendingRangeSm(range);
                         }}
                         numberOfMonths={1}
                         captionLayout="dropdown-buttons"
                         initialFocus
-                      />
-                      <div className="flex items-center justify-end pt-2">
-                        <Button variant="ghost" size="sm" onClick={() => { setDateRange(undefined); setIsRangeOpen(false); fetchSearch(true, { range: undefined }); }}>クリア</Button>
+                        />
+                      </div>
+                      {/* Anchor actions row (single day selection) */}
+                      {(isSingleDayRange(pendingRangeSm) || rangeAnchor || isInfUntilRange(pendingRangeSm) || isInfFromRange(pendingRangeSm)) && (
+                        <div className="mt-2 grid grid-cols-2 gap-2 w-full" style={{ width: smCalWidth ? `${smCalWidth}px` : undefined }}>
+                          <Button
+                            variant={(rangeAnchor?.mode === 'to' || isInfUntilRange(pendingRangeSm)) ? 'default' : 'outline'}
+                            aria-pressed={rangeAnchor?.mode === 'to' || isInfUntilRange(pendingRangeSm)}
+                            size="sm"
+                            className="w-full text-xs"
+                            onClick={() => {
+                            const pr = pendingRangeSm;
+                            const base = (pr && isInfUntilRange(pr)) ? (pr.to as Date) : ((pr?.from as Date) || (pr?.to as Date));
+                            if (!base) return;
+                            if (rangeAnchor?.mode === 'to' || isInfUntilRange(pr)) {
+                              setRangeAnchor(null);
+                              setPendingRangeSm({ from: base, to: base } as any);
+                            } else {
+                              setRangeAnchor({ mode: 'to', date: base });
+                              setPendingRangeSm({ from: MIN_DATE, to: base } as any);
+                            }
+                          }}>〜この日まで</Button>
+                          <Button
+                            variant={(rangeAnchor?.mode === 'from' || isInfFromRange(pendingRangeSm)) ? 'default' : 'outline'}
+                            aria-pressed={rangeAnchor?.mode === 'from' || isInfFromRange(pendingRangeSm)}
+                            size="sm"
+                            className="w-full text-xs"
+                            onClick={() => {
+                            const pr = pendingRangeSm;
+                            const base = (pr && isInfUntilRange(pr)) ? (pr.to as Date) : ((pr?.from as Date) || (pr?.to as Date));
+                            if (!base) return;
+                            if (rangeAnchor?.mode === 'from' || isInfFromRange(pr)) {
+                              setRangeAnchor(null);
+                              setPendingRangeSm({ from: base, to: base } as any);
+                            } else {
+                              setRangeAnchor({ mode: 'from', date: base });
+                              setPendingRangeSm({ from: base, to: MAX_DATE } as any);
+                            }
+                          }}>この日から〜</Button>
+                        </div>
+                      )}
+                      {/* Bottom row: Clear and OK */}
+                      <div className="mt-2 grid grid-cols-2 gap-2 w-full" style={{ width: smCalWidth ? `${smCalWidth}px` : undefined }}>
+                        <Button variant="ghost" size="sm" className="w-full" onClick={() => { setPendingRangeSm(undefined); setRangeAnchor(null); /* defer search until OK/outside */ }}>クリア</Button>
+                        <Button variant="default" size="sm" className="w-full" onClick={() => {
+                          let applied: DateRange | undefined = pendingRangeSm;
+                          if (applied?.from && !applied?.to) {
+                            applied = { from: applied.from, to: applied.from } as any;
+                          }
+                          let normalized: DateRange | undefined = applied;
+                          if (applied?.from && applied?.to) {
+                            if (sameDay(applied.from as Date, MIN_DATE)) {
+                              normalized = { to: applied.to } as any;
+                            } else if (sameDay(applied.to as Date, MAX_DATE)) {
+                              normalized = { from: applied.from } as any;
+                            }
+                          }
+                          setDateRange(normalized);
+                          fetchSearch(true, { range: normalized as any });
+                          setIsRangeOpenSm(false);
+                        }}>OK</Button>
                       </div>
                     </PopoverContent>
                   </Popover>
-
-                  
+                  </div>
                 </div>
 
-                <div className="flex items-center gap-1">
-                  <Button
-                    aria-label="検索結果を閉じる"
-                    title="検索結果を閉じる"
-                    variant="ghost"
-                    size="icon"
-                    className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700"
-                    onClick={() => {
-                      setHasSearched(false);
-                      setSearchError(null);
-                      setResults([]);
-                      setTotalResults(0);
-                      setHasMore(false);
-                      setNextOffset(0);
-                    }}
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
+                {/* Quick actions are shown inside the popover footer */}
               </div>
               <div className="mt-3 space-y-2">
                 {results.map((item, idx) => {

@@ -1,0 +1,4 @@
+feat: 検索結果からのジャンプとハイライト表示機能の追加
+
+- 検索結果から該当の学習ログ、目標、日次サマリーへジャンプした際に、対象要素を一時的にハイライト表示する機能を追加しました。
+- `webnew/components/daily-goals-card.tsx`と`webnew/components/study-records.tsx`を更新しました。
