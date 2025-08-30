@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar"
 import { DailyGoalsCard } from "@/components/daily-goals-card";
 import { Skeleton } from "@/components/ui/skeleton"
-import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb, Calendar as CalendarIcon, SlidersHorizontal, X } from "lucide-react"
+import { Clock, BookOpen, Search, Filter, ChevronLeft, ChevronRight, Play, Pause, MessageSquare, ChevronDown, ChevronUp, AlertCircle, ClipboardList, Lightbulb, Calendar as CalendarIcon, SlidersHorizontal, ArrowUpDown, X } from "lucide-react"
 
 // Define the types for our data to ensure type safety
 interface Goal {
@@ -111,6 +111,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   // --- Search states ---
   const [searchInput, setSearchInput] = useState("");
   const [searchType, setSearchType] = useState<'all'|'entry'|'goal'|'summary'>('all');
+  const [sortOrder, setSortOrder] = useState<'relevance'|'newest'|'oldest'>('relevance');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
@@ -231,11 +232,12 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     return { q, tags };
   };
 
-  const fetchSearch = async (reset = true, opts?: { type?: 'all'|'entry'|'goal'|'summary', range?: DateRange | undefined, input?: string }) => {
+  const fetchSearch = async (reset = true, opts?: { type?: 'all'|'entry'|'goal'|'summary', range?: DateRange | undefined, input?: string, order?: 'relevance'|'newest'|'oldest' }) => {
     const reqId = ++latestSearchReqId.current;
     const effectiveType = opts?.type ?? searchType;
     const effectiveRange = opts?.range ?? dateRange;
     const rawInput = opts?.input ?? searchInput;
+    const effectiveOrder = opts?.order ?? sortOrder;
     const { q, tags } = extractTagsFromInput(rawInput);
     const qWords = q ? q.split(/\s+/).filter(Boolean) : [];
     const params = new URLSearchParams();
@@ -253,6 +255,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     params.set('match', 'all');
     params.set('limit', '20');
     params.set('offset', reset ? '0' : String(nextOffset));
+    params.set('order', effectiveOrder);
 
     setHasSearched(true);
     setSearching(true);
@@ -311,6 +314,30 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     });
     if (lastIndex < text.length) parts.push(text.slice(lastIndex));
     return parts;
+  };
+
+  const formatJPMonthDay = (dateStr: string) => {
+    try {
+      const [y, m, d] = dateStr.split('-').map(Number);
+      return `${m}月${d}日`;
+    } catch { return dateStr; }
+  };
+
+  type SnippetField = 'title'|'session_summary'|'body'|'memo'|'impression'|'tags';
+  const SnippetIcon: React.FC<{ field: SnippetField }> = ({ field }) => {
+    switch (field) {
+      case 'session_summary':
+        return <MessageSquare className="w-4 h-4 mr-2 mt-0.5 text-slate-500 flex-shrink-0" />
+      case 'memo':
+        return <ClipboardList className="w-4 h-4 mr-2 mt-0.5 text-slate-500 flex-shrink-0" />
+      case 'impression':
+        return <Lightbulb className="w-4 h-4 mr-2 mt-0.5 text-slate-500 flex-shrink-0" />
+      case 'body':
+        return <BookOpen className="w-4 h-4 mr-2 mt-0.5 text-slate-500 flex-shrink-0" />
+      case 'title':
+      default:
+        return <></>;
+    }
   };
 
   const requestSuggestions = async (prefix: string) => {
@@ -691,7 +718,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       className={cn(
                         "relative h-8 w-auto px-3 text-sm rounded-full justify-start gap-2 transition-colors duration-150 [&>svg]:hidden font-light focus:outline-none focus:ring-0 focus:ring-offset-0",
                         searchType !== 'all'
-                          ? "pr-6 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
+                          ? "pr-8 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
                           : "border-transparent bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
                       )}
                     >
@@ -702,16 +729,16 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                           role="button"
                           tabIndex={0}
                           aria-label="種別指定をクリア"
-                          className="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 rounded-full flex items-center justify-center hover:bg-slate-200/70 dark:hover:bg-slate-600/70 pointer-events-auto z-10"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-600/70 z-20 pointer-events-auto leading-none"
                           onPointerDownCapture={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
-                            setSearchType('all');
-                            fetchSearch(true, { type: 'all' });
                           }}
                           onClick={(e) => {
                             e.preventDefault();
                             e.stopPropagation();
+                            setSearchType('all');
+                            fetchSearch(true, { type: 'all' });
                           }}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter' || e.key === ' ') {
@@ -722,7 +749,9 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                             }
                           }}
                         >
-                          <X className="w-3 h-3" />
+                          <span className="flex items-center justify-center w-full h-full pointer-events-none">
+                            <X className="w-3 h-3" aria-hidden="true" />
+                          </span>
                         </span>
                       )}
                     </SelectTrigger>
@@ -731,6 +760,63 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       <SelectItem value="entry">学習ログ</SelectItem>
                       <SelectItem value="goal">目標</SelectItem>
                       <SelectItem value="summary">サマリー</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {/* Order selector */}
+                  <Select
+                    value={sortOrder}
+                    onValueChange={(val) => {
+                      const v = (val as any) as 'relevance'|'newest'|'oldest';
+                      setSortOrder(v);
+                      fetchSearch(true, { order: v });
+                    }}
+                  >
+                    <SelectTrigger
+                      className={cn(
+                        "relative h-8 w-auto px-3 text-sm rounded-full justify-start gap-2 transition-colors duration-150 [&>svg]:hidden font-light focus:outline-none focus:ring-0 focus:ring-offset-0",
+                        sortOrder !== 'relevance'
+                          ? "pr-8 border text-purple-600 dark:text-purple-300 border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 dark:hover:bg-purple-900/50 bg-transparent"
+                          : "border-transparent bg-transparent text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700 data-[state=open]:bg-gray-100 dark:data-[state=open]:bg-slate-700"
+                      )}
+                    >
+                      <span className="inline-flex items-center"><ArrowUpDown className="w-4 h-4" /></span>
+                      <span>{sortOrder === 'relevance' ? '関連度' : sortOrder === 'newest' ? '新しい順' : '古い順'}</span>
+                      {sortOrder !== 'relevance' && (
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label="並び替えをクリア"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-600/70 z-20 pointer-events-auto leading-none"
+                          onPointerDownCapture={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSortOrder('relevance');
+                            fetchSearch(true, { order: 'relevance' });
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSortOrder('relevance');
+                              fetchSearch(true, { order: 'relevance' });
+                            }
+                          }}
+                        >
+                          <span className="flex items-center justify-center w-full h-full pointer-events-none">
+                            <X className="w-3 h-3" aria-hidden="true" />
+                          </span>
+                        </span>
+                      )}
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="relevance">関連度</SelectItem>
+                      <SelectItem value="newest">新しい順</SelectItem>
+                      <SelectItem value="oldest">古い順</SelectItem>
                     </SelectContent>
                   </Select>
 
@@ -815,41 +901,60 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                 </div>
               </div>
               <div className="mt-3 space-y-2">
-                {results.map((item, idx) => (
-                  <div key={idx} className="p-3 rounded-md bg-slate-50 dark:bg-slate-700/40 flex items-start justify-between">
-                    <div className="pr-3">
-                      <div className="text-xs text-slate-500 mb-1">{item.kind.toUpperCase()} ・ {item.date}</div>
-                      <div className="text-slate-800 dark:text-slate-100 font-medium">{renderHighlighted(item.subject || '(no subject)')}</div>
-                      <div className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{renderHighlighted(item.preview)}</div>
-                      {item._expanded && (
-                        <div className="mt-2 text-xs text-slate-500">詳細表示（今後拡張）</div>
-                      )}
+                {results.map((item, idx) => {
+                  const title = item.kind === 'summary'
+                    ? `${formatJPMonthDay(item.date)}のまとめ`
+                    : (item.subject || '(no subject)');
+                  const snippets = Array.isArray(item.snippets) && item.snippets.length > 0
+                    ? item.snippets.slice(0, 2)
+                    : null;
+                  return (
+                    <div key={idx} className="p-3 rounded-md bg-slate-50 dark:bg-slate-700/40 flex items-start justify-between">
+                      <div className="pr-3">
+                        <div className="text-xs text-slate-500 mb-1">{item.kind.toUpperCase()} ・ {item.date}</div>
+                        <div className="text-slate-800 dark:text-slate-100 font-medium">{renderHighlighted(title)}</div>
+                        {snippets ? (
+                          <div className="mt-1 space-y-1">
+                            {snippets.map((sn: any, i: number) => (
+                              <div key={i} className="flex items-start text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                                {sn.field !== 'title' && <SnippetIcon field={sn.field} />}
+                                <span className="flex-1">{renderHighlighted(sn.text)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-sm text-slate-700 dark:text-slate-300 mt-1 whitespace-pre-wrap">{renderHighlighted(item.preview)}</div>
+                        )}
+                        {item._expanded && (
+                          <div className="mt-2 text-xs text-slate-500">詳細表示（今後拡張）</div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const p = results.slice();
+                            p[idx]._expanded = !p[idx]._expanded;
+                            setResults(p);
+                          }}
+                        >
+                          詳細
+                        </Button>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => {
+                            setPendingJump({ date: item.date, id: item.id, logId: item.kind === 'entry' ? item.id : undefined, kind: item.kind });
+                            onDateChange(item.date);
+                          }}
+                        >
+                          該当へジャンプ
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const p = results.slice();
-                          p[idx]._expanded = !p[idx]._expanded;
-                          setResults(p);
-                        }}
-                      >
-                        詳細
-                      </Button>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => {
-                          setPendingJump({ date: item.date, id: item.id, logId: item.kind === 'entry' ? item.id : undefined, kind: item.kind });
-                          onDateChange(item.date);
-                        }}
-                      >
-                        該当へジャンプ
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
                 {hasMore && (
                   <div className="flex justify-center mt-2">
                     <Button variant="outline" size="sm" disabled={searching} onClick={() => fetchSearch(false)}>

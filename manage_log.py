@@ -1098,6 +1098,7 @@ def recalculate_all_durations():
 
 # --- タグ抽出・検索（新規） ---
 import re
+import unicodedata
 
 # 半角/全角シャープの両方を許可
 HASHTAG_RE = re.compile(r"[#＃]([\w\u0080-\uFFFF\-]+)")
@@ -1107,13 +1108,54 @@ def _extract_hashtags_from_text(text):
         return []
     return [m.group(1) for m in HASHTAG_RE.finditer(text)]
 
-def _make_preview(*fields, max_len=120):
+def _make_preview(*fields, max_len=80):
     for f in fields:
         if f and isinstance(f, str):
             s = f.strip()
             if s:
                 return (s[:max_len] + ("…" if len(s) > max_len else ""))
     return ""
+
+# --- 検索スニペット生成（改良） ---
+def _norm(s: str) -> str:
+    if not s:
+        return ""
+    try:
+        return unicodedata.normalize('NFKC', s).lower()
+    except Exception:
+        return s.lower() if isinstance(s, str) else ""
+
+def _first_match_index(text: str, terms_norm):
+    """正規化テキストで最初に見つかる語のインデックスを返す（なければ-1）。"""
+    if not text:
+        return -1
+    hay = _norm(text)
+    best = -1
+    for t in terms_norm:
+        if not t:
+            continue
+        idx = hay.find(t)
+        if idx != -1:
+            if best == -1 or idx < best:
+                best = idx
+    return best
+
+def _make_centered_snippet(text: str, match_idx: int, match_len: int, max_len: int = 80) -> str:
+    if not text:
+        return ""
+    if match_idx < 0 or match_idx >= len(text):
+        # フォールバック：先頭から
+        return text[:max_len] + ("…" if len(text) > max_len else "")
+    # マッチ中心で切り出し
+    half = max_len // 2
+    start = max(0, match_idx - half)
+    end = min(len(text), match_idx + match_len + half)
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "…" + snippet
+    if end < len(text):
+        snippet = snippet + "…"
+    return snippet
 
 def get_all_tags(prefix=None, limit=None):
     """goals.tags と各テキストフィールドからハッシュタグを集計して返す。
@@ -1209,6 +1251,7 @@ def search_data(params):
     q = (params.get('q') or '').strip()
     typ = (params.get('type') or 'all').lower()
     match = (params.get('match') or 'all').lower()
+    order = (params.get('order') or 'relevance').lower()
     limit = params.get('limit')
     offset = params.get('offset')
     try:
@@ -1256,11 +1299,15 @@ def search_data(params):
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
+        # 正規化済み語
+        q_words_norm = [_norm(w) for w in q_words]
+
         def _matches_q(texts):
+            # 全フィールドを結合し、正規化でAND判定
             hay = "\n".join([t for t in texts if t])
-            # AND: すべての語が含まれること
-            for w in q_words:
-                if w not in hay:
+            hay_n = _norm(hay)
+            for w in q_words_norm:
+                if w and (hay_n.find(w) == -1):
                     return False
             return True
 
@@ -1288,18 +1335,53 @@ def search_data(params):
             date_only = row['start_time'][:10] if row['start_time'] else None
             if not _within_range(date_only, start_d, end_d):
                 return
-            texts = [row['subject'], row['content'], row['summary'], row['memo'], row['impression']]
+            texts = [row['subject'], row['summary'], row['content'], row['memo'], row['impression']]
             if not _matches_q(texts):
                 return
             hay = "\n".join([t for t in texts if t])
             if not _tags_match_in_text(hay):
                 return
+            # 重み: title > session_summary > body > memo > impression > tags
+            weights = {
+                'title': 10,
+                'session_summary': 8,
+                'body': 6,
+                'memo': 4,
+                'impression': 2,
+                'tags': 1,
+            }
+            fields = {
+                'title': row['subject'] or '',
+                'session_summary': row['summary'] or '',
+                'body': row['content'] or '',
+                'memo': row['memo'] or '',
+                'impression': row['impression'] or '',
+            }
+            # マッチ位置取得
+            matches = []
+            for fname, ftext in fields.items():
+                idx = _first_match_index(ftext, q_words_norm)
+                if idx != -1:
+                    matches.append((fname, idx))
+            # スコア算出
+            score = 0
+            for fname, _ in matches:
+                score += weights.get(fname, 0)
+            # スニペット（最大2件、重み降順）
+            snippets = []
+            for fname, idx in sorted(matches, key=lambda x: weights.get(x[0], 0), reverse=True)[:2]:
+                # マッチ長は最初の語長で近似
+                first_term_len = len(q_words_norm[0]) if q_words_norm else 1
+                snippet = _make_centered_snippet(fields[fname], idx, first_term_len, max_len=80)
+                snippets.append({'field': fname, 'text': snippet})
             items.append({
                 'kind': 'entry',
                 'id': row['id'],
                 'date': date_only,
                 'subject': row['subject'],
-                'preview': _make_preview(row['summary'], row['content'], row['memo'], row['impression'])
+                'preview': _make_preview(row['summary'], row['content'], row['memo'], row['impression']),
+                'snippets': snippets,
+                'score': score,
             })
 
         def _append_goal(row):
@@ -1317,12 +1399,39 @@ def search_data(params):
                 return
             if not _tags_match_in_goal(tags_list):
                 return
+            # 重みをエントリに準拠（session_summary/impressionはなし）
+            weights = {
+                'title': 10,
+                'body': 6,  # task
+                'memo': 4,  # details
+                'tags': 1,
+            }
+            fields = {
+                'title': row['subject'] or '',
+                'body': row['task'] or '',
+                'memo': row['details'] or '',
+            }
+            matches = []
+            for fname, ftext in fields.items():
+                idx = _first_match_index(ftext, q_words_norm)
+                if idx != -1:
+                    matches.append((fname, idx))
+            score = 0
+            for fname, _ in matches:
+                score += weights.get(fname, 0)
+            snippets = []
+            for fname, idx in sorted(matches, key=lambda x: weights.get(x[0], 0), reverse=True)[:2]:
+                first_term_len = len(q_words_norm[0]) if q_words_norm else 1
+                snippet = _make_centered_snippet(fields[fname], idx, first_term_len, max_len=80)
+                snippets.append({'field': fname, 'text': snippet})
             items.append({
                 'kind': 'goal',
                 'id': row['id'],
                 'date': date_only,
                 'subject': row['subject'],
-                'preview': _make_preview(row['task'], row['details'])
+                'preview': _make_preview(row['task'], row['details']),
+                'snippets': snippets,
+                'score': score,
             })
 
         def _append_summary(row):
@@ -1335,11 +1444,26 @@ def search_data(params):
             hay = "\n".join([t for t in texts if t])
             if not _tags_match_in_text(hay):
                 return
+            weights = {'session_summary': 8}
+            fields = {'session_summary': row['summary'] or ''}
+            matches = []
+            for fname, ftext in fields.items():
+                idx = _first_match_index(ftext, q_words_norm)
+                if idx != -1:
+                    matches.append((fname, idx))
+            score = sum(weights.get(fname, 0) for fname, _ in matches)
+            snippets = []
+            for fname, idx in matches[:2]:
+                first_term_len = len(q_words_norm[0]) if q_words_norm else 1
+                snippet = _make_centered_snippet(fields[fname], idx, first_term_len, max_len=80)
+                snippets.append({'field': fname, 'text': snippet})
             items.append({
                 'kind': 'summary',
                 'id': row['date'],
                 'date': date_only,
-                'preview': _make_preview(row['summary'])
+                'preview': _make_preview(row['summary']),
+                'snippets': snippets,
+                'score': score,
             })
 
         # entry
@@ -1360,8 +1484,14 @@ def search_data(params):
             for row in cursor.fetchall():
                 _append_summary(row)
 
-    # 日付降順、同日の場合は kind/ID 降順の簡易順序
-    items.sort(key=lambda x: (x['date'] or '', x['kind'], str(x['id'])), reverse=True)
+    # 並び順: relevance/newest/oldest
+    if order == 'relevance' and q_words:
+        # relevance: スコア降順、同点は新しい日付優先
+        items.sort(key=lambda x: (x.get('score', 0), x.get('date') or ''), reverse=True)
+    elif order == 'oldest':
+        items.sort(key=lambda x: (x['date'] or '', x['kind'], str(x['id'])))
+    else:  # newest
+        items.sort(key=lambda x: (x['date'] or '', x['kind'], str(x['id'])), reverse=True)
     total = len(items)
     sliced = items[offset: offset + limit]
     has_more = (offset + limit) < total

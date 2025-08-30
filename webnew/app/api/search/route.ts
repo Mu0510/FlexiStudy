@@ -10,13 +10,14 @@ export async function GET(request: Request) {
   const q = searchParams.get('q') || undefined;
   const tagsParam = searchParams.get('tags') || undefined; // comma separated
   const match = (searchParams.get('match') || 'all').toLowerCase();
+  const order = (searchParams.get('order') || 'relevance').toLowerCase();
   const limit = Number(searchParams.get('limit') || '20');
   const offset = Number(searchParams.get('offset') || '0');
 
   const pythonScriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
   const payload = {
     action: 'data.search',
-    params: { from, to, type, q, tags: tagsParam, match, limit, offset },
+    params: { from, to, type, q, tags: tagsParam, match, order, limit, offset },
   };
   const args = ['--api-mode', 'execute', JSON.stringify(payload)];
 
@@ -40,4 +41,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to search', details: error.message }, { status: 500 });
   }
 }
-
