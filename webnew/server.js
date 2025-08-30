@@ -16,17 +16,55 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 // --- Start of Gemini Process Logic (from old server.js) ---
-const GEMINI_ARGS = [
-  '-m', 'gemini-2.5-flash',
-  '-y',
-  '--experimental-acp'
-];
+// Gemini CLI 起動設定
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const GEMINI_BIN = process.env.GEMINI_BIN || 'gemini'; // グローバルCLIを既定
+// CLI本体にも '-y' を付与して自動確認を許可
+const GEMINI_FLAGS = ['-m', GEMINI_MODEL, '-y', '--experimental-acp'];
+const PROJECT_ROOT = path.join(__dirname, '..');
+
+function getGeminiSpawnSpec() {
+  // グローバル gemini コマンドを使用（必要なら GEMINI_BIN で差し替え）
+  return {
+    cmd: 'sudo',
+    args: ['-E', '-u', 'geminicli', GEMINI_BIN, ...GEMINI_FLAGS],
+  };
+}
 
 let geminiProcess = null;
 const history = [];
 let ongoingText = '';
 let isRestartingGemini = false; // 新しいフラグ
 let currentAssistantId = null; // ★ 返信ごとに一意なIDを保持する変数
+// --- ACP 0.2.2 state
+let acpSessionId = null; // 現在のセッションID
+let acpReqCounter = 1;   // AgentへのリクエストID採番
+const acpPending = new Map(); // id -> method 名
+const pendingPrompts = [];    // セッション準備前に受けた送信をキュー
+let isFlushingQueue = false;
+let acpMode = 'unknown'; // 'v1' | 'legacy' | 'unknown'
+
+function acpSend(method, params) {
+  const id = acpReqCounter++;
+  acpPending.set(id, method);
+  const req = { jsonrpc: '2.0', id, method, params };
+  geminiProcess?.stdin.write(JSON.stringify(req) + '\n');
+  return id;
+}
+
+function mapToolStatus(status) {
+  switch (status) {
+    case 'pending':
+    case 'in_progress':
+      return 'running';
+    case 'completed':
+      return 'finished';
+    case 'failed':
+      return 'error';
+    default:
+      return 'running';
+  }
+}
 
 function broadcast(wss, json){
   const str = JSON.stringify(json);
@@ -48,14 +86,28 @@ function broadcastExcept(wss, sender, json) {
 
 function _startNewGeminiProcess(wss) { // Pass wss to broadcast
   console.log(`[Gemini Process] Attempting to start new Gemini process... (Called from: ${new Error().stack.split('\n')[2].trim()})`);
-  geminiProcess = spawn('sudo', ['-u', 'geminicli', 'gemini', ...GEMINI_ARGS], { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..') });
+  const spec = getGeminiSpawnSpec();
+  console.log(`[Gemini Process] Spawning: ${spec.cmd} ${spec.args.join(' ')}`);
+  geminiProcess = spawn(spec.cmd, spec.args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: path.join(__dirname, '..'), env: process.env });
+
+  // Reset ACP state on fresh start
+  acpSessionId = null;
+  acpReqCounter = 1;
+  acpPending.clear();
+  pendingPrompts.length = 0;
+  acpMode = 'unknown';
 
   const init = {
     jsonrpc: '2.0',
-    id:      1,
+    id:      acpReqCounter,
     method:  'initialize',
-    params:  { protocolVersion: '0.0.9' }
+    params:  {
+      clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } },
+      protocolVersion: 1,
+    }
   };
+  acpPending.set(acpReqCounter, 'initialize');
+  acpReqCounter++;
   geminiProcess.stdin.write(JSON.stringify(init) + '\n');
 
   geminiProcess.on('error', (err) => {
@@ -105,16 +157,172 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
               try {
                 const msg = JSON.parse(jsonString);
                 console.log('[Gemini CLI Output] ' + jsonString);
+                // --- ACP 0.2.2 and legacy handling ---
+                // 1) Handle responses to our ACP requests
+                if (msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined)) {
+                  const meth = acpPending.get(msg.id);
+                    if (meth) {
+                      acpPending.delete(msg.id);
+                    if (meth === 'initialize' && msg.result) {
+                      console.log('[ACP] initialize result:', JSON.stringify(msg.result));
+                      const pv = msg.result?.protocolVersion;
+                      const isV1 = pv === 1 || pv === '1' || pv === '1.0.0';
+                      if (isV1) {
+                        acpMode = 'v1';
+                        const authMethods = msg.result?.authMethods || [];
+                        if (Array.isArray(authMethods) && authMethods.length > 0) {
+                          const methodId = authMethods[0]?.id;
+                          if (methodId) {
+                            console.log(`[ACP] authenticating via method: ${methodId}`);
+                            acpSend('authenticate', { methodId });
+                            return; // wait authenticate response before new session
+                          }
+                        }
+                        // No auth required -> create a new session
+                        const newSessParams = { cwd: PROJECT_ROOT, mcpServers: [] };
+                        acpSend('session/new', newSessParams);
+                        return;
+                      } else {
+                        // Legacy experimental ACP (0.0.x)
+                        acpMode = 'legacy';
+                        console.log('[ACP] Detected legacy protocol, using legacy message flow.');
+                        // Flush queued prompts by sending legacy requests
+                        flushPromptQueueLegacy();
+                        return;
+                      }
+                    } else if (meth === 'authenticate') {
+                      // After auth, create a new session
+                      const newSessParams = { cwd: PROJECT_ROOT, mcpServers: [] };
+                      acpSend('session/new', newSessParams);
+                      return;
+                    } else if (meth === 'session/new' && msg.result?.sessionId) {
+                      acpSessionId = msg.result.sessionId;
+                      console.log(`[ACP] New session established: ${acpSessionId}`);
+                      // Flush queued prompts
+                      flushPromptQueue();
+                    } else if (meth === 'session/prompt') {
+                      // Treat prompt response as completion signal
+                      if (ongoingText.length > 0) {
+                        const rec = { id: currentAssistantId || String(Date.now()), ts: Date.now(), role: 'assistant', text: ongoingText.trimEnd() };
+                        broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
+                        ongoingText = '';
+                        currentAssistantId = null;
+                      }
+                      broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { stopReason: msg.result?.stopReason || 'end_turn' } });
+                    }
+                    return; // handled
+                  }
+                }
 
-                // --- Start of existing message processing logic ---
+                // 2) Handle requests coming from Agent (client methods)
+                if (msg.id !== undefined && typeof msg.method === 'string') {
+                  if (msg.method === 'session/request_permission') {
+                    // Auto-allow: prefer allow_once, fallback to first option
+                    try {
+                      const opts = msg.params?.options || [];
+                      const allow = opts.find(o => o.kind === 'allow_once') || opts[0];
+                      const result = { outcome: { outcome: 'selected', optionId: allow?.optionId || 'allow_once' } };
+                      geminiProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }) + '\n');
+                    } catch (e) {
+                      geminiProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Internal error' } }) + '\n');
+                    }
+                    return;
+                  } else if (msg.method === 'fs/read_text_file') {
+                    (async () => {
+                      try {
+                        const rel = msg.params?.path || '';
+                        const abs = path.resolve(PROJECT_ROOT, rel);
+                        if (!abs.startsWith(PROJECT_ROOT)) throw new Error('Path outside project');
+                        const content = fs.readFileSync(abs, 'utf-8');
+                        geminiProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { content } }) + '\n');
+                      } catch (e) {
+                        geminiProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Read failed' } }) + '\n');
+                      }
+                    })();
+                    return;
+                  } else if (msg.method === 'fs/write_text_file') {
+                    (async () => {
+                      try {
+                        const rel = msg.params?.path || '';
+                        const abs = path.resolve(PROJECT_ROOT, rel);
+                        if (!abs.startsWith(PROJECT_ROOT)) throw new Error('Path outside project');
+                        fs.mkdirSync(path.dirname(abs), { recursive: true });
+                        fs.writeFileSync(abs, msg.params?.content ?? '', 'utf-8');
+                        geminiProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }) + '\n');
+                      } catch (e) {
+                        geminiProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'Write failed' } }) + '\n');
+                      }
+                    })();
+                    return;
+                  }
+                }
+
+                // 3) Handle ACP session/update notifications and map to UI events
+                if (msg.method === 'session/update' && msg.params?.update) {
+                  const upd = msg.params.update;
+                  const nowTs = Date.now();
+                  const ensureAssistantId = () => {
+                    if (!currentAssistantId) currentAssistantId = `assistant-${nowTs}`;
+                    return currentAssistantId;
+                  };
+
+                  const emitChunk = (chunk) => {
+                    const mid = ensureAssistantId();
+                    broadcast(wss, { jsonrpc: '2.0', method: 'streamAssistantMessageChunk', params: { messageId: mid, chunk } });
+                  };
+
+                  const contentBlockToText = (cb) => {
+                    if (!cb) return '';
+                    if (cb.type === 'text' && typeof cb.text === 'string') return cb.text;
+                    return '';
+                  };
+
+                  if (upd.sessionUpdate === 'agent_thought_chunk') {
+                    emitChunk({ thought: contentBlockToText(upd.content) });
+                  } else if (upd.sessionUpdate === 'agent_message_chunk') {
+                    const t = contentBlockToText(upd.content);
+                    if (t) {
+                      ongoingText += t;
+                      emitChunk({ text: t });
+                    }
+                  } else if (upd.sessionUpdate === 'tool_call') {
+                    const toolId = upd.toolCallId || `tool-${nowTs}`;
+                    const params = {
+                      toolCallId: toolId,
+                      icon: upd.kind || 'tool',
+                      label: upd.title || String(upd.kind || 'tool'),
+                      locations: upd.locations || [],
+                      confirmation: undefined,
+                    };
+                    const toolMsg = { jsonrpc: '2.0', method: 'pushToolCall', id: msg.id, ts: nowTs, params };
+                    history.push({ ...toolMsg, ts: nowTs, type: 'tool' });
+                    broadcast(wss, toolMsg);
+                  } else if (upd.sessionUpdate === 'tool_call_update') {
+                    const toolId = upd.toolCallId;
+                    let content = undefined;
+                    if (Array.isArray(upd.content) && upd.content.length > 0) {
+                      const c = upd.content[0];
+                      if (c.type === 'content' && c.content?.type === 'text') {
+                        content = { type: 'markdown', markdown: c.content.text };
+                      } else if (c.type === 'diff') {
+                        content = { type: 'diff', oldText: c.oldText || '', newText: c.newText || '' };
+                      }
+                    }
+                    const updateMsg = { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: toolId, status: mapToolStatus(upd.status), content } };
+                    broadcast(wss, updateMsg);
+                  } else if (upd.sessionUpdate === 'plan') {
+                    console.log('[ACP] plan update entries:', upd.entries?.length || 0);
+                  }
+                  return; // handled
+                }
+
+                // 4) Legacy passthrough: old experimental-acp messages
                 if (msg.method !== 'streamAssistantMessageChunk' && ongoingText.length > 0) {
-                    // ★ 修正点: currentAssistantId を使用
-                    const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(),
-                                 role:'assistant', text:ongoingText.trimEnd() };
+                    const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(), role:'assistant', text:ongoingText.trimEnd() };
                     history.push(rec);
                     console.log('[History] Saved assistant message (before other message): ' + JSON.stringify(rec));
                     ongoingText = '';
-                    currentAssistantId = null; // ★ リセット
+                    currentAssistantId = null;
                 }
 
                 if (msg.method === 'streamAssistantMessageChunk') {
@@ -122,7 +330,6 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                     if (c?.text) {
                         ongoingText += c.text;
                     }
-                    // ★ 修正点: currentAssistantId をメッセージに付与
                     if (currentAssistantId) {
                       msg.params.messageId = currentAssistantId;
                     }
@@ -133,12 +340,10 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                 const methodsToExclude = ['initialize', 'requestToolCallConfirmation', 'updateToolCall'];
                 if ((msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted' || (msg.result !== undefined && msg.result !== null)) && !methodsToExclude.includes(msg.method)) {
                     if (ongoingText.length > 0) {
-                        // ★ 修正点: currentAssistantId を使用
-                        const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(),
-                                     role:'assistant', text:ongoingText.trimEnd() };
+                        const rec = { id: currentAssistantId || String(Date.now()), ts:Date.now(), role:'assistant', text:ongoingText.trimEnd() };
                         broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
                         ongoingText = '';
-                        currentAssistantId = null; // ★ リセット
+                        currentAssistantId = null;
                     }
                     broadcast(wss, msg);
                     continue;
@@ -149,29 +354,18 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                 }
                 if (msg.method === 'updateToolCall') {
                   broadcast(wss, msg);
-                  geminiProcess.stdin.write(JSON.stringify({
-                    jsonrpc: '2.0',
-                    id:      msg.id,
-                    result:  null
-                  }) + '\n');
+                  geminiProcess.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }) + '\n');
                   history.push({ ...msg, ts: Date.now(), type:'tool' });
                   return;
                 }
                 else if (msg.method === 'pushToolCall') {
                     msg.ts = Date.now();
-                    history.push({
-                        ...msg,
-                        type: 'tool'
-                    });
+                    history.push({ ...msg, type: 'tool' });
                 }
                 else if (msg.method === 'requestToolCallConfirmation') {
                     msg.ts = Date.now();
-                    history.push({
-                        ...msg,
-                        type: 'tool'
-                    });
+                    history.push({ ...msg, type: 'tool' });
 
-                    // データベース更新コマンドか確認し、クライアントに通知
                     const command = msg.params?.confirmation?.command;
                     if (command && command.includes('manage_log.py')) {
                         console.log(`[Server] Detected database command: "${command}". Broadcasting databaseUpdated message.`);
@@ -182,7 +376,7 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                 }
 
                 broadcast(wss, msg);
-                // --- End of existing message processing logic ---
+                // --- End of handling ---
 
               } catch (e) {
                 console.error('Error parsing JSON object:', e, jsonString);
@@ -199,14 +393,55 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
     console.error('[Gemini ERROR] ' + data.toString());
   });
 
-  geminiProcess.on('close', (code, signal) => {
-    console.log(`[Gemini Process] Gemini process (PID: ${this.pid}) exited with code ${code} and signal ${signal}. (Called from: ${new Error().stack.split('\n')[2].trim()})`);
-    if (geminiProcess && geminiProcess.pid === this.pid) {
+  const child = geminiProcess;
+  child.on('close', (code, signal) => {
+    console.log(`[Gemini Process] Gemini process (PID: ${child.pid}) exited with code ${code} and signal ${signal}. (Called from: ${new Error().stack.split('\n')[2].trim()})`);
+    if (geminiProcess && geminiProcess.pid === child.pid) {
         history.length = 0;
         broadcast(wss, { jsonrpc:'2.0', method:'historyCleared', params:{ reason: 'gemini-exit' } });
         geminiProcess = null;
+        acpSessionId = null;
+        // 自動再起動（短い待機後）
+        setTimeout(() => {
+          console.log('[Gemini Process] Restarting after unexpected exit...');
+          startGemini(wss);
+        }, 1500);
     }
   });
+}
+
+function flushPromptQueue() {
+  if (!acpSessionId || isFlushingQueue || pendingPrompts.length === 0 || !geminiProcess) return;
+  isFlushingQueue = true;
+  try {
+    while (pendingPrompts.length > 0 && acpSessionId && geminiProcess) {
+      const text = pendingPrompts.shift();
+      const promptParams = { sessionId: acpSessionId, prompt: [{ type: 'text', text }] };
+      acpSend('session/prompt', promptParams);
+    }
+  } finally {
+    isFlushingQueue = false;
+  }
+}
+
+function flushPromptQueueLegacy() {
+  if (isFlushingQueue || pendingPrompts.length === 0 || !geminiProcess) return;
+  isFlushingQueue = true;
+  try {
+    while (pendingPrompts.length > 0 && geminiProcess) {
+      const text = pendingPrompts.shift();
+      const localId = Date.now();
+      const req = {
+        jsonrpc: '2.0',
+        id: localId,
+        method: 'sendUserMessage',
+        params: { chunks: [{ text }] },
+      };
+      geminiProcess.stdin.write(JSON.stringify(req) + '\n');
+    }
+  } finally {
+    isFlushingQueue = false;
+  }
 }
 
 function startGemini(wss) {
@@ -373,8 +608,18 @@ app.prepare().then(() => {
                 messageForAI = `${systemMessages.join('\n\n')}\n\n${inputText}`;
             }
 
-            // Send the potentially modified message to the Gemini process
-            if (geminiProcess) {
+            // Send the message to the Gemini Agent via ACP session/prompt
+            if (geminiProcess && acpSessionId) {
+                const promptParams = {
+                  sessionId: acpSessionId,
+                  prompt: [ { type: 'text', text: messageForAI } ],
+                };
+                acpSend('session/prompt', promptParams);
+            } else if (geminiProcess && acpMode === 'unknown') {
+                console.warn('[ACP] No protocol determined yet; queueing prompt');
+                pendingPrompts.push(messageForAI);
+            } else if (geminiProcess && acpMode === 'legacy') {
+                // Directly forward as legacy sendUserMessage
                 const aiMsg = {
                     ...msg,
                     params: {
@@ -383,6 +628,9 @@ app.prepare().then(() => {
                     }
                 };
                 geminiProcess.stdin.write(JSON.stringify(aiMsg) + '\n');
+            } else if (geminiProcess && acpMode === 'v1' && !acpSessionId) {
+                console.warn('[ACP] v1 mode but no active session yet; queueing prompt');
+                pendingPrompts.push(messageForAI);
             }
             return; // Exit after handling sendUserMessage
         }

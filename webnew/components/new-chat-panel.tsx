@@ -629,9 +629,9 @@ export function NewChatPanel({
                   </div>
                 </CardHeader>
                 <CardContent className="p-0 text-sm">
-                  <pre className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-800 dark:bg-gray-900 p-2 rounded not-prose max-h-48 overflow-auto">
+                  <div className="tool-card__body text-xs whitespace-pre font-mono bg-gray-800 dark:bg-gray-900 p-2 rounded not-prose max-h-48 overflow-y-auto overflow-x-auto">
                     <div className="text-gray-200 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: msg.content }} />
-                  </pre>
+                  </div>
                 </CardContent>
               </Card>
             );

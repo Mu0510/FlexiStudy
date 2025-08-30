@@ -417,3 +417,5 @@ study_log_20250824_163359_896864.db: Before session summary update.
 study_log_20250824_165015_321145.db: Before ending session.
 study_log_20250824_165020_476128.db: Before session summary update.
 study_log_20250824_165023_691759.db: Before daily summary update.
+study_log_20250830_142423_192785.db: Before adding a goal to a specific date.
+study_log_20250830_143307_183465.db: Before deleting goal by global ID.

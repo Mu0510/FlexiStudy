@@ -110,11 +110,11 @@
 
 /* Diff 表示用スタイル */
 .tool-card__body pre {
-  background-color: #2d2d2d; /* 暗めの背景色 */
+  background: transparent; /* 外側のコンテナ背景を使用 */
   color: #f8f8f2; /* デフォルトの文字色 */
-  padding: 1em;
-  overflow-x: auto;
-  border-radius: 0.3em;
+  padding: 0; /* 余白は外側で管理 */
+  overflow: visible; /* スクロールは外側で管理 */
+  border-radius: 0; /* 角丸も外側で管理 */
 }
 
 .tool-card__body pre span.add {
@@ -143,6 +143,56 @@
 
 .tool-card__body pre span.del .diff-prefix {
   color: #f92672; /* 赤色 */
+}
+
+/* Tool card header chip (e.g., Edit/Search) */
+.tool-card__icon-text {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
+/* Make tool-card code area scrollbars blend with theme (Chrome/WebKit) */
+.tool-card__body { 
+  /* Hint browser to render dark scrollbars to match dark code bg */
+  color-scheme: dark; 
+  scrollbar-gutter: stable; /* keep horizontal gutter space reserved */
+}
+.tool-card__body::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.tool-card__body::-webkit-scrollbar-track {
+  background: #1f2937; /* gray-800 */
+  border-radius: 8px;
+}
+
+.tool-card__body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5); /* slate-400/50 */
+  border-radius: 8px;
+}
+
+.dark .tool-card__body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35); /* slightly subtler in dark */
+}
+
+.dark .tool-card__body::-webkit-scrollbar-track {
+  background: #0b1220; /* near slate-950 */
+}
+
+.tool-card__body::-webkit-scrollbar-track-piece {
+  background: inherit; /* ensure no white gaps on horizontal */
+}
+
+.tool-card__body::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+.tool-card__body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,.35) #0b1220;
 }
 
 .tool-card__body pre span.diff-prefix {
