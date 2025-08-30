@@ -16,24 +16,18 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 // --- Start of Gemini Process Logic (from old server.js) ---
-// Gemini CLI 起動設定（開発時は npx で @google/gemini-cli を使用）
+// Gemini CLI 起動設定
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-// CLI本体にも '-y' を付与して自動確認を許可（npxの -y は別）
+const GEMINI_BIN = process.env.GEMINI_BIN || 'gemini'; // グローバルCLIを既定
+// CLI本体にも '-y' を付与して自動確認を許可
 const GEMINI_FLAGS = ['-m', GEMINI_MODEL, '-y', '--experimental-acp'];
 const PROJECT_ROOT = path.join(__dirname, '..');
 
 function getGeminiSpawnSpec() {
-  // dev 環境では npx で `@google/gemini-cli` を実行
-  if (dev) {
-    return {
-      cmd: 'sudo',
-      args: ['-E', '-u', 'geminicli', 'npx', '-y', '@google/gemini-cli', ...GEMINI_FLAGS],
-    };
-  }
-  // 本番も npx 経由で確実に正しいCLIを呼ぶ
+  // グローバル gemini コマンドを使用（必要なら GEMINI_BIN で差し替え）
   return {
     cmd: 'sudo',
-    args: ['-E', '-u', 'geminicli', 'npx', '-y', '@google/gemini-cli', ...GEMINI_FLAGS],
+    args: ['-E', '-u', 'geminicli', GEMINI_BIN, ...GEMINI_FLAGS],
   };
 }
 
