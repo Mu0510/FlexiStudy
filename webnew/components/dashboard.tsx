@@ -151,6 +151,7 @@ export function Dashboard({ dashboardData, subjectColors, onSelectGoal }) {
             </CardContent>
           </Card>
 
+          {/*
           <Card className="border-0 shadow-lg bg-white dark:bg-neutral-800">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center space-x-2 text-neutral-800 dark:text-neutral-200">
@@ -179,6 +180,7 @@ export function Dashboard({ dashboardData, subjectColors, onSelectGoal }) {
               </Button>
             </CardContent>
           </Card>
+          */}
         </div>
       </div>
     </div>

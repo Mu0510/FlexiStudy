@@ -1,4 +1,5 @@
-feat: 検索結果からのジャンプとハイライト表示機能の追加
+feat(search): 検索結果表示の改善と詳細情報の追加
 
-- 検索結果から該当の学習ログ、目標、日次サマリーへジャンプした際に、対象要素を一時的にハイライト表示する機能を追加しました。
-- `webnew/components/daily-goals-card.tsx`と`webnew/components/study-records.tsx`を更新しました。
+- `manage_log.py` で学習ログの `content` と `event_type` を検索結果に含めるように変更。
+- `webnew/components/study-records.tsx` で検索結果のタイトル表示ロジックを改善し、`subject` と `tags` の表示を追加。
+- スニペット表示を `memo`, `impression`, `session_summary` に限定。

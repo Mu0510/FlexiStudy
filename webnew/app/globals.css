@@ -145,6 +145,37 @@
   color: #f92672; /* 赤色 */
 }
 
+/* Tool card header chip (e.g., Edit/Search) */
+.tool-card__icon-text {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
+/* Make tool-card code area scrollbars blend with theme (Chrome/WebKit) */
+.tool-card__body::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.tool-card__body::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 8px;
+}
+
+.tool-card__body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5); /* slate-400/50 */
+  border-radius: 8px;
+}
+
+.dark .tool-card__body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35); /* slightly subtler in dark */
+}
+
+.tool-card__body::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 .tool-card__body pre span.diff-prefix {
   display: inline-block;
   width: 1em; /* + や - のための幅 */
