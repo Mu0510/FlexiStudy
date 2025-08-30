@@ -91,9 +91,9 @@ export function ToolCardItem({ msg, getToolIconText, getRelativePath }: ToolCard
         </CardHeader>
         <CardContent className="p-0 text-sm text-gray-800 dark:text-gray-200">
           {/* Removed toolCallConfirmation logic for now, focusing on content */}
-          <pre ref={bodyRef} className="tool-card__body text-xs whitespace-pre-wrap break-words bg-gray-100 dark:bg-slate-700/50 p-2 rounded not-prose overflow-y-auto" style={{ maxHeight: bodyMaxHeight }}>
+          <div ref={bodyRef} className="tool-card__body text-xs whitespace-pre font-mono bg-gray-100 dark:bg-slate-700/50 p-2 rounded not-prose overflow-y-auto overflow-x-auto" style={{ maxHeight: bodyMaxHeight }}>
             <div className="text-gray-800 dark:text-gray-200" dangerouslySetInnerHTML={{ __html: msg.content }} /> {/* Use msg.content */}
-          </pre>
+          </div>
         </CardContent>
       </Card>
     </div>
