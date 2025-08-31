@@ -4,9 +4,9 @@ import path from 'path';
 
 export async function GET(
   request: Request,
-  context: { params: { date: string } }
+  context: { params: Promise<{ date: string }> }
 ) {
-  const { date } = context.params;
+  const { date } = await context.params;
 
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return NextResponse.json({ error: 'Invalid date format. Please use YYYY-MM-DD.' }, { status: 400 });

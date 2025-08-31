@@ -5,6 +5,7 @@ import './globals.css'
 import { ViewportController } from '@/components/viewport-controller'
 import { ThemeProvider } from "@/components/theme-provider"
 import { WebSocketProvider } from '@/context/WebSocketContext';
+import { DevSWRegister } from '@/components/dev-sw-register';
 
 export const metadata: Metadata = {
   title: 'FlexiStudy',
@@ -35,6 +36,7 @@ html {
           enableSystem
           disableTransitionOnChange
         >
+          {process.env.NODE_ENV !== 'production' ? <DevSWRegister /> : null}
           <ViewportController />
           <WebSocketProvider>
             {children}

@@ -503,6 +503,17 @@ const httpsOptions = {
 app.prepare().then(() => {
   const httpsServer = createHttpsServer(httpsOptions, async (req, res) => {
     try {
+      // Allow all origins in dev to load assets across origins
+      if (dev) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range, X-Requested-With');
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+      }
       const parsedUrl = parse(req.url, true);
       await handle(req, res, parsedUrl);
     } catch (err) {
@@ -515,6 +526,9 @@ app.prepare().then(() => {
   const httpServer = createHttpServer((req, res) => {
     const host = req.headers.host;
     const httpsUrl = `https://${host}${req.url}`;
+    if (dev) {
+      res.setHeader('Access-Control-Allow-Origin', '*');
+    }
     res.writeHead(301, { Location: httpsUrl });
     res.end();
   });

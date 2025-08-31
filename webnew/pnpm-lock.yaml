@@ -216,6 +216,24 @@ importers:
       typescript:
         specifier: ^5
         version: 5.9.2
+      workbox-cacheable-response:
+        specifier: 6.6.0
+        version: 6.6.0
+      workbox-core:
+        specifier: 6.6.0
+        version: 6.6.0
+      workbox-expiration:
+        specifier: 6.6.0
+        version: 6.6.0
+      workbox-precaching:
+        specifier: 6.6.0
+        version: 6.6.0
+      workbox-routing:
+        specifier: 6.6.0
+        version: 6.6.0
+      workbox-strategies:
+        specifier: 6.6.0
+        version: 6.6.0
 
 packages:
 
