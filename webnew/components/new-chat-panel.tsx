@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon, Pause } from "lucide-react"
+import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon, Pause, Globe, FolderPlus } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils"
 // import { useChat } from '@/hooks/useChat'; // useChatは親コンポーネントで管理
@@ -16,6 +16,8 @@ import rehypeRaw from "rehype-raw";
 import remarkBreaks from "remark-breaks";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useToast } from "@/components/ui/use-toast";
 
 interface FileInfo {
   name: string;
@@ -162,6 +164,41 @@ export function NewChatPanel({
   const [isRecording, setIsRecording] = useState(false);
   const [interimTranscript, setInterimTranscript] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const { toast } = useToast();
+
+  // --- Templates (local only) ---
+  type Template = { id: string; title: string; content: string };
+  const [templates, setTemplates] = useState<Template[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('chat.templates.v1');
+      if (raw) setTemplates(JSON.parse(raw));
+    } catch {}
+  }, []);
+  const saveTemplates = (list: Template[]) => {
+    setTemplates(list);
+    try { localStorage.setItem('chat.templates.v1', JSON.stringify(list)); } catch {}
+  };
+  const addTemplate = () => {
+    const title = window.prompt('テンプレート名');
+    if (!title) return;
+    const content = window.prompt('テンプレート本文');
+    if (content == null) return;
+    const t: Template = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, title, content };
+    const list = [t, ...templates].slice(0, 50);
+    saveTemplates(list);
+    toast({ description: 'テンプレートを追加しました' });
+  };
+  const insertTemplate = (t: Template) => {
+    setInput((prev) => (prev ? prev + "\n" + t.content : t.content));
+  };
+
+  // --- Tool actions / flags ---
+  const [webSearchFlag, setWebSearchFlag] = useState(false);
+  const enableWebSearch = () => {
+    setWebSearchFlag(true);
+    toast({ description: 'Web検索を有効化しました' });
+  };
   // useChatフックの呼び出しを削除
   // const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
   //   onMessageReceived: () => {
@@ -315,7 +352,9 @@ export function NewChatPanel({
     // Send message with text, file info, and goal info
     if (finalMessage || uploadedFiles.length > 0 || selectedGoal || selectedSession) {
       shouldScrollToBottomRef.current = true; // Force scroll to bottom on send
-      sendMessage({ text: finalMessage, files: uploadedFiles, goal: selectedGoal, session: selectedSession });
+      const features = webSearchFlag ? { webSearch: true } : undefined;
+      sendMessage({ text: finalMessage, files: uploadedFiles, goal: selectedGoal, session: selectedSession, features });
+      if (webSearchFlag) setWebSearchFlag(false);
     }
 
     // Reset other states
@@ -850,14 +889,67 @@ export function NewChatPanel({
                 disabled={isUploading}
               />
               <div className="flex items-center justify-between mt-2">
-                <div className="flex items-center gap-0 text-gray-500 dark:text-gray-400">
+                <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
                     <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading}>
                         <Plus className="w-5 h-5" />
                     </Button>
-                    <Button variant="ghost" className="h-8 px-3 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-2" disabled={isUploading}>
-                        <SlidersHorizontal className="w-4 h-4" />
-                        <span className="text-sm font-light">ツール</span>
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" className="h-8 px-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-1" disabled={isUploading}>
+                          <SlidersHorizontal className="w-4 h-4" />
+                          <span className="text-sm font-light">ツール</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-64 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
+                        <DropdownMenuItem onClick={enableWebSearch}>
+                          <Globe className="w-4 h-4 mr-2" /> Web検索
+                        </DropdownMenuItem>
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <FolderPlus className="w-4 h-4 mr-2" /> テンプレート
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="w-72 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
+                            {templates.length === 0 && (
+                              <DropdownMenuItem onClick={addTemplate}>テンプレートを追加…</DropdownMenuItem>
+                            )}
+                            {templates.map(t => (
+                              <DropdownMenuItem key={t.id} onClick={() => insertTemplate(t)} title={t.content}>
+                                {t.title}
+                              </DropdownMenuItem>
+                            ))}
+                            {templates.length > 0 && <DropdownMenuSeparator />}
+                            <DropdownMenuItem onClick={addTemplate}>テンプレートを追加…</DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>その他</DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
+                            <DropdownMenuItem onClick={() => {
+                              if (confirm('会話履歴をクリアします。よろしいですか？')) {
+                                clearMessages();
+                              }
+                            }}>履歴をクリア…</DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {webSearchFlag && (
+                      <div className={cn(
+                        "relative inline-flex items-center h-8 px-3 rounded-full select-none cursor-default text-sm font-light",
+                        "pr-6 border text-sky-600 dark:text-sky-400 border-sky-200 dark:border-sky-900/50 hover:bg-sky-50 dark:hover:bg-sky-900/50 bg-transparent"
+                      )}>
+                        <span className="inline-flex items-center"><Globe className="w-4 h-4 mr-1" /></span>
+                        <span>Web検索</span>
+                        <button
+                          type="button"
+                          aria-label="Web検索無効化"
+                          className="absolute right-1 top-1/2 -translate-y-1/2 inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-slate-200/70 dark:hover:bg-slate-600/70"
+                          onClick={(e) => { e.stopPropagation(); setWebSearchFlag(false); }}
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
                 </div>
                 <div className="flex items-center gap-2">
                   <Button

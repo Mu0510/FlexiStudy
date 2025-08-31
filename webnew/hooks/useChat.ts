@@ -51,6 +51,7 @@ interface SendMessageData {
   files?: FileInfo[];
   goal?: Goal | null;
   session?: { session: any; logEntry: any } | null;
+  features?: { webSearch?: boolean };
 }
 
 
@@ -588,7 +589,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
     setIsGeneratingResponse(true);
 
-    const { text, files, goal, session } = messageData;
+    const { text, files, goal, session, features } = messageData;
 
     const newMessage: Message = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
@@ -610,7 +611,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       jsonrpc: '2.0',
       id: reqId,
       method: 'sendUserMessage',
-      params: { chunks: [{ text, files, goal, messageId: newMessage.id, session }] }
+      params: { chunks: [{ text, files, goal, messageId: newMessage.id, session, features }] }
     };
     sendWsMessage(req); // sendWsMessage を使用
   }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
@@ -695,6 +696,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       finished: false,
       isFetchingHistory: false,
       histReqId: 10000,
+      requestMeta: new Map<number, { mode: 'older' | 'newer' | 'initial' }>(),
     };
     // サーバーにもクリアを通知するWebSocketメッセージを送信
     if (ws && ws.readyState === WebSocket.OPEN) { // ws.current から ws に変更

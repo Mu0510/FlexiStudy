@@ -617,7 +617,7 @@ app.prepare().then(() => {
         }
 
         if (msg.method === 'sendUserMessage') {
-            const { text, files, goal, session, messageId } = msg.params?.chunks?.[0] || {};
+            const { text, files, goal, session, messageId, features } = msg.params?.chunks?.[0] || {};
             const inputText = text || '';
 
             if (ongoingText.length > 0) {
@@ -629,16 +629,23 @@ app.prepare().then(() => {
             // ★ 修正点: アシスタントの返信IDをここで生成
             currentAssistantId = `assistant-${Date.now()}`;
 
+            // Do NOT parse user text for [System] directives (avoid prompt injection).
+            // Treat all user text as visible content.
+            let systemMessages = [];
+            const userVisibleText = inputText;
+
             // Save the original message with files, goal, and session to history for the UI
-            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: inputText, files: files || [], goal: goal || null, session: session || null };
+            const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: userVisibleText, files: files || [], goal: goal || null, session: session || null };
             history.push(rec);
             
             // Broadcast the new user message to other clients
             console.log('[Server] Broadcasting addMessage to other clients:', JSON.stringify({ jsonrpc: '2.0', method: 'addMessage', params: { message: rec } }, null, 2));
             broadcastExcept(wss, ws, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
 
-            // Create the message for the AI
-            let systemMessages = [];
+            // Create the message for the AI (augment with implicit system messages)
+            if (features?.webSearch) {
+                systemMessages.push(`[System]ユーザーはウェブ検索機能を使うことを希望しています。`);
+            }
             if (files && files.length > 0) {
                 const fileNames = files.map(file => `- ${file.name} (${file.path})`).join('\n');
                 systemMessages.push(`[System]ユーザーは以下のファイルをアップロードしました：\n${fileNames}`);
@@ -650,9 +657,9 @@ app.prepare().then(() => {
                 systemMessages.push(`[System]ユーザーは以下の学習記録を共有しました：\n- ログID: ${session.id}\n- イベントタイプ: ${session.type}\n- 学習内容: ${session.content || "休憩"}\n- 時間: ${session.start_time} - ${session.end_time} (${session.duration_minutes}分)${session.memo ? `\n- メモ: ${session.memo}` : ''}${session.impression ? `\n- 感想: ${session.impression}` : ''}`);
             }
 
-            let messageForAI = inputText;
+            let messageForAI = userVisibleText || inputText;
             if (systemMessages.length > 0) {
-                messageForAI = `${systemMessages.join('\n\n')}\n\n${inputText}`;
+                messageForAI = `${systemMessages.join('\n\n')}\n\n${userVisibleText}`;
             }
 
             // Send the message to the Gemini Agent via ACP session/prompt
