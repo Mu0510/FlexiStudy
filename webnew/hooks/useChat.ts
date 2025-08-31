@@ -116,7 +116,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     finished: false,
     isFetchingHistory: false,
     histReqId: 10000,
+    requestMeta: new Map<number, { mode: 'older' | 'newer' | 'initial' }>(),
   });
+  const latestTsRef = useRef<number | null>(null);
+  const hasLoadedOnceRef = useRef(false);
 
   useEffect(() => {
     if (!ws) return; // WebSocketインスタンスがまだ利用可能でない場合は何もしない
@@ -201,11 +204,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             }
             const newMessages = [...prev, {
               id: activeMessage.id,
-              ts: activeMessage.ts, // activeMessageのタイムスタンプを利用
+              // 確定時点のタイムスタンプで整列（ツールの直後に来るように）
+              ts: Date.now(),
               role: 'assistant',
               content: activeMessage.content,
             }];
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
           });
           setActiveMessage(null);
@@ -233,8 +236,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               goal: message.goal || null,
               session: message.session || null,
             }];
-            // タイムスタンプでソートして順序を保証
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
           });
         });
@@ -247,7 +248,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             role: 'assistant',
             content: msg.params.content,
           }];
-          newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
           return newMessages;
         });
         setActiveMessage(null);
@@ -293,7 +293,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
             });
 
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
           });
           // 状態更新後、activeMessageをクリア
@@ -357,7 +356,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
             });
 
-            newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
             return newMessages;
           });
           // 状態更新後、activeMessageをクリア
@@ -471,7 +469,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             mergedMessages.sort((a: any, b: any) => a.ts - b.ts);
 
             setMessages(prev => {
-              const updatedMessages = [...mergedMessages.map((m: any) => {
+              const prevIds = new Set(prev.map(p => p.id));
+              const mergedMapped = mergedMessages.map((m: any) => {
                 // 既にツール呼び出しは処理済みなので、ここでは通常のメッセージを処理
                 if (m.role === 'user' || m.role === 'assistant') {
                    return {
@@ -488,22 +487,43 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                     return m;
                 }
                 return null; // 万が一のためのnullチェック
-              }).filter(Boolean), ...prev]; // nullを除外
+              }).filter(Boolean) as Message[]; // nullを除外
+              // 既存と重複するIDを除外
+              const dedup = mergedMapped.filter(m => !prevIds.has(m.id));
+              const meta = historyState.current.requestMeta.get(msg.id);
+              let updatedMessages: Message[];
+              if (meta?.mode === 'newer') {
+                // 差分は末尾に追加（受信順を維持）
+                updatedMessages = [...prev, ...dedup];
+              } else {
+                // 初回/過去ページングは先頭に追加（過去→現在の順で追加）
+                updatedMessages = [...dedup, ...prev];
+              }
               
               rawMessages.forEach((m: any) => historyState.current.loadedIds.add(m.id));
+              // リクエストモード別に状態更新
               if (rawMessages.length > 0) {
-                historyState.current.oldestTs = rawMessages[0].ts;
+                if (meta?.mode === 'older' || meta?.mode === 'initial') {
+                  // 古い履歴をロードした場合のみ oldestTs を更新
+                  historyState.current.oldestTs = Math.min(historyState.current.oldestTs ?? rawMessages[0].ts, rawMessages[0].ts);
+                }
+                // 最新tsを更新（どのモードでも）
+                const newest = rawMessages[rawMessages.length - 1].ts;
+                latestTsRef.current = Math.max(latestTsRef.current ?? 0, newest);
               }
-              updatedMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
               return updatedMessages;
             });
           }
-
+          // 取りきり判定は過去取得のときのみ
+          const meta = historyState.current.requestMeta.get(msg.id);
           const limit = 20;
-          if (rawMessages.length < limit) {
-            historyState.current.finished = true;
+          if (meta?.mode === 'older' || meta?.mode === 'initial') {
+            if (rawMessages.length < limit) {
+              historyState.current.finished = true;
+            }
           }
           historyState.current.isFetchingHistory = false;
+          historyState.current.requestMeta.delete(msg.id);
         }
       } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
@@ -539,8 +559,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               if (p.some(m => m.id === prevActiveMessage.id)) {
                 return p;
               }
-              const newMessages = [...p, { id: prevActiveMessage.id, ts: prevActiveMessage.ts, role: 'assistant', content: prevActiveMessage.content }];
-              newMessages.sort((a, b) => (a.ts || 0) - (b.ts || 0));
+              const newMessages = [...p, { id: prevActiveMessage.id, ts: Date.now(), role: 'assistant', content: prevActiveMessage.content }];
               return newMessages;
             });
           }
@@ -634,11 +653,24 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         method: 'fetchHistory',
         params: { limit: limit, before: historyState.current.oldestTs }
       });
+      historyState.current.requestMeta.set(id, { mode: isInitialLoad ? 'initial' : 'older' });
     } else {
       console.warn("WebSocket is not open, cannot fetch history.");
       historyState.current.isFetchingHistory = false;
     }
   }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+
+  const requestDelta = useCallback(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (historyState.current.isFetchingHistory) return;
+    const after = latestTsRef.current;
+    if (!after) return; // 初回は通常ロード
+    const id = ++historyState.current.histReqId;
+    historyState.current.pendingHistory.add(id);
+    historyState.current.requestMeta.set(id, { mode: 'newer' });
+    console.log('[useChat DEBUG] Sending fetchHistory delta with id:', id, 'after:', after);
+    sendWsMessage({ jsonrpc: '2.0', id, method: 'fetchHistory', params: { after } });
+  }, [ws, sendWsMessage]);
 
   const cancelSendMessage = useCallback(() => {
     if (!ws || !lastSentRequestId.current) return; // ws.current から ws に変更
@@ -676,10 +708,21 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
   useEffect(() => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('[useChat DEBUG] WebSocket is open. Requesting initial history.'); // 追加
-      requestHistory(true);
+      console.log('[useChat DEBUG] WebSocket is open. Loading history or delta.');
+      if (hasLoadedOnceRef.current && (latestTsRef.current ?? 0) > 0 && messages.length > 0) {
+        requestDelta();
+      } else {
+        requestHistory(true);
+        hasLoadedOnceRef.current = true;
+      }
     }
-  }, [ws, requestHistory]); // wsとrequestHistoryを依存配列に追加
+  }, [ws, requestHistory, requestDelta, messages.length]);
+
+  useEffect(() => {
+    // 最新tsの追跡
+    const maxTs = messages.reduce((acc, m) => Math.max(acc, m.ts || 0), latestTsRef.current ?? 0);
+    if (maxTs > (latestTsRef.current ?? 0)) latestTsRef.current = maxTs;
+  }, [messages]);
 
   return {
     messages,

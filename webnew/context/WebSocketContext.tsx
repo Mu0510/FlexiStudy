@@ -7,7 +7,7 @@ interface WebSocketContextType {
   isConnected: boolean;
   // メッセージ購読のための関数
   subscribe: (handler: (message: any) => void) => () => void;
-  // メッセージ送信のための関数
+  // メッセージ送信のための関数（未接続時はキュー）
   sendMessage: (message: any) => void;
 }
 
@@ -42,26 +42,67 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const isConnecting = useRef(false);
-  const reconnectAttempts = useRef(0);
-  const MAX_RECONNECT_ATTEMPTS = 10;
-  const RECONNECT_INTERVAL_MS = 3000; // 3 seconds
+  // 再接続バックオフ
+  const backoffRef = useRef(1000); // ms
+  const MAX_BACKOFF_MS = 30000;
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ハートビート
+  const pingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pongTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const HEARTBEAT_INTERVAL_MS = 25000;
+  const HEARTBEAT_TIMEOUT_MS = 10000;
+  // 送信キュー（未接続時にためる）
+  const sendQueueRef = useRef<string[]>([]);
+
+  const stopHeartbeat = () => {
+    if (pingTimerRef.current) clearInterval(pingTimerRef.current);
+    if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+    pingTimerRef.current = null;
+    pongTimeoutRef.current = null;
+  };
+
+  const startHeartbeat = (socket: WebSocket) => {
+    stopHeartbeat();
+    pingTimerRef.current = setInterval(() => {
+      if (!socket || socket.readyState !== WebSocket.OPEN) return;
+      try {
+        socket.send(JSON.stringify({ type: 'ping' }));
+      } catch {}
+      if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+      pongTimeoutRef.current = setTimeout(() => {
+        try { socket.close(4000, 'heartbeat-timeout'); } catch {}
+      }, HEARTBEAT_TIMEOUT_MS);
+    }, HEARTBEAT_INTERVAL_MS);
+  };
+
+  const flushQueue = () => {
+    const socket = wsRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return;
+    while (sendQueueRef.current.length) {
+      const msg = sendQueueRef.current.shift()!;
+      try { socket.send(msg); } catch { sendQueueRef.current.unshift(msg); break; }
+    }
+  };
+
+  const scheduleReconnect = useCallback(() => {
+    if (reconnectTimerRef.current) return; // 既にスケジュール済み
+    const jitter = 0.8 + Math.random() * 0.4;
+    const delay = Math.min(backoffRef.current, MAX_BACKOFF_MS) * jitter;
+    reconnectTimerRef.current = setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connectWebSocket();
+    }, delay);
+    backoffRef.current = Math.min(backoffRef.current * 2, MAX_BACKOFF_MS);
+    console.log(`[WS] scheduled reconnect in ${Math.round(delay)}ms`);
+  }, []);
 
   const connectWebSocket = useCallback(() => {
-    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
-      return;
-    }
-    if (isConnecting.current) {
-      return;
-    }
-    if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
-      console.warn('Max reconnect attempts reached. Not attempting to reconnect WebSocket.');
-      return;
-    }
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) return;
+    if (isConnecting.current) return;
 
     isConnecting.current = true;
     console.log('Attempting to connect WebSocket from provider...');
 
-    // window.location.hostname を使用
     const socket = new WebSocket(`wss://${window.location.hostname}:443/ws`);
     wsRef.current = socket;
 
@@ -69,17 +110,29 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
       console.log('WebSocket connected from provider');
       setIsConnected(true);
       isConnecting.current = false;
-      reconnectAttempts.current = 0; // 接続成功でリセット
+      backoffRef.current = 1000; // バックオフをリセット
+      startHeartbeat(socket);
+      flushQueue();
     };
 
     socket.onmessage = (event) => {
-      console.log('[Provider DEBUG] Raw WebSocket message received:', event.data); // 追加
+      // 文字列以外は無視
+      const data = event.data;
       try {
-        const parsedMessage = JSON.parse(event.data);
-        console.log('[Provider DEBUG] Parsed WebSocket message:', parsedMessage); // 追加
-        eventEmitter.emit('message', parsedMessage);
+        const parsed = JSON.parse(data);
+        // ハートビート応答は握りつぶす
+        if (parsed && (parsed.type === 'pong' || parsed.method === 'pong')) {
+          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+          return;
+        }
+        eventEmitter.emit('message', parsed);
       } catch (e) {
-        console.error('[Provider ERROR] Failed to parse WebSocket message:', e, event.data); // 追加
+        // 非JSONは無視（サーバが純テキストを返す可能性に備える）
+        if (String(data).toLowerCase() === 'pong') {
+          if (pongTimeoutRef.current) clearTimeout(pongTimeoutRef.current);
+          return;
+        }
+        console.warn('[Provider] Non-JSON message ignored:', data);
       }
     };
 
@@ -88,35 +141,43 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
       setIsConnected(false);
       isConnecting.current = false;
       wsRef.current = null;
-
-      // 異常終了の場合のみ再接続を試みる
-      if (!event.wasClean && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
-        console.log(`[Provider DEBUG] Attempting reconnect due to unclean close. WasClean: ${event.wasClean}`); // 追加
-        reconnectAttempts.current++;
-        console.log(`Attempting to reconnect in ${RECONNECT_INTERVAL_MS / 1000} seconds (attempt ${reconnectAttempts.current}/${MAX_RECONNECT_ATTEMPTS})...`);
-        setTimeout(connectWebSocket, RECONNECT_INTERVAL_MS);
-      } else if (event.wasClean) {
-        console.log('[Provider DEBUG] Clean WebSocket close. No reconnect attempt.'); // 追加
-      }
+      stopHeartbeat();
+      scheduleReconnect();
     };
 
-    socket.onerror = (event) => {
-      console.error('WebSocket error from provider:', event);
+    socket.onerror = () => {
+      // エラーは控えめにログに残し、oncloseで再接続
+      console.warn('WebSocket error from provider');
       setIsConnected(false);
       isConnecting.current = false;
-      wsRef.current = null;
-      // onerrorの後はoncloseが呼ばれるので、再接続ロジックはoncloseに集約
+      try { socket.close(); } catch {}
     };
-  }, []);
+  }, [scheduleReconnect]);
 
   useEffect(() => {
     connectWebSocket();
 
+    const onPageShow = () => { connectWebSocket(); };
+    const onVisibility = () => { if (document.visibilityState === 'visible') connectWebSocket(); };
+    const onOnline = () => { connectWebSocket(); };
+    const onPageHide = () => { if (wsRef.current) { try { wsRef.current.close(1001, 'pagehide'); } catch {} } };
+
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('pagehide', onPageHide);
+
     return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('pagehide', onPageHide);
       if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
         console.log('Cleaning up WebSocket connection from provider.');
         wsRef.current.close(1000, "Provider unmounting");
       }
+      stopHeartbeat();
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
     };
   }, [connectWebSocket]);
 
@@ -126,12 +187,17 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
   }, []);
 
   const sendMessage = useCallback((message: any) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify(message));
+    const str = typeof message === 'string' ? message : JSON.stringify(message);
+    const socket = wsRef.current;
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      try { socket.send(str); } catch { sendQueueRef.current.push(str); }
     } else {
-      console.warn('WebSocket is not open, cannot send message:', message);
+      // 未接続ならキューにため、次回接続時にflush
+      sendQueueRef.current.push(str);
+      // 速やかに接続トリガー（必要なら）
+      connectWebSocket();
     }
-  }, []);
+  }, [connectWebSocket]);
 
   const contextValue = useMemo(() => ({
     ws: wsRef.current,

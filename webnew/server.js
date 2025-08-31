@@ -576,6 +576,14 @@ app.prepare().then(() => {
             return;
         }
 
+        // --- Heartbeat ping/pong ---
+        if ((msg && (msg.type === 'ping' || msg.method === 'ping')) || text.trim().toLowerCase() === 'ping') {
+            try {
+                ws.send(JSON.stringify({ type: 'pong' }));
+            } catch {}
+            return;
+        }
+
         // --- clearHistory メソッドの処理を追加 ---
         if (msg.method === 'clearHistory') {
             console.log('[Server] Received clearHistory command.');
@@ -586,13 +594,24 @@ app.prepare().then(() => {
         }
 
         if (msg.method === 'fetchHistory') {
+            // 直近の未確定テキストを確定化（次回の取得で落ちないように）
             if (ongoingText.length > 0) {
                 const rec = { id: String(Date.now()), ts: Date.now(), role: 'assistant', text: ongoingText.trimEnd() };
                 history.push(rec);
                 ongoingText = '';
             }
-            const { limit = 20, before } = msg.params || {};
-            let chunk = before ? history.filter(rec => rec.ts < before).slice(-limit) : history.slice(-limit);
+            const { limit = 20, before, after } = msg.params || {};
+            let chunk;
+            if (after) {
+                // 差分: 指定tsより新しいものを返す
+                chunk = history.filter(rec => (rec.ts ?? 0) > after).slice(-(limit || 100));
+            } else if (before) {
+                // 過去: 指定tsより古いものから末尾limit件
+                chunk = history.filter(rec => (rec.ts ?? 0) < before).slice(-limit);
+            } else {
+                // 末尾limit件
+                chunk = history.slice(-limit);
+            }
             chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
             return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { messages: chunk } }));
         }
