@@ -1,8 +1,9 @@
 // Lightweight dev Service Worker (no precache, watch-friendly)
 // - Avoids Workbox InjectManifest in dev to prevent noisy warnings
-// - Provides basic runtime caching for images/fonts and Next static assets
+// - Provides basic runtime caching for images/fonts only
+// - Do NOT cache Next.js dev assets to avoid UI glitches during HMR
 
-const STATIC_CACHE = 'dev-static-v1';
+const STATIC_CACHE = 'dev-static-v2';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -56,13 +57,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Next.js static assets: stale-while-revalidate
-  if (url.pathname.startsWith('/_next/static/')) {
-    event.respondWith(staleWhileRevalidate(request));
-    return;
-  }
-
-  // Navigations and everything else: pass-through (network-first)
-  // Keeping SSR fresh in dev, no offline fallback here
+  // Everything else: pass-through (network)
+  // Keep SSR and dev static fresh; no offline fallback in dev
 });
-

@@ -7,6 +7,20 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
+// Suppress noisy Workbox multi-run warnings in dev only
+if (process.env.NODE_ENV !== 'production') {
+  const _warn = console.warn.bind(console);
+  console.warn = (...args) => {
+    try {
+      const msg = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+      if (/has been called multiple times, perhaps due to running webpack in --watch mode/i.test(msg)) {
+        return; // drop only this specific Workbox warning
+      }
+    } catch {}
+    _warn(...args);
+  };
+}
+
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
 const port = 3000;
