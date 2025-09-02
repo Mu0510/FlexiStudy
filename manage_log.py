@@ -1048,11 +1048,22 @@ def get_dashboard_data(weekly_period_days=None):
         for row in recent_sessions_raw:
             start_time = datetime.datetime.strptime(row['start_time'], '%Y-%m-%d %H:%M:%S')
             end_time = datetime.datetime.strptime(row['end_time'], '%Y-%m-%d %H:%M:%S') if row['end_time'] else start_time
+            # 相対日付ラベル（今日/昨日/◯日前）
+            days_ago = (today - start_time.date()).days
+            if days_ago == 0:
+                relative = "今日"
+            elif days_ago == 1:
+                relative = "昨日"
+            else:
+                relative = f"{days_ago}日前"
+
             recent_sessions.append({
                 'subject': row['subject'],
                 'duration': row['duration_minutes'],
                 'time': "{}-{}".format(start_time.strftime('%H:%M'), end_time.strftime('%H:%M')),
-                'topic': row['content']
+                'topic': row['content'],
+                'date': start_time.strftime('%Y-%m-%d'),
+                'relative': relative,
             })
 
     dashboard_data = {

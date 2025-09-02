@@ -115,6 +115,9 @@
   padding: 0; /* 余白は外側で管理 */
   overflow: visible; /* スクロールは外側で管理 */
   border-radius: 0; /* 角丸も外側で管理 */
+  /* Render only visible parts for performance while keeping full DOM for copy/select */
+  content-visibility: auto;
+  contain-intrinsic-size: 1000px;
 }
 
 .tool-card__body pre span.add {

@@ -144,7 +144,12 @@ export function Dashboard({ dashboardData, subjectColors, onSelectGoal }) {
                     </Badge>
                     <span className="text-sm font-medium text-neutral-600 dark:text-neutral-400">{session.duration}分</span>
                   </div>
-                  <div className="text-sm text-neutral-600 dark:text-neutral-400 mb-1">{session.time}</div>
+                  <div className="text-sm text-neutral-600 dark:text-neutral-400 mb-1">
+                    {session.time}
+                    {session.relative ? (
+                      <span className="ml-2 text-neutral-500 dark:text-neutral-400">({session.relative})</span>
+                    ) : null}
+                  </div>
                   <div className="text-sm text-neutral-800 dark:text-neutral-200 font-medium">{session.topic}</div>
                 </div>
               ))}
