@@ -5,6 +5,7 @@ import './globals.css'
 import { ViewportController } from '@/components/viewport-controller'
 import { ThemeProvider } from "@/components/theme-provider"
 import { WebSocketProvider } from '@/context/WebSocketContext';
+import DebugConsole from '@/components/debug-console'
 
 export const metadata: Metadata = {
   title: 'FlexiStudy',
@@ -39,6 +40,8 @@ html {
           <WebSocketProvider>
             {children}
           </WebSocketProvider>
+          {/* In-app logs enabled via ?debug=1 or localStorage('app.debug.console'='1') */}
+          <DebugConsole />
         </ThemeProvider>
       </body>
     </html>

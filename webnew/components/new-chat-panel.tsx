@@ -1,7 +1,7 @@
 // webnew/components/new-chat-panel.tsx
 "use client"
 
-import { useState, useEffect, useRef, useCallback, useLayoutEffect } from "react"
+import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon, Pause, Globe, FolderPlus } from "lucide-react"
@@ -18,6 +18,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
+import TemplateManagerDialog, { ChatTemplate } from '@/components/template-manager';
 
 interface FileInfo {
   name: string;
@@ -78,7 +79,7 @@ interface NewChatPanelProps {
   messages: Message[];
   activeMessage: ActiveMessage | null;
   isGeneratingResponse: boolean;
-  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; session?: any | null; }) => void;
+  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; session?: any | null; features?: { webSearch?: boolean } }) => void;
   cancelSendMessage: () => void;
   requestHistory: (isInitialLoad?: boolean) => void;
   isFetchingHistory: boolean;
@@ -167,15 +168,15 @@ export function NewChatPanel({
   const { toast } = useToast();
 
   // --- Templates (local only) ---
-  type Template = { id: string; title: string; content: string };
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const [templates, setTemplates] = useState<ChatTemplate[]>([]);
+  const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   useEffect(() => {
     try {
       const raw = localStorage.getItem('chat.templates.v1');
       if (raw) setTemplates(JSON.parse(raw));
     } catch {}
   }, []);
-  const saveTemplates = (list: Template[]) => {
+  const saveTemplates = (list: ChatTemplate[]) => {
     setTemplates(list);
     try { localStorage.setItem('chat.templates.v1', JSON.stringify(list)); } catch {}
   };
@@ -184,12 +185,25 @@ export function NewChatPanel({
     if (!title) return;
     const content = window.prompt('テンプレート本文');
     if (content == null) return;
-    const t: Template = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, title, content };
+    let cmd = window.prompt('スラッシュコマンド名（例: /summary）（省略可）') || undefined;
+    if (cmd) {
+      cmd = cmd.trim();
+      if (!cmd.startsWith('/')) cmd = '/' + cmd;
+      // 簡易バリデーション: 半角英数と-/のみ
+      if (!/^\/[a-zA-Z0-9\-]+$/.test(cmd)) {
+        alert('コマンドは \/, 英数字, ハイフンのみ使用できます');
+        cmd = undefined;
+      } else if (templates.some(t => t.cmd === cmd)) {
+        alert('同じコマンドが既に存在します');
+        cmd = undefined;
+      }
+    }
+    const t: Template = { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, title, content, cmd };
     const list = [t, ...templates].slice(0, 50);
     saveTemplates(list);
     toast({ description: 'テンプレートを追加しました' });
   };
-  const insertTemplate = (t: Template) => {
+  const insertTemplate = (t: ChatTemplate) => {
     setInput((prev) => (prev ? prev + "\n" + t.content : t.content));
   };
 
@@ -221,6 +235,75 @@ export function NewChatPanel({
   const shouldScrollToBottomRef = useRef(true); // 初回ロード時はスクロールしたいのでtrueに初期化
   const shouldSendMessageOnEndRef = useRef(false);
   const [needsToSend, setNeedsToSend] = useState(false);
+
+  // --- Slash command suggestions ---
+  type SlashItem = { cmd: string; label: string; action?: () => void; replaceWith?: string };
+  const baseSlash: SlashItem[] = useMemo(() => ([
+    { cmd: '/web', label: 'Web検索を有効化', action: () => setWebSearchFlag(true), replaceWith: '' },
+    { cmd: '/clear', label: '履歴をクリア', replaceWith: '/clear' },
+    { cmd: '/debug', label: 'アプリ内ログを表示/切替', action: () => { try { const cur = localStorage.getItem('app.debug.console') === '1'; localStorage.setItem('app.debug.console', cur ? '0' : '1'); location.reload(); } catch {} }, replaceWith: '' },
+  ]), []);
+  const templateSlash: SlashItem[] = useMemo(() => (
+    templates
+      .filter(t => t.cmd && t.cmd.startsWith('/'))
+      .map(t => ({
+        cmd: t.cmd!,
+        label: `テンプレート: ${t.title}`,
+        // スラッシュ選択時はその場に本文を挿入（コマンドは残さない）
+        replaceWith: t.content,
+      }))
+  ), [templates]);
+  const slashItems: SlashItem[] = useMemo(() => ([...baseSlash, ...templateSlash]), [baseSlash, templateSlash]);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashQuery, setSlashQuery] = useState('');
+  const [slashIndex, setSlashIndex] = useState(0);
+  const filteredSlashRaw = slashItems.filter(i => i.cmd.startsWith('/' + slashQuery) || i.label.includes(slashQuery));
+  const filteredSlash = useMemo(() => {
+    const seen = new Set<string>();
+    const out: SlashItem[] = [];
+    for (const it of filteredSlashRaw) {
+      if (!it.cmd) continue;
+      if (seen.has(it.cmd)) continue;
+      seen.add(it.cmd);
+      out.push(it);
+    }
+    return out;
+  }, [filteredSlashRaw]);
+
+  const replaceCurrentToken = (text: string) => {
+    const ta = chatInputRef.current; if (!ta) return;
+    const pos = ta.selectionStart ?? (input?.length || 0);
+    const before = (input ?? '').slice(0, pos);
+    const after = (input ?? '').slice(pos);
+    // token start = last whitespace before caret
+    const m = before.match(/(^|[\s\n\t])[^\s\n\t]*$/);
+    const tokenStart = m ? before.length - (m[0].trim().length) : before.length;
+    const head = (input ?? '').slice(0, tokenStart);
+    const newVal = head + text + after;
+    setInput(newVal);
+    // move caret to end of inserted text
+    requestAnimationFrame(() => {
+      if (chatInputRef.current) {
+        const np = (head + text).length;
+        chatInputRef.current.selectionStart = chatInputRef.current.selectionEnd = np;
+        chatInputRef.current.focus();
+      }
+    });
+  };
+
+  const tryUpdateSlash = (val: string) => {
+    const ta = chatInputRef.current; if (!ta) { setSlashOpen(false); return; }
+    const pos = ta.selectionStart ?? val.length;
+    const before = val.slice(0, pos);
+    const token = before.split(/\s|\n|\t/).pop() || '';
+    if (token.startsWith('/')) {
+      setSlashOpen(true);
+      setSlashQuery(token.slice(1));
+      setSlashIndex(0);
+    } else {
+      setSlashOpen(false);
+    }
+  };
 
   // Auto-resize textarea with max height
   useEffect(() => {
@@ -632,11 +715,17 @@ export function NewChatPanel({
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
           </div>
         )}
-        {messages && messages.map((msg) => {
+        {useMemo(() => {
+          const seen = new Set<string>();
+          return (messages || []).filter(m => {
+            const k = String(m.id ?? '')
+            if (seen.has(k)) return false; seen.add(k); return true;
+          });
+        }, [messages]).map((msg, idx) => {
           // Render tool messages
           if (msg.type === "tool") {
             return (
-              <Card key={`${msg.id}-${msg.ts}`} className={cn(
+              <Card key={`${msg.id}-${idx}`} className={cn(
                 "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
                 "w-11/12 mx-auto my-1 mb-3",
                 msg.status === "running" && "tool-card--running",
@@ -677,7 +766,7 @@ export function NewChatPanel({
           } else {
             // Render user/assistant messages
             return (
-              <div key={`${msg.id}-${msg.ts}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
+              <div key={`${msg.id}-${idx}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
                 {/* File Cards for User Messages */}
                 {msg.role === 'user' && msg.goal && (
                   <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
@@ -880,14 +969,50 @@ export function NewChatPanel({
                   if (isRecording) {
                     recognitionRef.current?.stop();
                   }
+                  tryUpdateSlash(e.target.value)
                 }}
-                onKeyDown={handleKeyDown}
+                onKeyDown={(e) => {
+                  // Slash menu keyboard handling
+                  if (slashOpen) {
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setSlashIndex(i => Math.min(i + 1, Math.max(0, filteredSlash.length - 1))); return; }
+                    if (e.key === 'ArrowUp') { e.preventDefault(); setSlashIndex(i => Math.max(i - 1, 0)); return; }
+                    if (e.key === 'Escape') { setSlashOpen(false); return; }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      e.preventDefault();
+                      const sel = filteredSlash[slashIndex];
+                      if (sel) {
+                        if (sel.action) sel.action();
+                        replaceCurrentToken(sel.replaceWith ?? sel.cmd);
+                      }
+                      setSlashOpen(false);
+                      return;
+                    }
+                  }
+                  handleKeyDown(e);
+                }}
                 onPaste={handlePaste}
                 placeholder="システムと対話... (Alt+Enterで送信)"
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1 text-base"
                 rows={1}
                 disabled={isUploading}
               />
+              {slashOpen && filteredSlash.length > 0 && (
+                <div className="absolute -top-2 translate-y-[-100%] left-2 z-50 w-64 rounded-md border bg-popover text-popover-foreground shadow-md">
+                  <ul className="py-1 max-h-60 overflow-auto">
+                    {filteredSlash.map((it, idx) => (
+                      <li key={it.cmd}
+                          className={cn('px-3 py-2 text-sm cursor-pointer flex items-center gap-2', idx === slashIndex ? 'bg-slate-100 dark:bg-slate-700' : 'hover:bg-slate-100 dark:hover:bg-slate-700')}
+                          onMouseEnter={() => setSlashIndex(idx)}
+                          onMouseDown={(e) => { e.preventDefault(); }}
+                          onClick={() => { if (it.action) it.action(); replaceCurrentToken(it.replaceWith ?? it.cmd); setSlashOpen(false); }}
+                      >
+                        <span className="font-mono text-sky-700 dark:text-sky-400">{it.cmd}</span>
+                        <span className="text-slate-600 dark:text-slate-300">{it.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
                     <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading}>
@@ -910,15 +1035,18 @@ export function NewChatPanel({
                           </DropdownMenuSubTrigger>
                           <DropdownMenuSubContent className="w-72 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
                             {templates.length === 0 && (
-                              <DropdownMenuItem onClick={addTemplate}>テンプレートを追加…</DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => setTemplateManagerOpen(true)}>テンプレートを追加…</DropdownMenuItem>
                             )}
                             {templates.map(t => (
                               <DropdownMenuItem key={t.id} onClick={() => insertTemplate(t)} title={t.content}>
-                                {t.title}
+                                <div className="flex items-center gap-2">
+                                  <span>{t.title}</span>
+                                  {t.cmd && <span className="text-xs font-mono text-slate-500">{t.cmd}</span>}
+                                </div>
                               </DropdownMenuItem>
                             ))}
                             {templates.length > 0 && <DropdownMenuSeparator />}
-                            <DropdownMenuItem onClick={addTemplate}>テンプレートを追加…</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setTemplateManagerOpen(true)}>テンプレートを管理…</DropdownMenuItem>
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                         <DropdownMenuSub>
@@ -985,24 +1113,34 @@ export function NewChatPanel({
 
   if (isFloating) {
     return (
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            className={cn(
-              "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl flex flex-col z-50",
-              isFullScreen 
-                ? "fixed inset-0"
-                : "fixed bottom-4 right-4 w-96 h-[600px]"
-            )}
-            variants={panelVariants}
-            initial="closed"
-            animate="open"
-            exit="closed"
-          >
-            {ChatContent}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <>
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              key="chat-panel"
+              className={cn(
+                "bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 shadow-2xl rounded-2xl flex flex-col z-50",
+                isFullScreen 
+                  ? "fixed inset-0"
+                  : "fixed bottom-4 right-4 w-96 h-[600px]"
+              )}
+              variants={panelVariants}
+              initial="closed"
+              animate="open"
+              exit="closed"
+            >
+              {ChatContent}
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Keep manager dialog outside AnimatePresence to avoid key issues */}
+        <TemplateManagerDialog
+          open={templateManagerOpen}
+          onOpenChange={setTemplateManagerOpen}
+          templates={templates}
+          onChange={(list) => saveTemplates(list)}
+        />
+      </>
     );
   }
 
@@ -1010,6 +1148,12 @@ export function NewChatPanel({
   return (
     <div className="h-full w-full flex flex-col bg-white dark:bg-slate-900 max-w-full overflow-x-hidden">
       {ChatContent}
+      <TemplateManagerDialog
+        open={templateManagerOpen}
+        onOpenChange={setTemplateManagerOpen}
+        templates={templates}
+        onChange={(list) => saveTemplates(list)}
+      />
     </div>
   );
 }

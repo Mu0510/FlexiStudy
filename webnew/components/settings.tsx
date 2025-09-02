@@ -27,6 +27,8 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
   const [weeklyPeriod, setWeeklyPeriod] = useState('this_week');
+  const [appInfo, setAppInfo] = useState<{ version: string | null; lastCommitDate: string | null; git: { branch?: string | null; commit?: string | null } | null } | null>(null)
+  const SHOW_TEMPLATES = false; // 将来的に使うテンプレート群は非表示
 
   useEffect(() => {
     const savedPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
@@ -41,6 +43,13 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   
   useEffect(() => {
     setMounted(true)
+  }, [])
+  useEffect(() => {
+    // Fetch app and git info for display
+    fetch('/api/app-info')
+      .then((r) => r.json())
+      .then((data) => setAppInfo(data))
+      .catch(() => setAppInfo(null))
   }, [])
 
   const handleSave = async () => {
@@ -131,42 +140,44 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <span>プロフィール設定</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="firstName" className="dark:text-slate-200">名前</Label>
-                  <Input id="firstName" defaultValue="田中" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
+          {SHOW_TEMPLATES && (
+            <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
+                  <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <span>プロフィール設定</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="firstName" className="dark:text-slate-200">名前</Label>
+                    <Input id="firstName" defaultValue="田中" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
+                  </div>
+                  <div>
+                    <Label htmlFor="lastName" className="dark:text-slate-200">姓</Label>
+                    <Input id="lastName" defaultValue="太郎" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
+                  </div>
                 </div>
                 <div>
-                  <Label htmlFor="lastName" className="dark:text-slate-200">姓</Label>
-                  <Input id="lastName" defaultValue="太郎" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
+                  <Label htmlFor="email" className="dark:text-slate-200">メールアドレス</Label>
+                  <Input id="email" type="email" defaultValue="tanaka@example.com" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
                 </div>
-              </div>
-              <div>
-                <Label htmlFor="email" className="dark:text-slate-200">メールアドレス</Label>
-                <Input id="email" type="email" defaultValue="tanaka@example.com" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
-              </div>
-              <div>
-                <Label htmlFor="school" className="dark:text-slate-200">学校名</Label>
-                <Input id="school" defaultValue="○○高等学校" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
-              </div>
-              <div>
-                <Label htmlFor="grade" className="dark:text-slate-200">学年</Label>
-                <Input id="grade" defaultValue="3年生" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
-              </div>
-              <Button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-                <Save className="w-4 h-4 mr-2" />
-                プロフィールを保存
-              </Button>
-            </CardContent>
-          </Card>
+                <div>
+                  <Label htmlFor="school" className="dark:text-slate-200">学校名</Label>
+                  <Input id="school" defaultValue="○○高等学校" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
+                </div>
+                <div>
+                  <Label htmlFor="grade" className="dark:text-slate-200">学年</Label>
+                  <Input id="grade" defaultValue="3年生" className="mt-1 dark:bg-slate-700 dark:text-slate-200 dark:border-slate-600" />
+                </div>
+                <Button className="bg-gradient-to-r from-blue-600 to-blue-700 text-white">
+                  <Save className="w-4 h-4 mr-2" />
+                  プロフィールを保存
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
@@ -208,97 +219,103 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
             </CardContent>
           </Card>
 
-          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <Palette className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                <span>テーマ設定</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="darkMode" className="text-base font-medium text-slate-800 dark:text-slate-200">
-                    ダークモード
-                  </Label>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">暗いテーマに切り替える</p>
+          {SHOW_TEMPLATES && (
+            <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
+                  <Palette className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <span>テーマ設定</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="darkMode" className="text-base font-medium text-slate-800 dark:text-slate-200">
+                      ダークモード
+                    </Label>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">暗いテーマに切り替える</p>
+                  </div>
+                  <Switch
+                    id="darkMode"
+                    checked={resolvedTheme === 'dark'}
+                    onCheckedChange={(checked) => {
+                      setTheme(checked ? 'dark' : 'light')
+                    }}
+                  />
                 </div>
-                <Switch
-                  id="darkMode"
-                  checked={resolvedTheme === 'dark'}
-                  onCheckedChange={(checked) => {
-                    setTheme(checked ? 'dark' : 'light')
-                  }}
-                />
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right Column */}
         <div className="space-y-6">
-          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                <span>データ管理</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Button
-                variant="outline"
-                className="w-full justify-start border-green-200 text-green-700 hover:bg-green-50 bg-transparent dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/50"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                データをエクスポート
-              </Button>
+          {SHOW_TEMPLATES && (
+            <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
+                  <Shield className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                  <span>データ管理</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <Button
+                  variant="outline"
+                  className="w-full justify-start border-green-200 text-green-700 hover:bg-green-50 bg-transparent dark:border-green-800 dark:text-green-400 dark:hover:bg-green-900/50"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  データをエクスポート
+                </Button>
 
-              <Button
-                variant="outline"
-                className="w-full justify-start border-blue-200 text-blue-700 hover:bg-blue-50 bg-transparent dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/50"
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                データをインポート
-              </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start border-blue-200 text-blue-700 hover:bg-blue-50 bg-transparent dark:border-blue-800 dark:text-blue-400 dark:hover:bg-blue-900/50"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  データをインポート
+                </Button>
 
-              <Button
-                variant="outline"
-                className="w-full justify-start border-red-200 text-red-700 hover:bg-red-50 bg-transparent dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/50"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                全データを削除
-              </Button>
-            </CardContent>
-          </Card>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start border-red-200 text-red-700 hover:bg-red-50 bg-transparent dark:border-red-800 dark:text-red-400 dark:hover:bg-red-900/50"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  全データを削除
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
-          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
-                <SettingsIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
-                <span>アカウント情報</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600 dark:text-slate-400">プラン</span>
-                <Badge className="bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800">無料プラン</Badge>
-              </div>
+          {SHOW_TEMPLATES && (
+            <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
+                  <SettingsIcon className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+                  <span>アカウント情報</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">プラン</span>
+                  <Badge className="bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/50 dark:text-blue-300 dark:border-blue-800">無料プラン</Badge>
+                </div>
 
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600 dark:text-slate-400">登録日</span>
-                <span className="text-sm text-slate-800 dark:text-slate-200">2025年6月1日</span>
-              </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">登録日</span>
+                  <span className="text-sm text-slate-800 dark:text-slate-200">2025年6月1日</span>
+                </div>
 
-              <div className="flex justify-between items-center">
-                <span className="text-sm text-slate-600 dark:text-slate-400">データ使用量</span>
-                <span className="text-sm text-slate-800 dark:text-slate-200">2.3 MB / 100 MB</span>
-              </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-slate-600 dark:text-slate-400">データ使用量</span>
+                  <span className="text-sm text-slate-800 dark:text-slate-200">2.3 MB / 100 MB</span>
+                </div>
 
-              <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 mt-4 text-white">
-                プレミアムにアップグレード
-              </Button>
-            </CardContent>
-          </Card>
+                <Button className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 mt-4 text-white">
+                  プレミアムにアップグレード
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
@@ -307,12 +324,18 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-slate-600 dark:text-slate-400">バージョン</span>
-                <span className="text-slate-800 dark:text-slate-200">2.1.0</span>
+                <span className="text-slate-800 dark:text-slate-200">{appInfo?.version ?? '—'}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-600 dark:text-slate-400">最終更新</span>
-                <span className="text-slate-800 dark:text-slate-200">2025年7月20日</span>
+                <span className="text-slate-800 dark:text-slate-200">{appInfo?.lastCommitDate ?? '—'}</span>
               </div>
+              {appInfo?.git && (
+                <div className="flex justify-between">
+                  <span className="text-slate-600 dark:text-slate-400">Git</span>
+                  <span className="text-slate-800 dark:text-slate-200">{`${appInfo.git.branch ?? '—'} @ ${appInfo.git.commit ?? '—'}`}</span>
+                </div>
+              )}
               <Button variant="link" className="p-0 h-auto text-sm text-blue-600 dark:text-blue-400">
                 利用規約・プライバシーポリシー
               </Button>
