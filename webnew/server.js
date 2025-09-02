@@ -183,37 +183,43 @@ function _startNewGeminiProcess(wss) { // Pass wss to broadcast
                       const isV1 = pv === 1 || pv === '1' || pv === '1.0.0';
                       if (isV1) {
                         acpMode = 'v1';
-                        const authMethods = msg.result?.authMethods || [];
-                        if (Array.isArray(authMethods) && authMethods.length > 0) {
-                          const methodId = authMethods[0]?.id;
-                          if (methodId) {
-                            console.log(`[ACP] authenticating via method: ${methodId}`);
-                            acpSend('authenticate', { methodId });
-                            return; // wait authenticate response before new session
-                          }
-                        }
-                        // No auth required -> create a new session
+                        // 先にnewSessionを試す
+                        console.log('[ACP] Attempting to start a new session directly...');
                         const newSessParams = { cwd: PROJECT_ROOT, mcpServers: [] };
                         acpSend('session/new', newSessParams);
-                        return;
                       } else {
                         // Legacy experimental ACP (0.0.x)
                         acpMode = 'legacy';
                         console.log('[ACP] Detected legacy protocol, using legacy message flow.');
-                        // Flush queued prompts by sending legacy requests
                         flushPromptQueueLegacy();
-                        return;
                       }
+                      return; // ハンドリング終了
                     } else if (meth === 'authenticate') {
-                      // After auth, create a new session
+                      // 認証後、新しいセッションを作成
+                      console.log('[ACP] Authentication successful. Creating new session...');
                       const newSessParams = { cwd: PROJECT_ROOT, mcpServers: [] };
                       acpSend('session/new', newSessParams);
                       return;
-                    } else if (meth === 'session/new' && msg.result?.sessionId) {
-                      acpSessionId = msg.result.sessionId;
-                      console.log(`[ACP] New session established: ${acpSessionId}`);
-                      // Flush queued prompts
-                      flushPromptQueue();
+                    } else if (meth === 'session/new') {
+                      if (msg.result?.sessionId) {
+                        // セッション成功
+                        acpSessionId = msg.result.sessionId;
+                        console.log(`[ACP] New session established: ${acpSessionId}`);
+                        flushPromptQueue();
+                      } else if (msg.error && msg.error.code === -32000) {
+                        // 認証が必要
+                        console.log('[ACP] New session failed with auth error. Starting authentication...');
+                        // initializeのレスポンスをどこかに保存しておく必要があるが、
+                        // 現状のコードではレスポンスが揮発してしまうため、決め打ちで認証方法を呼び出す。
+                        // Gemini CLIの `initialize` は通常 `oauth-personal` を返す。
+                        const authMethodId = 'oauth-personal'; 
+                        console.log(`[ACP] authenticating via method: ${authMethodId}`);
+                        acpSend('authenticate', { methodId: authMethodId });
+                      } else {
+                        // その他のセッションエラー
+                        console.error('[ACP] Failed to create new session:', msg.error);
+                      }
+                      return;
                     } else if (meth === 'session/prompt') {
                       // Treat prompt response as completion signal
                       if (ongoingText.length > 0) {
@@ -589,7 +595,18 @@ app.prepare().then(() => {
             console.log('[Server] Received clearHistory command.');
             history.length = 0;
             broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'command' } });
-            startGemini(wss); // Geminiプロセスを再起動
+            
+            // Geminiプロセスを再起動する代わりに、新しいセッションを開始する
+            if (geminiProcess && acpMode === 'v1') {
+              console.log('[ACP] Clearing history by starting a new session.');
+              const newSessParams = { cwd: PROJECT_ROOT, mcpServers: [] };
+              acpSend('session/new', newSessParams);
+            } else if (geminiProcess) {
+              // v1以外のモードやセッションがない場合は、従来通り再起動
+              console.warn('[Server] ACPv1 session not active. Restarting Gemini process to clear history.');
+              startGemini(wss);
+            }
+
             return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
         }
 

@@ -192,7 +192,7 @@ export function Analytics() {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-neutral-800 dark:text-slate-100">
                 <BookOpen className="w-5 h-5 text-secondary-600 dark:text-secondary-400" />
-                <span>科目別分析</span>
+                <span>累計 教科別学習時間</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
