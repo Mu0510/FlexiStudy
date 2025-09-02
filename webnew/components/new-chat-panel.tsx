@@ -18,6 +18,7 @@ import remarkBreaks from "remark-breaks";
 import { motion, AnimatePresence } from "framer-motion";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/components/ui/use-toast";
 import TemplateManagerDialog, { ChatTemplate } from '@/components/template-manager';
 
@@ -172,6 +173,7 @@ export function NewChatPanel({
   // --- Templates (server-synced; falls back to local on first run) ---
   const [templates, setTemplates] = useState<ChatTemplate[]>([]);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
+  const [templatePickerOpen, setTemplatePickerOpen] = useState(false);
   useEffect(() => {
     (async () => {
       try {
@@ -686,12 +688,12 @@ export function NewChatPanel({
     open: {
       x: 0,
       opacity: 1,
-      transition: { type: "spring", stiffness: 300, damping: 30 }
+      transition: { type: "tween", duration: 0.24, ease: "easeOut" }
     },
     closed: {
       x: "100%",
       opacity: 0,
-      transition: { type: "spring", stiffness: 300, damping: 30 }
+      transition: { type: "tween", duration: 0.18, ease: "easeIn" }
     }
   };
 
@@ -1074,29 +1076,35 @@ export function NewChatPanel({
                         <DropdownMenuItem onClick={enableWebSearch}>
                           <Globe className="w-4 h-4 mr-2" /> Web検索
                         </DropdownMenuItem>
-                        <DropdownMenuSub>
-                          <DropdownMenuSubTrigger>
+                        {isMobile ? (
+                          <DropdownMenuItem onClick={() => setTemplatePickerOpen(true)}>
                             <FolderPlus className="w-4 h-4 mr-2" /> テンプレート
-                          </DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent className="w-72 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
-                            {templates.length === 0 && (
-                              <DropdownMenuItem onClick={() => setTemplateManagerOpen(true)}>テンプレートを追加…</DropdownMenuItem>
-                            )}
-                            {templates.map(t => (
-                              <DropdownMenuItem key={t.id} onClick={() => insertTemplate(t)} title={t.content}>
-                                <div className="flex items-center gap-2">
-                                  <span>{t.title}</span>
-                                  {t.cmd && <span className="text-xs font-mono text-slate-500">{t.cmd}</span>}
-                                </div>
-                              </DropdownMenuItem>
-                            ))}
-                            {templates.length > 0 && <DropdownMenuSeparator />}
-                            <DropdownMenuItem onClick={() => setTemplateManagerOpen(true)}>テンプレートを管理…</DropdownMenuItem>
-                          </DropdownMenuSubContent>
-                        </DropdownMenuSub>
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                              <FolderPlus className="w-4 h-4 mr-2" /> テンプレート
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="w-80 max-h-[60vh] overflow-auto bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
+                              {templates.length === 0 && (
+                                <DropdownMenuItem onClick={() => setTemplateManagerOpen(true)}>テンプレートを追加…</DropdownMenuItem>
+                              )}
+                              {templates.map(t => (
+                                <DropdownMenuItem key={t.id} onClick={() => insertTemplate(t)} title={t.content}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{t.title}</span>
+                                    {t.cmd && <span className="text-xs font-mono text-slate-500">{t.cmd}</span>}
+                                  </div>
+                                </DropdownMenuItem>
+                              ))}
+                              {templates.length > 0 && <DropdownMenuSeparator />}
+                              <DropdownMenuItem onClick={() => setTemplateManagerOpen(true)}>テンプレートを管理…</DropdownMenuItem>
+                            </DropdownMenuSubContent>
+                          </DropdownMenuSub>
+                        )}
                         <DropdownMenuSub>
                           <DropdownMenuSubTrigger>その他</DropdownMenuSubTrigger>
-                          <DropdownMenuSubContent className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
+                          <DropdownMenuSubContent className="w-64 max-h-[60vh] overflow-auto bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-700 shadow-xl">
                             <DropdownMenuItem onClick={() => {
                               if (confirm('会話履歴をクリアします。よろしいですか？')) {
                                 clearMessages();
@@ -1153,6 +1161,37 @@ export function NewChatPanel({
             </div>
         </div>
       </div>
+      {/* Mobile Template Picker (Bottom Sheet) */}
+      <Sheet open={templatePickerOpen} onOpenChange={setTemplatePickerOpen}>
+        <SheetContent side="bottom" className="h-[75vh] p-0">
+          <SheetHeader className="px-4 pt-4">
+            <SheetTitle>テンプレート</SheetTitle>
+          </SheetHeader>
+          <div className="px-2 pb-4 overflow-auto max-h-[calc(75vh-3rem)]">
+            {templates.length === 0 ? (
+              <div className="text-sm text-slate-500 px-2 py-4">テンプレートはまだありません。</div>
+            ) : (
+              <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                {templates.map(t => (
+                  <li key={t.id}>
+                    <button
+                      type="button"
+                      className="w-full text-left px-4 py-3 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-between"
+                      onClick={() => { insertTemplate(t); setTemplatePickerOpen(false); }}
+                    >
+                      <span className="truncate mr-2">{t.title}</span>
+                      {t.cmd && <span className="text-xs font-mono text-slate-500">{t.cmd}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="px-4 py-3">
+              <Button className="w-full" variant="secondary" onClick={() => { setTemplatePickerOpen(false); setTemplateManagerOpen(true); }}>テンプレートを管理…</Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </>
   );
 
