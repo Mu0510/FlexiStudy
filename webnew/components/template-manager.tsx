@@ -16,7 +16,7 @@ interface TemplateManagerProps {
   onChange: (next: ChatTemplate[]) => void
 }
 
-const RESERVED = new Set<string>(['/web', '/clear']);
+const RESERVED = new Set<string>(['/web', '/clear', '/debug']);
 function validateCmd(cmd?: string, existing: ChatTemplate[], currentId?: string): string | null {
   if (!cmd) return null
   const norm = cmd.startsWith('/') ? cmd : `/${cmd}`

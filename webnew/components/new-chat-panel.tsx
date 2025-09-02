@@ -169,17 +169,46 @@ export function NewChatPanel({
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
 
-  // --- Templates (local only) ---
+  // --- Templates (server-synced; falls back to local on first run) ---
   const [templates, setTemplates] = useState<ChatTemplate[]>([]);
   const [templateManagerOpen, setTemplateManagerOpen] = useState(false);
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('chat.templates.v1');
-      if (raw) setTemplates(JSON.parse(raw));
-    } catch {}
+    (async () => {
+      try {
+        const res = await fetch('/api/settings?keys=chat.templates.v1', { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          const v = data?.settings?.['chat.templates.v1'];
+          if (v) {
+            try {
+              if (Array.isArray(v)) {
+                setTemplates(v);
+              } else if (typeof v === 'string') {
+                setTemplates(JSON.parse(v));
+              } else {
+                setTemplates([]);
+              }
+            } catch { setTemplates([]); }
+          } else {
+            // migrate from localStorage if any
+            try {
+              const raw = localStorage.getItem('chat.templates.v1');
+              if (raw) {
+                const arr = JSON.parse(raw);
+                setTemplates(arr);
+                await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'chat.templates.v1', value: arr })});
+              }
+            } catch {}
+          }
+        }
+      } catch {}
+    })();
   }, []);
-  const saveTemplates = (list: ChatTemplate[]) => {
+  const saveTemplates = async (list: ChatTemplate[]) => {
     setTemplates(list);
+    try {
+      await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'chat.templates.v1', value: list })});
+    } catch {}
     try { localStorage.setItem('chat.templates.v1', JSON.stringify(list)); } catch {}
   };
   const addTemplate = () => {
@@ -250,7 +279,7 @@ export function NewChatPanel({
       .filter(t => t.cmd && t.cmd.startsWith('/'))
       .map(t => ({
         cmd: t.cmd!,
-        label: `テンプレート: ${t.title}`,
+        label: t.title,
         // スラッシュ選択時はその場に本文を挿入（コマンドは残さない）
         replaceWith: t.content,
       }))
@@ -702,7 +731,7 @@ export function NewChatPanel({
       />
       {isFloating && onClose && (
         <div className="flex-shrink-0 border-b border-slate-200 dark:border-slate-700 p-4 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">Gemini Chat</h2>
+          <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">{process.env.NEXT_PUBLIC_CHAT_TITLE || 'AI Chat'}</h2>
           <div className="flex items-center space-x-2">
             <Button variant="ghost" size="sm" onClick={handleToggleFullScreen} className="p-2">
               {isFullScreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}

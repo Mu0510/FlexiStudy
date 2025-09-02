@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { useTheme } from "next-themes"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -336,9 +337,13 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                   <span className="text-slate-800 dark:text-slate-200">{`${appInfo.git.branch ?? '—'} @ ${appInfo.git.commit ?? '—'}`}</span>
                 </div>
               )}
-              <Button variant="link" className="p-0 h-auto text-sm text-blue-600 dark:text-blue-400">
-                利用規約・プライバシーポリシー
-              </Button>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+                <Link href="/legal/terms" className="text-blue-600 hover:underline dark:text-blue-400">利用規約</Link>
+                <span className="text-slate-400">/</span>
+                <Link href="/legal/privacy" className="text-blue-600 hover:underline dark:text-blue-400">プライバシーポリシー</Link>
+                <span className="text-slate-400">/</span>
+                <Link href="/legal/licenses" className="text-blue-600 hover:underline dark:text-blue-400">ライセンス</Link>
+              </div>
             </CardContent>
           </Card>
         </div>
