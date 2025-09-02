@@ -38,10 +38,10 @@ const GEMINI_FLAGS = ['-m', GEMINI_MODEL, '-y', '--experimental-acp'];
 const PROJECT_ROOT = path.join(__dirname, '..');
 
 function getGeminiSpawnSpec() {
-  // グローバル gemini コマンドを使用（必要なら GEMINI_BIN で差し替え）
+  // npx経由で特定のバージョン(0.2.1)のgemini-cliを呼び出すように変更
   return {
     cmd: 'sudo',
-    args: ['-E', '-u', 'geminicli', GEMINI_BIN, ...GEMINI_FLAGS],
+    args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.2.1', ...GEMINI_FLAGS],
   };
 }
 
