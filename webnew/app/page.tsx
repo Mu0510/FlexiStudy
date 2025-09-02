@@ -18,6 +18,7 @@ import { Settings } from "@/components/settings"
 
 import { NewChatPanel } from "@/components/new-chat-panel"
 import { MobileHeader } from "@/components/mobile-header"
+import { useOnlineStatus } from "@/hooks/useOnlineStatus"
 
 // Define Goal type, ideally this would be in a shared types file
 interface Goal {
@@ -58,6 +59,7 @@ export default function StudyApp() {
   const [selectedSessionForChat, setSelectedSessionForChat] = useState<any | null>(null);
 
   const chatStateBeforeSystemView = useRef(false);
+  const online = useOnlineStatus();
 
   const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
     onMessageReceived: () => {
@@ -313,6 +315,17 @@ export default function StudyApp() {
         />
       </div>
 
+      {/* Mobile: fixed offline banner directly under the header */}
+      <div className="lg:hidden">
+        {!online && (
+          <div className="fixed top-16 left-0 right-0 z-40">
+            <div className="w-full bg-yellow-100 text-yellow-800 px-4 py-2 border-y border-yellow-300 text-sm text-center">
+              オフラインです。チャット送信は無効化されています。
+            </div>
+          </div>
+        )}
+      </div>
+
       <div className="flex h-screen">
         <div className={isFullScreen && activeView !== 'system-chat' ? 'hidden' : ''}>
           <Sidebar
@@ -330,7 +343,16 @@ export default function StudyApp() {
             sidebarCollapsed ? "lg:ml-16" : "lg:ml-64"
           } ${isFullScreen && activeView !== 'system-chat' ? 'hidden' : ''}`}
         >
-          <div className="flex-1 p-6 pt-20 lg:pt-6 overflow-y-auto overflow-x-hidden">
+          {/* Desktop: header-attached offline banner (outside content panel) */}
+          <div className="hidden lg:block">
+            {!online && (
+              <div className="w-full bg-yellow-100 text-yellow-800 px-4 py-2 border-b border-yellow-300 text-sm text-center">
+                オフラインです。チャット送信は無効化されています。
+              </div>
+            )}
+          </div>
+
+          <div className={`flex-1 p-6 ${online ? 'pt-12' : 'pt-24'} lg:pt-6 overflow-y-auto overflow-x-hidden`}>
             <div className="max-w-7xl mx-auto h-full">{renderActiveView()}</div>
           </div>
         </main>

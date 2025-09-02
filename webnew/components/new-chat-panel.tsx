@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef, useCallback, useLayoutEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import { useOnlineStatus } from "@/hooks/useOnlineStatus"
 import { X, Bot, User, CheckCircle, XCircle, Maximize, Minimize, Plus, SlidersHorizontal, Mic, ArrowUp, Square, File as FileIcon, Pause, Globe, FolderPlus } from "lucide-react"
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils"
@@ -158,6 +159,7 @@ export function NewChatPanel({
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
   const isMobile = useIsMobile();
+  const online = useOnlineStatus();
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number>(0);
@@ -323,6 +325,10 @@ export function NewChatPanel({
   }, [input, interimTranscript]);
 
   const handleSendMessage = useCallback(async () => {
+    if (!online) {
+      toast({ description: 'オフラインです。接続後に再試行してください。' });
+      return;
+    }
     // If recording, stop it. The onend event will trigger the send.
     if (isRecording) {
       shouldSendMessageOnEndRef.current = true;
@@ -457,7 +463,7 @@ export function NewChatPanel({
       }
     }
     
-  }, [isRecording, input, interimTranscript, selectedFiles, selectedGoal, selectedSession, clearMessages, sendMessage, setInput, setInterimTranscript, setSelectedFiles, onClearSelectedGoal, onClearSelectedSession, isMobile]);
+  }, [online, toast, isRecording, input, interimTranscript, selectedFiles, selectedGoal, selectedSession, clearMessages, sendMessage, setInput, setInterimTranscript, setSelectedFiles, onClearSelectedGoal, onClearSelectedSession, isMobile]);
 
   const handleCancel = () => {
     // Cancel the AI response generation
@@ -707,6 +713,8 @@ export function NewChatPanel({
           </div>
         </div>
       )}
+
+      {/* Removed inline offline banner per user request. Page header + input notice are sufficient. */}
 
       <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto max-w-full overflow-x-hidden">
         <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
@@ -960,6 +968,14 @@ export function NewChatPanel({
                 </div>
               )}
 
+              {/* Offline notice inside input area */}
+              {!online && (
+                <div className="mb-2 px-3 py-2 text-xs text-yellow-800 bg-yellow-100 border border-yellow-300 rounded-md flex items-center gap-2">
+                  <XCircle className="h-4 w-4" />
+                  <span>オフラインです。接続後に送信してください。</span>
+                </div>
+              )}
+
               <Textarea
                 ref={chatInputRef}
                 value={input + interimTranscript}
@@ -991,10 +1007,10 @@ export function NewChatPanel({
                   handleKeyDown(e);
                 }}
                 onPaste={handlePaste}
-                placeholder="システムと対話... (Alt+Enterで送信)"
+                placeholder={online ? "システムと対話... (Alt+Enterで送信)" : "オフライン中は送信できません"}
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1 text-base"
                 rows={1}
-                disabled={isUploading}
+                disabled={isUploading || !online}
               />
               {slashOpen && filteredSlash.length > 0 && (
                 <div className="absolute -top-2 translate-y-[-100%] left-2 z-50 w-64 rounded-md border bg-popover text-popover-foreground shadow-md">
@@ -1015,12 +1031,12 @@ export function NewChatPanel({
               )}
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading}>
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading || !online}>
                         <Plus className="w-5 h-5" />
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 px-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-1" disabled={isUploading}>
+                        <Button variant="ghost" className="h-8 px-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-1" disabled={isUploading || !online}>
                           <SlidersHorizontal className="w-4 h-4" />
                           <span className="text-sm font-light">ツール</span>
                         </Button>
@@ -1087,7 +1103,7 @@ export function NewChatPanel({
                       "w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400",
                       isRecording && "bg-red-500/20 text-red-500 hover:bg-red-500/30 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
                     )}
-                    disabled={isGeneratingResponse || isUploading}
+                    disabled={isGeneratingResponse || isUploading || !online}
                     onClick={handleMicClick}
                   >
                     <Mic className="w-5 h-5" />
@@ -1097,7 +1113,7 @@ export function NewChatPanel({
                     disabled={
                       (isGeneratingResponse || isUploading)
                         ? false // 生成中・アップロード中はキャンセルボタンとして常に有効
-                        : (!input.trim() && !interimTranscript.trim() && selectedFiles.length === 0) // それ以外の場合は入力内容で判定
+                        : (!online || (!input.trim() && !interimTranscript.trim() && selectedFiles.length === 0)) // オフラインまたは入力なしで無効
                     }
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-full flex items-center justify-center"
                   >
