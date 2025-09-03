@@ -1,9 +1,9 @@
-// webnew/hooks/useChat.ts
+// webnew/hooks/useChat.ts (修正後の完成形コード)
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { flushSync } from 'react-dom';
 import { marked } from 'marked';
-import * as Diff from 'diff'; // jsdiff ライブラリをインポート
-import { useWebSocket } from '@/context/WebSocketContext'; // WebSocketContextからuseWebSocketをインポート
+import * as Diff from 'diff';
+import { useWebSocket } from '@/context/WebSocketContext';
 
 interface FileInfo {
   name: string;
@@ -127,292 +127,134 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
     // WebSocketからのメッセージ処理ロジックをsubscribeで登録
     const unsubscribe = subscribe((msg: any) => {
-      console.log('[DEBUG] Received WebSocket message:', msg);
-      // let msg; // JSON.parseはWebSocketContextで行われるため不要
-      // try {
-      //   msg = JSON.parse(event.data);
-      // } catch (err) {
-      //   console.error('❌ JSON parse error on chunk:', err, event.data);
-      //   return;
-      // }
-
-      if (msg.method === 'streamAssistantThoughtChunk') {
-        const { thought } = msg.params;
-        setActiveMessage(prev => ({
-          id: prev?.id || msg.id || `thought-${Date.now()}`,
-          ts: prev?.ts || Date.now(), // タイムスタンプを維持または新規作成
-          type: 'thought',
-          content: thought.trim(),
-          thoughtMode: true,
-        }));
-        onMessageReceived?.();
-      } else if (msg.method === 'streamAssistantMessageChunk') {
+      // 1) ストリーム（既存）: activeMessage にだけ反映
+      if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
-        const incomingMessageId = msg.params.messageId; // ★ サーバーからの共通IDを取得
+        const incomingMessageId = msg.params.messageId;
 
-        setActiveMessage(prevActiveMessage => {
-            // ★ 修正点: サーバーからのIDを最優先で使用する
-            const currentId = prevActiveMessage?.id || incomingMessageId || msg.id || `assistant-${Date.now()}`;
-            let currentTs = prevActiveMessage?.ts || Date.now(); // 既存のtsを使うか、なければ新規作成
-            let newContent = prevActiveMessage?.content || '';
-            let newType = prevActiveMessage?.type || 'thought';
-            let newThoughtMode = prevActiveMessage?.thoughtMode || false;
+        setActiveMessage(prev => {
+          const id = prev?.id || incomingMessageId || msg.id || `assistant-${Date.now()}`;
+          const ts = prev?.ts || Date.now();
+          let content = prev?.content || '';
+          let type = prev?.type || 'thought';
+          let thoughtMode = prev?.thoughtMode || false;
 
-            // If a thought arrives, update the thought content and set mode to thought.
-            if (chunk?.thought !== undefined) {
-                newContent = chunk.thought.trim();
-                newType = 'thought';
-                newThoughtMode = true;
+          if (chunk?.thought !== undefined) {
+            content = chunk.thought.trim();
+            type = 'thought';
+            thoughtMode = true;
+          }
+          if (chunk?.text !== undefined) {
+            if (thoughtMode) {
+              content = chunk.text;
+            } else {
+              content += chunk.text;
             }
+            type = 'assistant';
+            thoughtMode = false;
+          }
 
-            // If text arrives, it might override the thought or append to existing text.
-            if (chunk?.text !== undefined) {
-                // If we were in thought mode, the new text replaces the thought content.
-                // Otherwise, it appends to the existing assistant message.
-                if (newType === 'thought') {
-                    newContent = chunk.text.replace(/^\n+/, '');
-                } else {
-                    newContent = (prevActiveMessage?.content || '') + chunk.text.replace(/^\n+/, '');
-                }
-                newType = 'assistant';
-                newThoughtMode = false;
-            }
-
-            // サーバーからのタイムスタンプがあれば、それで上書きする
-            if (chunk?.ts) {
-                currentTs = chunk.ts;
-            }
-
-            return {
-                id: currentId,
-                ts: currentTs, // タイムスタンプを維持
-                type: newType as 'thought' | 'assistant',
-                content: newContent,
-                thoughtMode: newThoughtMode,
-            };
-        });
-
-        if (msg.id !== undefined && ws) { // ws.current から ws に変更
-          sendWsMessage({ jsonrpc: '2.0', id: msg.id, result: null }); // sendWsMessage を使用
-        }
-        onMessageReceived?.();
-      } else if (msg.method === 'agentMessageFinished' || msg.method === 'messageCompleted') {
-        if (activeMessage) {
-          setMessages(prev => {
-            // ★ 修正点: 重複を避ける
-            if (prev.some(m => m.id === activeMessage.id)) {
-              return prev;
-            }
-            const newMessages = [...prev, {
-              id: activeMessage.id,
-              // 確定時点のタイムスタンプで整列（ツールの直後に来るように）
-              ts: Date.now(),
-              role: 'assistant',
-              content: activeMessage.content,
-            }];
-            return newMessages;
-          });
-          setActiveMessage(null);
-        }
-        setIsGeneratingResponse(false);
-        onMessageReceived?.();
-      } else if (msg.method === 'addMessage') {
-        const { message } = msg.params;
-        
-        // 新しい方針: このハンドラは他人からのメッセージのみを受け取る。
-        // 自分のメッセージはsendMessageで先行表示済みのため、ID比較や置換は不要。
-        // 単純に受け取ったメッセージをリストに追加する。
-        flushSync(() => {
-          setMessages(prev => {
-            // 念のため重複をチェック
-            if (prev.some(m => m.id === message.id)) {
-              return prev;
-            }
-            const newMessages = [...prev, {
-              id: message.id,
-              ts: message.ts,
-              role: message.role,
-              content: message.text,
-              files: message.files || [],
-              goal: message.goal || null,
-              session: message.session || null,
-            }];
-            return newMessages;
-          });
+          return { id, ts, type, content, thoughtMode };
         });
         onMessageReceived?.();
-      } else if (msg.method === 'pushMessage') {
-        setMessages(prev => {
-          const newMessages = [...prev, {
-            id: `msg-${Date.now()}`,
-            ts: Date.now(), // タイムスタンプを追加
-            role: 'assistant',
-            content: msg.params.content,
-          }];
-          return newMessages;
-        });
-        setActiveMessage(null);
-        setIsGeneratingResponse(false);
+        return;
+      }
+
+      // 2) ツールカード（ライブ）
+      if (msg.method === 'pushToolCall') {
+        const params = msg.params || {};
+        const toolId = params.toolCallId || `tool-${Date.now()}`;
+        setMessages(prev => ([
+          ...prev,
+          {
+            id: toolId,
+            ts: Date.now(),
+            role: 'tool',
+            type: 'tool',
+            toolCallId: toolId,
+            icon: params.icon,
+            label: params.label,
+            command: params.confirmation?.command || params.locations?.[0]?.path || '',
+            status: 'running',
+            content: '',
+          }
+        ]));
         onMessageReceived?.();
-      } else if (msg.method === 'pushToolCall') {
-        const toolId = msg.params.toolCallId ?? msg.id;
-        const { icon, label, locations } = msg.params;
-        const command = locations?.[0]?.path ?? '';
+        return;
+      }
 
-        flushSync(() => {
-          setMessages(prev => {
-            const newMessages = [...prev];
-
-            // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
-            if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
-              const currentActiveMessage = activeMessageRef.current;
-              // 重複防止
-              if (!newMessages.some(m => m.id === currentActiveMessage.id)) {
-                newMessages.push({
-                  id: currentActiveMessage.id,
-                  ts: currentActiveMessage.ts,
-                  role: 'assistant',
-                  content: currentActiveMessage.content,
-                });
-              }
-            }
-
-            // 新しいツールメッセージを追加
-            newMessages.push({
-              id: toolId,
-              ts: msg.ts || Date.now(),
-              role: 'tool',
-              type: 'tool',
-              toolCallId: toolId,
-              icon,
-              label,
-              command,
-              status: 'running',
-              content: 'ツールを実行中...',
-              toolCallConfirmationId: msg.params.confirmation?.toolCallConfirmationId,
-              toolCallConfirmationMessage: msg.params.confirmation?.toolCallConfirmationMessage,
-              toolCallConfirmationButtons: msg.params.confirmation?.toolCallConfirmationButtons,
-            });
-
-            return newMessages;
-          });
-          // 状態更新後、activeMessageをクリア
-          setActiveMessage(null);
-        });
-
-        if (ws) { // ws.current から ws に変更
-          sendWsMessage({
-            jsonrpc: '2.0',
-            id: msg.id,
-            result: { id: toolId }
-          });
-        }
-        onMessageReceived?.();
-      } else if (msg.method === 'requestToolCallConfirmation') {
-        const toolId = msg.params.toolCallId ?? msg.id;
-        const { icon, label, confirmation } = msg.params;
-        const command = confirmation?.command ?? '';
-
-        // 常に許可するため、すぐに許可の応答を返す
-        if (ws) { // ws.current から ws に変更
-          sendWsMessage({
-            jsonrpc: '2.0',
-            id: msg.id, // 受け取ったメッセージのIDをそのまま使う
-            result: { id: toolId, outcome: 'allow' }
-          });
-        }
-
-        flushSync(() => {
-          setMessages(prev => {
-            const newMessages = [...prev];
-
-            // activeMessage が存在し、それがアシスタントメッセージであれば確定させる
-            if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
-              const currentActiveMessage = activeMessageRef.current;
-              // 重複防止
-              if (!newMessages.some(m => m.id === currentActiveMessage.id)) {
-                newMessages.push({
-                  id: currentActiveMessage.id,
-                  ts: currentActiveMessage.ts,
-                  role: 'assistant',
-                  content: currentActiveMessage.content,
-                });
-              }
-            }
-
-            // 新しいツールメッセージを追加
-            newMessages.push({
-              id: toolId,
-              ts: msg.ts || Date.now(),
-              role: 'tool',
-              type: 'tool',
-              toolCallId: toolId,
-              icon,
-              label,
-              command,
-              status: 'running',
-              content: confirmation?.details ?? 'ツールの確認を待っています...',
-              toolCallConfirmationId: confirmation?.toolCallConfirmationId,
-              toolCallConfirmationMessage: confirmation?.toolCallConfirmationMessage,
-              toolCallConfirmationButtons: confirmation?.toolCallConfirmationButtons,
-            });
-
-            return newMessages;
-          });
-          // 状態更新後、activeMessageをクリア
-          setActiveMessage(null);
-        });
-        onMessageReceived?.();
-      } else if (msg.method === 'updateToolCall') {
+      // 3) ツール更新（既存・必要ならそのまま）
+      if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         const { status, content } = msg.params;
 
         setMessages(prevMessages => {
-            const newMessages = [...prevMessages];
-            const toolMessageIndex = newMessages.findIndex(m => m.id === toolId);
+          const newMessages = [...prevMessages];
+          const toolMessageIndex = newMessages.findIndex(m => m.id === toolId);
+          if (toolMessageIndex === -1) {
+            console.warn(`[updateToolCall] Tool message with id ${toolId} not found.`);
+            return prevMessages;
+          }
+          const toolMessage = { ...newMessages[toolMessageIndex] };
 
-            if (toolMessageIndex === -1) {
-                // まだメッセージが存在しない場合 (pushToolCallより先にupdateが来た場合)
-                // ここで一旦保留するロジックも考えられるが、一旦何もしない
-                console.warn(`[updateToolCall] Tool message with id ${toolId} not found.`);
-                return prevMessages;
-            }
-
-            const toolMessage = { ...newMessages[toolMessageIndex] };
-
-            // __headerPatch が存在する場合、ヘッダー情報を更新
-            if (content?.__headerPatch) {
-                const { icon, label, command } = content.__headerPatch;
-                toolMessage.icon = icon ?? toolMessage.icon;
-                toolMessage.label = label ?? toolMessage.label;
-                toolMessage.command = command ?? toolMessage.command;
-                newMessages[toolMessageIndex] = toolMessage;
-                return newMessages;
-            }
-
-            let processedContent = '';
-            if (content) {
-                if (content.type === 'markdown') {
-                    processedContent = content.markdown; // marked.parse を削除
-                } else if (content.type === 'diff') {
-                    processedContent = generateContextualDiffHtml(content.oldText, content.newText);
-                } else if (typeof content === 'string') {
-                    processedContent = `<pre>${content}</pre>`;
-                } else {
-                    processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
-                }
-            }
-            toolMessage.status = status;
-            toolMessage.content = processedContent;
+          if (content?.__headerPatch) {
+            const { icon, label, command } = content.__headerPatch;
+            toolMessage.icon = icon ?? toolMessage.icon;
+            toolMessage.label = label ?? toolMessage.label;
+            toolMessage.command = command ?? toolMessage.command;
             newMessages[toolMessageIndex] = toolMessage;
             return newMessages;
+          }
+
+          let processedContent = '';
+          if (content) {
+            if (content.type === 'markdown') {
+              processedContent = content.markdown;
+            } else if (content.type === 'diff') {
+              processedContent = generateContextualDiffHtml(content.oldText, content.newText);
+            } else if (typeof content === 'string') {
+              processedContent = `<pre>${content}</pre>`;
+            } else {
+              processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+            }
+          }
+          toolMessage.status = status;
+          toolMessage.content = processedContent;
+          newMessages[toolMessageIndex] = toolMessage;
+          return newMessages;
         });
 
         if (status === 'finished') {
           setActiveMessage(null);
         }
         onMessageReceived?.();
-      } else if (msg.id !== undefined && msg.result?.messages) {
+        return;
+      }
+
+      // 4) サーバ確定メッセージ（addMessage）を重複無しで反映
+      if (msg.method === 'addMessage' && msg.params?.message) {
+        const m = msg.params.message;
+        setMessages(prev => {
+          if (prev.some(x => x.id === m.id)) return prev; // 重複防止
+          return [...prev, m];
+        });
+        // 追加で最新タイムスタンプを更新（履歴delta用）
+        if (typeof m.ts === 'number') {
+          latestTsRef.current = Math.max(latestTsRef.current ?? 0, m.ts);
+        }
+        onMessageReceived?.();
+        return;
+      }
+
+      // 5) 完了通知（ここで activeMessage を消す。messages への追加は addMessage に任せる）
+      if (msg.method === 'messageCompleted' || msg.method === 'agentMessageFinished') {
+        setActiveMessage(null);
+        setIsGeneratingResponse(false);
+        return;
+      }
+
+      // 6) 履歴（既存）
+      if (msg.id !== undefined && msg.result?.messages) {
         if (historyState.current.pendingHistory.has(msg.id)) {
           historyState.current.pendingHistory.delete(msg.id);
           const rawMessages = msg.result.messages.filter((m: any) => !historyState.current.loadedIds.has(m.id));
@@ -526,51 +368,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           historyState.current.isFetchingHistory = false;
           historyState.current.requestMeta.delete(msg.id);
         }
-      } else if (msg.method === 'pushChunk' && msg.params?.chunk?.sender === 'tool') {
-        const toolId = msg.params.callId ?? msg.params.toolCallId;
-        let textContent = msg.params.chunk.text;
-
-        setMessages(prevMessages => prevMessages.map(m => {
-          if (m.id === toolId) {
-            let newContent = m.content || '';
-            // タイプが'diff'の場合のdiffカラーリングを処理
-            if (msg.params.chunk.type === 'diff') {
-              newContent += textContent.split('\n').map((line: string) => {
-                if (line.startsWith('+')) return `<span class="add">${line}</span>`;
-                if (line.startsWith('-')) return `<span class="del">${line}</span>`;
-                return line;
-              }).join('\n');
-            } else {
-              newContent += textContent;
-            }
-            return { ...m, content: newContent };
-          }
-          return m;
-        }));
-
-      } else if (msg.id !== undefined && msg.result === null) {
-        // ACPモードでは、sendUserMessage への応答 (result:null) がストリーム全体の完了を示す
-        // ★ 修正点: lastSentRequestId のチェックを外す
-        console.log(`[DEBUG] Completion signal received (id: ${msg.id}). Finalizing active message.`);
-
-        // 関数型アップデートを使い、ref のタイミング問題を起こさずに activeMessage を確定させる
-        setActiveMessage(prevActiveMessage => {
-          if (prevActiveMessage && prevActiveMessage.type === 'assistant') {
-            setMessages(p => {
-              if (p.some(m => m.id === prevActiveMessage.id)) {
-                return p;
-              }
-              const newMessages = [...p, { id: prevActiveMessage.id, ts: Date.now(), role: 'assistant', content: prevActiveMessage.content }];
-              return newMessages;
-            });
-          }
-          // thought モードのまま完了した場合や、activeMessage がない場合は何もせずバブルを消すだけ
-          return null; // activeMessage をクリア
-        });
-
-        setIsGeneratingResponse(false);
+        return;
       }
-    }); // subscribeの閉じ括弧
+
+      // 7) 注意: result:null はACKなので無視（完了扱いしない）
+      if (msg.id !== undefined && msg.result === null) {
+        // 以前はここで activeMessage を messages に確定していたが重複の原因になるため無視する
+        console.log(`[DEBUG] Ignoring result:null (id:${msg.id})`);
+        return;
+      }
+    });
 
     // クリーンアップ関数は、ws インスタンスが変更されたり、コンポーネントがアンマウントされたりする際に実行される
     return () => {
@@ -579,42 +386,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       console.log('Cleaning up useChat WebSocket listeners.');
       unsubscribe(); // subscribeで返されたunsubscribe関数を呼び出す
     };
-  }, [ws, subscribe]); // wsとsubscribeを依存配列に追加
-
-  const sendMessage = useCallback((messageData: SendMessageData) => {
-    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) { // ws.current から ws に変更
-      console.warn("WebSocket is not open or busy, cannot send message.");
-      return;
-    }
-
-    setIsGeneratingResponse(true);
-
-    const { text, files, goal, session, features } = messageData;
-
-    const newMessage: Message = {
-        id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
-        ts: Date.now(),
-        role: "user",
-        content: text,
-        files: files || [],
-        goal: goal || null,
-        session: session || null,
-        type: "text",
-      };
-
-    setMessages(prev => [...prev, newMessage]);
-
-    const reqId = requestIdCounter.current++;
-    lastSentRequestId.current = reqId;
-
-    const req = {
-      jsonrpc: '2.0',
-      id: reqId,
-      method: 'sendUserMessage',
-      params: { chunks: [{ text, files, goal, messageId: newMessage.id, session, features }] }
-    };
-    sendWsMessage(req); // sendWsMessage を使用
-  }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+  }, [ws, subscribe]);
 
   const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
     if (!ws) return; // ws.current から ws に変更
@@ -674,17 +446,132 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   }, [ws, sendWsMessage]);
 
   const cancelSendMessage = useCallback(() => {
-    if (!ws || !lastSentRequestId.current) return; // ws.current から ws に変更
+    if (!ws || !lastSentRequestId.current) return;
 
     const req = {
-      jsonrpc: '20',
+      jsonrpc: '2.0', // ← '20' から修正
       id: lastSentRequestId.current,
       method: 'cancelSendMessage',
       params: {}
     };
+    sendWsMessage(req);
+    setIsGeneratingResponse(false);
+  }, [ws, sendWsMessage]);
+
+  useEffect(() => {
+    // クリーンアップ関数は、ws インスタンスが変更されたり、コンポーネントがアンマウントされたりする際に実行される
+    return () => {
+      // ここでは ws.close() を直接呼ばない
+      // WebSocketProvider が接続のライフサイクルを管理するため
+      console.log('Cleaning up useChat WebSocket listeners.');
+      unsubscribe(); // subscribeで返されたunsubscribe関数を呼び出す
+    };
+  }, [ws, subscribe]); // wsとsubscribeを依存配列に追加
+
+  const sendMessage = useCallback((messageData: SendMessageData) => {
+    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) { // ws.current から ws に変更
+      console.warn("WebSocket is not open or busy, cannot send message.");
+      return;
+    }
+
+    setIsGeneratingResponse(true);
+
+    const { text, files, goal, session, features } = messageData;
+
+    const newMessage: Message = {
+        id: `${Date.now()}-${Math.random().toString(36).substring(2)}`, // Unique ID for the message
+        ts: Date.now(),
+        role: "user",
+        content: text,
+        files: files || [],
+        goal: goal || null,
+        session: session || null,
+        type: "text",
+      };
+
+    setMessages(prev => [...prev, newMessage]);
+
+    const reqId = requestIdCounter.current++;
+    lastSentRequestId.current = reqId;
+
+    const req = {
+      jsonrpc: '2.0',
+      id: reqId,
+      method: 'sendUserMessage',
+      params: { chunks: [{ text, files, goal, messageId: newMessage.id, session, features }] }
+    };
     sendWsMessage(req); // sendWsMessage を使用
-    setIsGeneratingResponse(false); // UIを即座にリセット
+  }, [ws, isGeneratingResponse, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+  
+  const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
+    if (!ws) return; // ws.current から ws に変更
+
+    const req = {
+      jsonrpc: '2.0',
+      id: requestIdCounter.current++,
+      method: 'confirmToolCall',
+      params: { toolCallId, result }
+    };
+    sendWsMessage(req); // sendWsMessage を使用
+
+    // 確認後はツールメッセージのステータスを更新
+    setMessages(prev => prev.map(m => {
+      if (m.id === toolCallId) {
+        return { ...m, status: 'finished' }; // または 'confirmed' など、適切なステータスに更新
+      }
+      return m;
+    }));
+
   }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+
+  const requestHistory = useCallback((isInitialLoad = false) => {
+    console.log('[useChat DEBUG] requestHistory called. isFetchingHistory:', historyState.current.isFetchingHistory, 'finished:', historyState.current.finished); // 追加
+    if (historyState.current.isFetchingHistory || historyState.current.finished) return;
+
+    historyState.current.isFetchingHistory = true;
+    const id = ++historyState.current.histReqId;
+    historyState.current.pendingHistory.add(id);
+    const limit = isInitialLoad ? 30 : 20;
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      console.log('[useChat DEBUG] Sending fetchHistory request with id:', id, 'limit:', limit, 'before:', historyState.current.oldestTs); // 追加
+      sendWsMessage({
+        jsonrpc: '2.0',
+        id,
+        method: 'fetchHistory',
+        params: { limit: limit, before: historyState.current.oldestTs }
+      });
+      historyState.current.requestMeta.set(id, { mode: isInitialLoad ? 'initial' : 'older' });
+    } else {
+      console.warn("WebSocket is not open, cannot fetch history.");
+      historyState.current.isFetchingHistory = false;
+    }
+  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
+
+  const requestDelta = useCallback(() => {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (historyState.current.isFetchingHistory) return;
+    const after = latestTsRef.current;
+    if (!after) return; // 初回は通常ロード
+    const id = ++historyState.current.histReqId;
+    historyState.current.pendingHistory.add(id);
+    historyState.current.requestMeta.set(id, { mode: 'newer' });
+    console.log('[useChat DEBUG] Sending fetchHistory delta with id:', id, 'after:', after);
+    sendWsMessage({ jsonrpc: '2.0', id, method: 'fetchHistory', params: { after } });
+  }, [ws, sendWsMessage]);
+
+  const cancelSendMessage = useCallback(() => {
+    if (!ws || !lastSentRequestId.current) return;
+
+    const req = {
+      jsonrpc: '2.0', // ← '20' から修正
+      id: lastSentRequestId.current,
+      method: 'cancelSendMessage',
+      params: {}
+    };
+    sendWsMessage(req);
+    setIsGeneratingResponse(false);
+  }, [ws, sendWsMessage]);
 
   const clearMessages = useCallback(() => {
     setMessages([]);

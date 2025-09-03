@@ -395,10 +395,30 @@ app.prepare().then(() => {
       }
 
       if (msg.method === 'fetchHistory') {
-        const { limit = 50 } = msg.params || {};
-        const chunk = history.slice(-limit);
-        chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-        return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { messages: chunk } }));
+        const { limit = 50, before, after } = msg.params || {};
+
+        let chunk = history;
+
+        if (typeof after === 'number') {
+          // after より新しいもの
+          chunk = chunk.filter(rec => (rec.ts ?? 0) > after).slice(0, limit);
+        } else if (typeof before === 'number') {
+          // before より古いものの末尾 limit 件
+          const older = chunk.filter(rec => (rec.ts ?? 0) < before);
+          chunk = older.slice(Math.max(0, older.length - limit));
+        } else {
+          // カーソルなしは末尾 limit 件
+          chunk = chunk.slice(Math.max(0, history.length - limit));
+        }
+
+        // 昇順で返す
+        chunk = [...chunk].sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+
+        return ws.send(JSON.stringify({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { messages: chunk }
+        }));
       }
 
       // 5. WebSocketメッセージハンドラの更新
