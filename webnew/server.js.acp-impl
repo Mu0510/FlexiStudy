@@ -1,52 +1,25 @@
-# レポート: `master`から新ACP(v0.2.2)へ移行するための改修計画書
-
-## 1. はじめに
-
-### 1.1. 目的
-`master`ブランチの安定したコードベース（`server.js`, `useChat.ts`等）を、`gemini-cli@0.2.2`が採用する新しいACP(Agent Communication Protocol)仕様に完全対応させる。
-
-### 1.2. 方針
-`master`版の`server.js`をベースとし、現在のブランチに実装されている新ACP対応の知見（`readline`による出力処理、PromiseベースのACP通信、セッション管理ロジック等）を移植・統合する。
-
-その際、`server.js`がフロントエンドに送信するWebSocketメッセージの形式は、`master`版の`useChat.ts`が期待する形式を維持するように設計する。これにより、フロントエンド側の変更を最小限に抑える。
-
----
-
-## 2. `server.js` の改修計画
-
-### 2.1. 改修の概要
-`master`版の`server.js`に対し、以下の変更を行う。
-
-1.  **依存モジュールの追加:** `readline`を追加する。
-2.  **プロセス起動処理の更新:** `gemini-cli@0.2.2`を呼び出すように変更する。
-3.  **標準出力の処理方法の変更:** 複雑なJSONパーサーを廃止し、`readline`で1行ずつJSONを処理する方式に変更する。
-4.  **ACP通信関数の導入:** 新ACP仕様に対応するため、現在のブランチから以下の主要な関数と関連ロジックを移植する。
-    *   `acpSend`: PromiseベースのACPリクエスト送信関数。
-    *   `initializeAndStartSession`: ACPセッションを開始する関数。
-    *   `handleCliMessage`: `gemini-cli`からのメッセージを処理する主管関数。
-    *   `handleSessionUpdate`: フロントエンドへの通知を担う関数。**この関数内で、新ACPのデータを旧フロントエンドの形式に変換する。**
-    *   その他ヘルパー関数 (`ensureAssistantMessage`, `flushAssistantMessage`等)。
-5.  **WebSocketメッセージハンドラの更新:** `ws.on('message', ...)`内の処理を、新しいACPのフロー（`sendUserMessage` -> `session/prompt`）に置き換える。
-
-### 2.2. 変更後の `server.js` 全体コード
-上記の改修をすべて適用した、`server.js`の完全なコードは以下の通りです。
-
-```javascript
-// webnew/server.js (変更後のコード)
-
-const { createServer: createHttpsServer } = require('https');
 const { createServer: createHttpServer } = require('http');
+const { createServer: createHttpsServer } = require('https');
 const { parse } = require('url');
 const next = require('next');
 const { WebSocketServer } = require('ws');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const readline = require('readline'); // 1. 依存モジュールの追加
+const readline = require('readline'); // Using readline for line-by-line processing
 
+// Suppress noisy Workbox multi-run warnings in dev only
 if (process.env.NODE_ENV !== 'production') {
-  const env = require('dotenv');
-  env.config({ path: path.join(__dirname, '..', '.env') });
+  const _warn = console.warn.bind(console);
+  console.warn = (...args) => {
+    try {
+      const msg = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+      if (/has been called multiple times, perhaps due to running webpack in --watch mode/i.test(msg)) {
+        return; // drop only this specific Workbox warning
+      }
+    } catch {}
+    _warn(...args);
+  };
 }
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -57,12 +30,12 @@ const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
 
 // --- Gemini Process Logic ---
-const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_FLAGS = ['-m', GEMINI_MODEL, '-y', '--experimental-acp'];
 const PROJECT_ROOT = path.join(__dirname, '..');
 
-// 2. プロセス起動処理の更新
 function getGeminiSpawnSpec() {
+  // Pinning to v0.2.2 as requested for stability during the competition.
   return {
     cmd: 'sudo',
     args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.2.2', ...GEMINI_FLAGS],
@@ -73,16 +46,17 @@ let geminiProcess = null;
 const history = [];
 let isRestartingGemini = false;
 
-// --- ACP v0.2.2 State & Functions (移植・統合) ---
+// --- ACP v0.2.2 State ---
 let acpSessionId = null;
 let acpReqCounter = 1;
-const acpPending = new Map();
-const pendingPrompts = [];
+const acpPending = new Map(); // Maps request ID -> { method, resolve, reject }
+const pendingPrompts = []; // Queue for user messages before session is ready
 let isSessionReady = false;
-let currentAssistantMessage = { id: null, text: '', thought: '' };
 
+// Function to send a JSON-RPC request to the Gemini CLI
 function acpSend(method, params) {
   if (!geminiProcess || !geminiProcess.stdin || geminiProcess.stdin.destroyed) {
+    console.error('[ACP] Cannot send: Gemini process is not running.');
     return Promise.reject(new Error('Gemini process not running'));
   }
   const id = acpReqCounter++;
@@ -94,68 +68,87 @@ function acpSend(method, params) {
       geminiProcess.stdin.write(JSON.stringify(req) + '\n');
       console.log('[ACP >]', JSON.stringify(req));
     } catch (e) {
+      console.error('[ACP] Error writing to stdin:', e);
       acpPending.delete(id);
       reject(e);
     }
   });
 }
 
+// Maps ACP tool status to frontend status
 function mapToolStatus(status) {
   switch (status) {
-    case 'pending': return 'running';
-    case 'success': return 'finished';
-    case 'failure': return 'error';
-    default: return status;
+    case 'pending':
+    case 'in_progress':
+      return 'running';
+    case 'completed':
+      return 'finished';
+    case 'failed':
+      return 'error';
+    default:
+      return 'running';
   }
 }
 
+// Broadcasts a message to all connected WebSocket clients
 function broadcast(wss, json) {
   const str = JSON.stringify(json);
   for (const ws of wss.clients) {
-    if (ws.readyState === 1) {
+    if (ws.readyState === 1) { // WebSocket.OPEN
       ws.send(str);
     }
   }
 }
 
+// Broadcasts a message to all clients except the sender
 function broadcastExcept(wss, sender, json) {
   const str = JSON.stringify(json);
   for (const ws of wss.clients) {
-    if (ws !== sender && ws.readyState === 1) {
+    if (ws !== sender && ws.readyState === 1) { // WebSocket.OPEN
       ws.send(str);
     }
   }
 }
 
+// Starts a new Gemini CLI process
 function _startNewGeminiProcess(wss) {
   console.log(`[Gemini Process] Starting new Gemini process...`);
   const spec = getGeminiSpawnSpec();
+  console.log(`[Gemini Process] Spawning: ${spec.cmd} ${spec.args.join(' ')}`);
   geminiProcess = spawn(spec.cmd, spec.args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: PROJECT_ROOT, env: process.env });
 
+  // Reset ACP state
   acpSessionId = null;
   acpReqCounter = 1;
   acpPending.clear();
   isSessionReady = false;
+  // Do not clear pendingPrompts, they will be flushed once the new session is ready.
 
-  geminiProcess.on('error', (err) => console.error('[Gemini SPAWN ERROR]', err));
+  geminiProcess.on('error', (err) => {
+    console.error('[Gemini SPAWN ERROR]', err);
+  });
+
   console.log(`[Gemini Process] New Gemini process started with PID: ${geminiProcess.pid}`);
 
-  // 3. 標準出力の処理方法の変更
+  // Setup line-by-line reader for stdout
   const rl = readline.createInterface({ input: geminiProcess.stdout });
   rl.on('line', (line) => {
     handleCliMessage(line, wss);
   });
 
-  geminiProcess.stderr.on('data', data => console.error('[Gemini ERROR] ' + data.toString()));
+  geminiProcess.stderr.on('data', data => {
+    console.error('[Gemini ERROR] ' + data.toString());
+  });
 
   geminiProcess.on('close', (code, signal) => {
-    console.log(`[Gemini Process] Gemini process exited with code ${code} and signal ${signal}.`);
+    console.log(`[Gemini Process] Gemini process (PID: ${geminiProcess.pid}) exited with code ${code} and signal ${signal}.`);
     if (geminiProcess && geminiProcess.pid === geminiProcess.pid) {
       history.length = 0;
       broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'gemini-exit' } });
       geminiProcess = null;
       isSessionReady = false;
       acpSessionId = null;
+      // Automatically restart after a short delay
       setTimeout(() => {
         console.log('[Gemini Process] Restarting after unexpected exit...');
         startGemini(wss);
@@ -163,13 +156,29 @@ function _startNewGeminiProcess(wss) {
     }
   });
 
+  // Initialize ACP session
   initializeAndStartSession();
 }
 
 async function initializeAndStartSession() {
     try {
-        await acpSend('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } } });
-        const sessionResult = await acpSend('session/new', { cwd: PROJECT_ROOT, mcpServers: [] });
+        console.log('[ACP] Initializing...');
+        const initResult = await acpSend('initialize', {
+            protocolVersion: 1,
+            clientCapabilities: {
+                fs: { readTextFile: true, writeTextFile: true }
+            },
+        });
+        console.log('[ACP] Initialize result:', initResult);
+
+        console.log('[ACP] Starting new session...');
+        const sessionResult = await acpSend('session/new', {
+            cwd: PROJECT_ROOT,
+            mcpServers: [],
+        });
+
+        console.log('[ACP] Full session/new result:', JSON.stringify(sessionResult, null, 2)); // DEBUG: Log the full session result
+
         if (sessionResult?.sessionId) {
             acpSessionId = sessionResult.sessionId;
             isSessionReady = true;
@@ -180,10 +189,12 @@ async function initializeAndStartSession() {
         }
     } catch (error) {
         console.error('[ACP] Error during initialization or session creation:', error);
+        // Handle auth errors if necessary in the future
     }
 }
 
-// 4. ACP通信関数 (handleCliMessage, handleSessionUpdate) の導入
+
+// Handles a single JSON message from the Gemini CLI
 function handleCliMessage(jsonString, wss) {
   console.log('[Gemini CLI <]', jsonString);
   let msg;
@@ -194,14 +205,17 @@ function handleCliMessage(jsonString, wss) {
     return;
   }
 
+  // 1) Handle responses to our ACP requests
   if (msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined)) {
     const pending = acpPending.get(msg.id);
     if (pending) {
       acpPending.delete(msg.id);
       if (msg.error) {
+        console.error(`[ACP] Error response for method '${pending.method}':`, msg.error);
         pending.reject(msg.error);
       } else {
         pending.resolve(msg.result);
+        // If this is the response to a prompt, flush the assistant message
         if (pending.method === 'session/prompt') {
           flushAssistantMessage(wss, msg.result?.stopReason);
         }
@@ -210,12 +224,15 @@ function handleCliMessage(jsonString, wss) {
     return;
   }
 
+  // 2) Handle requests/notifications from the Agent
   if (typeof msg.method === 'string') {
     switch (msg.method) {
       case 'session/update':
         handleSessionUpdate(msg.params.update, wss);
         break;
+      
       case 'session/request_permission':
+        // Auto-allow all permissions
         const opts = msg.params?.options || [];
         const allow = opts.find(o => o.kind === 'allow_once') || opts[0];
         acpSend('session/provide_permission', {
@@ -223,26 +240,57 @@ function handleCliMessage(jsonString, wss) {
             outcome: { outcome: 'selected', optionId: allow?.optionId || 'allow_once' }
         }).catch(e => console.error('[ACP] Error providing permission:', e));
         break;
+
+      // Implement fs capabilities if needed, similar to old implementation
+      case 'fs/read_text_file':
+      case 'fs/write_text_file':
+        // These are now handled by the CLI directly, but we could intercept them here if needed.
+        break;
+        
+      default:
+        // console.log(`[ACP] Unhandled method from agent: ${msg.method}`);
     }
     return;
   }
 }
 
+let currentAssistantMessage = { id: null, text: '', thought: '' };
+
 function ensureAssistantMessage(wss, ts) {
     if (!currentAssistantMessage.id) {
         currentAssistantMessage.id = `assistant-${ts}`;
+        const rec = { id: currentAssistantMessage.id, ts, role: 'assistant', text: '' };
+        history.push(rec);
+        broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
     }
 }
 
 function flushAssistantMessage(wss, stopReason) {
     if (currentAssistantMessage.id) {
-        broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { messageId: currentAssistantMessage.id, stopReason: stopReason || 'end_turn' } });
+        const finalMsg = {
+            id: currentAssistantMessage.id,
+            ts: Date.now(),
+            role: 'assistant',
+            text: currentAssistantMessage.text,
+            thought: currentAssistantMessage.thought,
+        };
+        // Update history
+        const index = history.findIndex(m => m.id === finalMsg.id);
+        if (index !== -1) {
+            history[index] = finalMsg;
+        }
+        // Broadcast completion
+        broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { messageId: finalMsg.id, stopReason: stopReason || 'end_turn' } });
     }
+    // Reset
     currentAssistantMessage = { id: null, text: '', thought: '' };
 }
 
+
+// Handles the 'session/update' notification
 function handleSessionUpdate(upd, wss) {
   const nowTs = Date.now();
+
   switch (upd.sessionUpdate) {
     case 'agent_thought_chunk':
       ensureAssistantMessage(wss, nowTs);
@@ -303,13 +351,36 @@ function handleSessionUpdate(upd, wss) {
       };
       broadcast(wss, updateMsg);
       break;
+
+    case 'plan':
+      console.log('[ACP] Plan update with entries:', upd.entries?.length || 0);
+      broadcast(wss, {
+        jsonrpc: '2.0',
+        method: 'updatePlan',
+        params: { plan: upd.entries || [] }
+      });
+      break;
+      
+    case 'agent_state':
+        // This can be used to show a generic "Agent is thinking..." state
+        // console.log('[ACP] Agent state update:', upd.state);
+        break;
+
+    default:
+      // console.log(`[ACP] Unhandled session update: ${upd.sessionUpdate}`);
   }
 }
 
+// Flushes the queue of user prompts
 function flushPromptQueue() {
   if (!isSessionReady || pendingPrompts.length === 0) return;
+
   while (pendingPrompts.length > 0) {
     const { text, messageId } = pendingPrompts.shift();
+    
+    // Associate the current assistant message ID with this prompt
+    currentAssistantMessage.id = `assistant-for-${messageId}`;
+
     acpSend('session/prompt', {
       sessionId: acpSessionId,
       prompt: [{ type: 'text', text }],
@@ -317,26 +388,40 @@ function flushPromptQueue() {
   }
 }
 
+// Starts or restarts the Gemini process
 function startGemini(wss) {
-  if (isRestartingGemini) return;
+  if (isRestartingGemini) {
+    console.log('[Gemini Process] Already restarting. Skipping.');
+    return;
+  }
+
   if (geminiProcess) {
+    console.log(`[Gemini Process] Killing existing process (PID: ${geminiProcess.pid}) for restart...`);
     isRestartingGemini = true;
+    
     geminiProcess.once('close', () => {
+      console.log(`[Gemini Process] Old process killed. Starting new one.`);
       geminiProcess = null;
       isRestartingGemini = false;
       _startNewGeminiProcess(wss);
     });
+
     try {
+      // Using process group killing
       process.kill(-geminiProcess.pid, 'SIGTERM');
     } catch (err) {
+      console.error(`[Gemini Process] Failed to kill process group ${geminiProcess.pid}: ${err.message}. Trying individual kill.`);
        try {
          geminiProcess.kill('SIGTERM');
        } catch (e) {
          console.error(`[Gemini Process] Failed to kill process ${geminiProcess.pid}: ${e.message}`);
        }
     }
+
+    // Failsafe timeout
     setTimeout(() => {
       if (geminiProcess && !geminiProcess.killed) {
+        console.warn(`[Gemini Process] Process (PID: ${geminiProcess.pid}) did not exit gracefully. Forcing SIGKILL.`);
         try {
           geminiProcess.kill('SIGKILL');
         } catch (err) {
@@ -344,12 +429,15 @@ function startGemini(wss) {
         }
       }
     }, 3000);
+
   } else {
+    console.log('[Gemini Process] No existing process. Starting a new one.');
     _startNewGeminiProcess(wss);
   }
 }
 
 // --- Server Setup ---
+
 const httpsOptions = {
   key: fs.readFileSync(path.resolve(__dirname, 'certs/key.pem')),
   cert: fs.readFileSync(path.resolve(__dirname, 'certs/cert.pem')),
@@ -358,8 +446,20 @@ const httpsOptions = {
 app.prepare().then(() => {
   const httpsServer = createHttpsServer(httpsOptions, async (req, res) => {
     try {
-      await handle(req, res, parse(req.url, true));
+      if (dev) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range, X-Requested-With');
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+      }
+      const parsedUrl = parse(req.url, true);
+      await handle(req, res, parsedUrl);
     } catch (err) {
+      console.error('Error occurred handling', req.url, err);
       res.statusCode = 500;
       res.end('internal server error');
     }
@@ -367,8 +467,10 @@ app.prepare().then(() => {
 
   const httpServer = createHttpServer((req, res) => {
     const host = req.headers.host;
+    // Remove port 3000 from host if present, as we redirect to standard 443
     const hostWithoutPort = host.replace(':3000', '');
     const httpsUrl = `https://${hostWithoutPort}${req.url}`;
+    if (dev) res.setHeader('Access-Control-Allow-Origin', '*');
     res.writeHead(301, { Location: httpsUrl });
     res.end();
   });
@@ -385,15 +487,18 @@ app.prepare().then(() => {
     }
   });
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', ws => {
     console.log('Client connected');
+
     ws.on('message', async data => {
       const text = data.toString();
       if (!text.trim()) return;
+
       let msg;
       try {
         msg = JSON.parse(text);
       } catch (e) {
+        console.error('Failed to parse incoming WebSocket message:', e);
         return;
       }
 
@@ -403,46 +508,66 @@ app.prepare().then(() => {
       }
 
       if (msg.method === 'clearHistory') {
+        console.log('[Server] Received clearHistory. Restarting Gemini process.');
         history.length = 0;
         broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'command' } });
-        startGemini(wss);
+        startGemini(wss); // Restart the process to get a clean slate
         return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
       }
 
       if (msg.method === 'fetchHistory') {
+        flushAssistantMessage(wss, 'interrupted');
         const { limit = 50 } = msg.params || {};
         const chunk = history.slice(-limit);
         chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
         return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { messages: chunk } }));
       }
 
-      // 5. WebSocketメッセージハンドラの更新
       if (msg.method === 'sendUserMessage') {
         flushAssistantMessage(wss, 'interrupted');
+        
         const { text: userText, files, goal, session, messageId, features } = msg.params?.chunks?.[0] || {};
+
         const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: userText, files: files || [], goal: goal || null, session: session || null };
         history.push(rec);
+        
         broadcastExcept(wss, ws, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
 
+        // Create the message for the AI (augment with implicit system messages)
         let systemMessages = [];
-        if (features?.webSearch) systemMessages.push(`[System]ユーザーはウェブ検索機能を使うことを希望しています。`);
-        if (files && files.length > 0) systemMessages.push(`[System]ユーザーは以下のファイルをアップロードしました：\n${files.map(f => `- ${f.name} (${f.path})`).join('\n')}`);
-        if (goal) systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- ID: ${goal.id}\n- タスク: ${goal.task}`);
-        if (session) systemMessages.push(`[System]ユーザーは以下の学習記録を共有しました：\n- ログID: ${session.id}\n- 内容: ${session.content || 'N/A'}`);
-        
+        if (features?.webSearch) {
+            systemMessages.push(`[System]ユーザーはウェブ検索機能を使うことを希望しています。`);
+        }
+        if (files && files.length > 0) {
+            const fileNames = files.map(file => `- ${file.name} (${file.path})`).join('\n');
+            systemMessages.push(`[System]ユーザーは以下のファイルをアップロードしました：\n${fileNames}`);
+        }
+        if (goal) {
+            systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- ID: ${goal.id}\n- 教科: ${goal.subject}\n- タスク: ${goal.task}${goal.details ? `\n- 詳細: ${goal.details}` : ''}`);
+        }
+        if (session) {
+            systemMessages.push(`[System]ユーザーは以下の学習記録を共有しました：\n- ログID: ${session.id}\n- イベントタイプ: ${session.type}\n- 学習内容: ${session.content || 'N/A'}`);
+        }
+
         const fullPrompt = (systemMessages.length > 0 ? systemMessages.join('\n') + '\n\n' : '') + userText;
 
         if (isSessionReady && acpSessionId) {
-            acpSend('session/prompt', { sessionId: acpSessionId, prompt: [{ type: 'text', text: fullPrompt }] })
-              .catch(e => console.error('[ACP] Error sending prompt:', e));
+            acpSend('session/prompt', {
+                sessionId: acpSessionId,
+                prompt: [{ type: 'text', text: fullPrompt }],
+            }).catch(e => console.error('[ACP] Error sending prompt:', e));
         } else {
+            console.log('[Server] Session not ready or invalid. Queuing prompt.');
             pendingPrompts.push({ text: fullPrompt, messageId });
         }
         
         return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
       }
     });
-    ws.on('close', () => console.log('Client disconnected'));
+
+    ws.on('close', () => {
+      console.log('Client disconnected');
+    });
   });
 
   httpsServer.listen(port, hostname, () => {
@@ -454,24 +579,3 @@ app.prepare().then(() => {
     console.log(`> HTTP redirect server running on http://${hostname}:80, redirecting to https`);
   });
 });
-```
-
----
-
-## 3. フロントエンドの改修計画
-
-`server.js`側で新旧プロトコルの差異を吸収するように設計したため、`master`ブランチから取得したフロントエンドのファイル（`useChat.ts`, `new-chat-panel.tsx`, `page.tsx`）については、**原則として修正は不要です。**
-
---- 
-
-## 4. 実装手順
-
-1.  **ファイルの同期:** 
-    まず、関連するすべてのファイルを`master`ブランチの安定版に戻します。
-    ```bash
-    git checkout master -- webnew/server.js webnew/hooks/useChat.ts webnew/components/new-chat-panel.tsx webnew/app/page.tsx
-    ```
-
-2.  **`server.js`の置換:** 
-    `webnew/server.js`を開き、その内容全体を、上記の**「2.2. 変更後の `server.js` 全体コード」**に記載したコードで完全に置き換えてください。
-    

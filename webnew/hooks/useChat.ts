@@ -579,7 +579,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       console.log('Cleaning up useChat WebSocket listeners.');
       unsubscribe(); // subscribeで返されたunsubscribe関数を呼び出す
     };
-  }, [ws, subscribe, activeMessage]); // wsとsubscribeを依存配列に追加
+  }, [ws, subscribe]); // wsとsubscribeを依存配列に追加
 
   const sendMessage = useCallback((messageData: SendMessageData) => {
     if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) { // ws.current から ws に変更
