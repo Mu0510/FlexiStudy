@@ -233,13 +233,32 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       // 4) サーバ確定メッセージ（addMessage）を重複無しで反映
       if (msg.method === 'addMessage' && msg.params?.message) {
         const m = msg.params.message;
+
+        // text -> content へ変換して UI 表示形式に揃える
+        const converted: Message = {
+          id: String(m.id),
+          ts: typeof m.ts === 'number' ? m.ts : Date.now(),
+          role: m.role,
+          content: m.text ?? m.content ?? '',
+          files: m.files ?? [],
+          goal: m.goal ?? null,
+          session: m.session ?? null,
+          type: m.type === 'tool' ? 'tool' : 'text',
+          toolCallId: m.toolCallId,
+          status: m.status,
+          icon: m.icon,
+          label: m.label,
+          command: m.command,
+        };
+
         setMessages(prev => {
-          if (prev.some(x => x.id === m.id)) return prev; // 重複防止
-          return [...prev, m];
+          if (prev.some(x => x.id === converted.id)) return prev; // 重複防止
+          return [...prev, converted];
         });
-        // 追加で最新タイムスタンプを更新（履歴delta用）
-        if (typeof m.ts === 'number') {
-          latestTsRef.current = Math.max(latestTsRef.current ?? 0, m.ts);
+
+        // 最新タイムスタンプを更新（履歴delta用）
+        if (typeof converted.ts === 'number') {
+          latestTsRef.current = Math.max(latestTsRef.current ?? 0, converted.ts);
         }
         onMessageReceived?.();
         return;
