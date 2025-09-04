@@ -106,6 +106,37 @@ function broadcastExcept(wss, sender, json) {
   }
 }
 
+// 履歴内のツールカードを探して更新（なければ undefined）
+function findLastToolHistoryIndex(toolCallId) {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const rec = history[i];
+    if (!rec) continue;
+    // 正規化済み（role: 'tool'）だけを対象
+    if ((rec.role === 'tool' || rec.type === 'tool') && (rec.id === toolCallId || rec.toolCallId === toolCallId)) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function pushNormalizedToolHistory({ toolCallId, icon, label, command, status, content }) {
+  const nowTs = Date.now();
+  const msg = {
+    id: toolCallId,
+    ts: nowTs,
+    role: 'tool',
+    type: 'tool',
+    toolCallId,
+    icon: icon || 'tool',
+    label: label || 'Tool',
+    command: command || '',
+    status: status || 'running',
+    content: content || '',
+  };
+  history.push(msg);
+  return msg;
+}
+
 function _startNewGeminiProcess(wss) {
   console.log(`[Gemini Process] Starting new Gemini process...`);
   const spec = getGeminiSpawnSpec();
@@ -146,20 +177,20 @@ function _startNewGeminiProcess(wss) {
 }
 
 async function initializeAndStartSession() {
-    try {
-        await acpSend('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } } });
-        const sessionResult = await acpSend('session/new', { cwd: PROJECT_ROOT, mcpServers: [] });
-        if (sessionResult?.sessionId) {
-            acpSessionId = sessionResult.sessionId;
-            isSessionReady = true;
-            console.log(`[ACP] New session established: ${acpSessionId}`);
-            flushPromptQueue();
-        } else {
-            console.error('[ACP] Failed to create new session, result:', sessionResult);
-        }
-    } catch (error) {
-        console.error('[ACP] Error during initialization or session creation:', error);
+  try {
+    await acpSend('initialize', { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: true, writeTextFile: true } } });
+    const sessionResult = await acpSend('session/new', { cwd: PROJECT_ROOT, mcpServers: [] });
+    if (sessionResult?.sessionId) {
+      acpSessionId = sessionResult.sessionId;
+      isSessionReady = true;
+      console.log(`[ACP] New session established: ${acpSessionId}`);
+      flushPromptQueue();
+    } else {
+      console.error('[ACP] Failed to create new session, result:', sessionResult);
     }
+  } catch (error) {
+    console.error('[ACP] Error during initialization or session creation:', error);
+  }
 }
 
 // 4. ACP通信関数 (handleCliMessage, handleSessionUpdate) の導入
@@ -195,27 +226,39 @@ function handleCliMessage(jsonString, wss) {
         handleSessionUpdate(msg.params.update, wss);
         break;
       case 'session/request_permission': {
-        // まずツールカードのヘッダを全クライアントへ通知（permissionだけでtool_callが来ないため）
+        // ツール実行の許可要求の段階で、ツールカードを作成・履歴へ永続化しておく（tool_call が来ないケースがあるため）
         const tc = msg.params?.toolCall;
         if (tc && tc.toolCallId) {
-          const nowTs = Date.now();
+          const icon = tc.kind || 'tool';
+          const rawLabel = tc.title || String(tc.kind || 'tool');
+          const command = (rawLabel || '').split(' (')[0];
+          // 履歴に存在しなければ追加
+          const existsIdx = findLastToolHistoryIndex(tc.toolCallId);
+          if (existsIdx === -1) {
+            pushNormalizedToolHistory({
+              toolCallId: tc.toolCallId,
+              icon,
+              label: rawLabel,
+              command,
+              status: mapToolStatus(tc.status || 'pending'),
+              content: '',
+            });
+          }
+          // リアルタイム表示用に pushToolCall をブロードキャスト
           const pushMsg = {
             jsonrpc: '2.0',
             method: 'pushToolCall',
             params: {
               toolCallId: tc.toolCallId,
-              icon: tc.kind || 'tool',
-              label: tc.title || String(tc.kind || 'tool'),
+              icon,
+              label: rawLabel,
               locations: tc.locations || [],
-              // フロントは params.confirmation.command を読んで表示しているためここで提供
-              confirmation: { command: (tc.title || '').split(' (')[0] }
             }
           };
-          history.push({ ...pushMsg, ts: nowTs, type: 'tool' });
           broadcast(wss, pushMsg);
         }
 
-        // 既存の permission 応答処理
+        // 許可応答（既存ロジック）
         const opts = msg.params?.options || [];
         const allowOnce = opts.find(o => o.kind === 'allow_once') || opts.find(o => o.optionId === 'proceed_once') || opts[0];
         const optionId = allowOnce?.optionId || 'proceed_once';
@@ -231,34 +274,34 @@ function handleCliMessage(jsonString, wss) {
 }
 
 function ensureAssistantMessage(wss, ts) {
-    if (!currentAssistantMessage.id) {
-        currentAssistantMessage.id = `assistant-${ts}`;
-    }
+  if (!currentAssistantMessage.id) {
+    currentAssistantMessage.id = `assistant-${ts}`;
+  }
 }
 
 function flushAssistantMessage(wss, stopReason) {
-    // テキストがある場合のみ処理
-    if (currentAssistantMessage.id && currentAssistantMessage.text) {
-        const assistantMessage = {
-            id: currentAssistantMessage.id,
-            ts: Date.now(),
-            role: 'assistant',
-            text: currentAssistantMessage.text.trim(),
-        };
-        // 1. 履歴に保存する
-        history.push(assistantMessage);
+  // テキストがある場合のみ処理
+  if (currentAssistantMessage.id && currentAssistantMessage.text) {
+    const assistantMessage = {
+      id: currentAssistantMessage.id,
+      ts: Date.now(),
+      role: 'assistant',
+      text: currentAssistantMessage.text.trim(),
+    };
+    // 1. 履歴に保存する
+    history.push(assistantMessage);
 
-        // 2. ★★★[最重要] addMessage で全クライアントに確定したメッセージを通知する★★★
-        broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
-    }
+    // 2. addMessage で全クライアントに確定したメッセージを通知
+    broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+  }
 
-    // 3. messageCompleted でストリームの終了を通知する
-    if (currentAssistantMessage.id) {
-        broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { messageId: currentAssistantMessage.id, stopReason: stopReason || 'end_turn' } });
-    }
-    
-    // 4. 現在のメッセージをリセットする
-    currentAssistantMessage = { id: null, text: '', thought: '' };
+  // 3. messageCompleted でストリームの終了を通知する
+  if (currentAssistantMessage.id) {
+    broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { messageId: currentAssistantMessage.id, stopReason: stopReason || 'end_turn' } });
+  }
+  
+  // 4. 現在のメッセージをリセットする
+  currentAssistantMessage = { id: null, text: '', thought: '' };
 }
 
 function handleSessionUpdate(upd, wss) {
@@ -270,10 +313,10 @@ function handleSessionUpdate(upd, wss) {
       currentAssistantMessage.thought += thoughtChunk;
       broadcast(wss, {
         jsonrpc: '2.0',
-        method: 'streamAssistantMessageChunk', // ← 正しいメソッド名に変更
+        method: 'streamAssistantMessageChunk',
         params: {
           messageId: currentAssistantMessage.id,
-          chunk: { thought: thoughtChunk } // ← 正しいパラメータ構造に変更
+          chunk: { thought: thoughtChunk }
         }
       });
       break;
@@ -293,39 +336,93 @@ function handleSessionUpdate(upd, wss) {
       flushAssistantMessage(wss, upd.stopReason);
       break;
 
-    case 'tool_call':
+    case 'tool_call': {
       const toolCallId = upd.toolCallId || `tool-${nowTs}`;
+      const icon = upd.kind || 'tool';
+      const rawLabel = upd.title || String(upd.kind || 'tool');
+      const command = (rawLabel || '').split(' (')[0];
+
+      // 履歴に正規化メッセージとして保存（初期状態は running）
+      pushNormalizedToolHistory({
+        toolCallId,
+        icon,
+        label: rawLabel,
+        command,
+        status: 'running',
+        content: '',
+      });
+
+      // リアルタイム描画用の push イベントも送る
       const toolMsg = {
         jsonrpc: '2.0',
         method: 'pushToolCall',
         params: {
-          toolCallId: toolCallId,
-          icon: upd.kind || 'tool',
-          label: upd.title || String(upd.kind || 'tool'),
+          toolCallId,
+          icon,
+          label: rawLabel,
           locations: upd.locations || [],
         }
       };
-      history.push({ ...toolMsg, ts: nowTs, type: 'tool' });
       broadcast(wss, toolMsg);
       break;
+    }
 
-    case 'tool_call_update':
+    case 'tool_call_update': {
+      // content を UI 用に整形
       let content = undefined;
       if (Array.isArray(upd.content) && upd.content.length > 0) {
         const c = upd.content[0];
         if (c.type === 'content' && c.content?.type === 'text') {
           content = { type: 'markdown', markdown: c.content.text };
         } else if (c.type === 'diff') {
+          // diff はクライアント側で表示するならプレーンで送る
           content = { type: 'diff', oldText: c.oldText || '', newText: c.newText || '' };
         }
       }
+      const mappedStatus = mapToolStatus(upd.status);
+
+      // 履歴の該当ツールカードを更新
+      const idx = findLastToolHistoryIndex(upd.toolCallId);
+      if (idx !== -1) {
+        // 既存の正規化メッセージを更新
+        const rec = history[idx];
+        if (content?.__headerPatch) {
+          const { icon, label, command } = content.__headerPatch;
+          if (icon) rec.icon = icon;
+          if (label) rec.label = label;
+          if (command) rec.command = command;
+        } else if (content) {
+          if (content.type === 'markdown') {
+            rec.content = content.markdown;
+          } else if (content.type === 'diff') {
+            // diff はクライアント側で表示するならプレーンで送る
+            rec.content = JSON.stringify(content);
+          }
+        }
+        if (mappedStatus) rec.status = mappedStatus;
+        // タイムスタンプも更新しておくと後段の並びが安定
+        rec.ts = nowTs;
+      } else {
+        // 念のため見つからない場合は新規に入れる（フォールバック）
+        pushNormalizedToolHistory({
+          toolCallId: upd.toolCallId,
+          icon: 'tool',
+          label: String('tool'),
+          command: '',
+          status: mappedStatus || 'running',
+          content: content && content.type === 'markdown' ? content.markdown : '',
+        });
+      }
+
+      // クライアント向けの更新イベントは従来どおり送る
       const updateMsg = {
         jsonrpc: '2.0',
         method: 'updateToolCall',
-        params: { toolCallId: upd.toolCallId, status: mapToolStatus(upd.status), content }
+        params: { toolCallId: upd.toolCallId, status: mappedStatus, content }
       };
       broadcast(wss, updateMsg);
       break;
+    }
   }
 }
 
@@ -350,11 +447,11 @@ function startGemini(wss) {
     try {
       process.kill(-geminiProcess.pid, 'SIGTERM');
     } catch (err) {
-       try {
-         geminiProcess.kill('SIGTERM');
-       } catch (e) {
-         console.error(`[Gemini Process] Failed to kill process ${geminiProcess.pid}: ${e.message}`);
-       }
+      try {
+        geminiProcess.kill('SIGTERM');
+      } catch (e) {
+        console.error(`[Gemini Process] Failed to kill process ${geminiProcess.pid}: ${e.message}`);
+      }
     }
     setTimeout(() => {
       if (geminiProcess && !geminiProcess.killed) {
@@ -436,14 +533,11 @@ app.prepare().then(() => {
         let chunk = history;
 
         if (typeof after === 'number') {
-          // after より新しいもの
           chunk = chunk.filter(rec => (rec.ts ?? 0) > after).slice(0, limit);
         } else if (typeof before === 'number') {
-          // before より古いものの末尾 limit 件
           const older = chunk.filter(rec => (rec.ts ?? 0) < before);
           chunk = older.slice(Math.max(0, older.length - limit));
         } else {
-          // カーソルなしは末尾 limit 件
           chunk = chunk.slice(Math.max(0, history.length - limit));
         }
 
@@ -455,27 +549,6 @@ app.prepare().then(() => {
           id: msg.id,
           result: { messages: chunk }
         }));
-      }
-
-      // 5. WebSocketメッセージハンドラの更新
-      if (msg.method === 'cancelSendMessage') {
-        // 可能ならLLM側への割り込みも試す（未対応でもUIは確定される）
-        try {
-          // ACP が対応していればセッション割り込み
-          acpSend('session/interrupt', { sessionId: acpSessionId });
-        } catch (e) {
-          // 未対応なら無視してUI側のみ確定
-          console.log('[ACP] session/interrupt not available or failed, flushing locally:', e?.message || e);
-        }
-
-        // 現在のストリーム内容を確定して全クライアントへ配信
-        flushAssistantMessage(wss, 'canceled');
-
-        // JSON-RPC 応答
-        try {
-          ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
-        } catch {} // エラーハンドリングは最小限に留める
-        return;
       }
 
       if (msg.method === 'sendUserMessage') {
@@ -494,13 +567,24 @@ app.prepare().then(() => {
         const fullPrompt = (systemMessages.length > 0 ? systemMessages.join('\n') + '\n\n' : '') + userText;
 
         if (isSessionReady && acpSessionId) {
-            acpSend('session/prompt', { sessionId: acpSessionId, prompt: [{ type: 'text', text: fullPrompt }] })
-              .catch(e => console.error('[ACP] Error sending prompt:', e));
+          acpSend('session/prompt', { sessionId: acpSessionId, prompt: [{ type: 'text', text: fullPrompt }] })
+            .catch(e => console.error('[ACP] Error sending prompt:', e));
         } else {
-            pendingPrompts.push({ text: fullPrompt, messageId });
+          pendingPrompts.push({ text: fullPrompt, messageId });
         }
         
         return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
+      }
+
+      if (msg.method === 'cancelSendMessage') {
+        try {
+          await acpSend('session/interrupt', { sessionId: acpSessionId });
+        } catch (e) {
+          console.log('[ACP] session/interrupt not available or failed:', e?.message || e);
+        }
+        flushAssistantMessage(wss, 'canceled');
+        try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null })); } catch {}
+        return;
       }
     });
     ws.on('close', () => console.log('Client disconnected'));
