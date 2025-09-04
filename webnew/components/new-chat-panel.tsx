@@ -749,44 +749,50 @@ export function NewChatPanel({
 
       <div ref={messagesContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto max-w-full overflow-x-hidden">
         <div className="p-4 space-y-8 max-w-prose mx-auto pb-16">
-        {useMemo(() => {
-            // 1) messages と activeMessage を統合して時系列に並べる
+          {isFetchingHistory && (
+            <div className="flex justify-center items-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 dark:border-gray-100"></div>
+            </div>
+          )}
+
+          {useMemo(() => {
+            // messages と activeMessage を統合して、時系列で1回だけ描画する
             const list: any[] = [...(messages || [])];
 
             if (activeMessage) {
               list.push({
                 id: `active-${activeMessage.id}`,
-                ts: activeMessage.ts ?? Date.now(), // フォールバック
+                ts: activeMessage.ts ?? Date.now(),
                 role: 'assistant',
                 type: 'text',
                 content: activeMessage.content,
                 thoughtMode: activeMessage.thoughtMode,
-                __isActive: true, // 見た目調整用フラグ（任意）
+                __isActive: true,
               });
             }
 
-            // 重複排除（idベース）
+            // 重複排除
             const seen = new Set<string>();
-            const dedup = list.filter((m) => {
+            const dedup = list.filter(m => {
               const k = String(m.id ?? '');
               if (seen.has(k)) return false;
               seen.add(k);
               return true;
             });
 
-            // ts 昇順（未定義は0扱い）
+            // ts 昇順（未定義は0）
             dedup.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
             return dedup;
           }, [messages, activeMessage]).map((msg: any, idx: number) => {
-            // 2) ツールカード
-            if (msg.type === 'tool' || msg.role === 'tool') {
+            // ツールカード（role===tool も許容）
+            if (msg.type === "tool" || msg.role === "tool") {
               return (
                 <Card key={`${msg.id}-${idx}`} className={cn(
-                  'tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md',
-                  'w-11/12 mx-auto my-1 mb-3',
-                  msg.status === 'running' && 'tool-card--running',
-                  msg.status === 'finished' && 'tool-card--finished border-l-4 border-green-500',
-                  msg.status === 'error' && 'tool-card--error border-l-4 border-red-500'
+                  "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
+                  "w-11/12 mx-auto my-1 mb-3",
+                  msg.status === "running" && "tool-card--running",
+                  msg.status === "finished" && "tool-card--finished border-l-4 border-green-500",
+                  msg.status === "error" && "tool-card--error border-l-4 border-red-500"
                 )}>
                   <CardHeader className="flex flex-row items-center justify-between p-0 mb-1">
                     <div className="flex items-center space-x-2 flex-shrink min-w-0">
@@ -794,7 +800,7 @@ export function NewChatPanel({
                         {getToolIconText(msg.icon)}
                       </span>
                       <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-                        {msg.label || 'Tool Call'}
+                        {msg.label || "Tool Call"}
                       </CardTitle>
                     </div>
                     <div className="tool-card__line-break"></div>
@@ -802,9 +808,9 @@ export function NewChatPanel({
                       {getRelativePath(msg.command)}
                     </code>
                     <div className="tool-card__status-indicator">
-                      {msg.status === 'finished' && <CheckCircle className="h-4 w-4 text-green-500" />}
-                      {msg.status === 'error' && <XCircle className="h-4 w-4 text-red-500" />}
-                      {msg.status === 'running' && (
+                      {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                      {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
+                      {msg.status === "running" && (
                         <span className="relative flex h-3 w-3">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
@@ -821,17 +827,17 @@ export function NewChatPanel({
               );
             }
 
-            // 3) 通常（ユーザー/アシスタント/アクティブ）メッセージ
+            // 通常メッセージ（ユーザー/アシスタント/ストリーミング中）
             return (
-              <div key={`${msg.id}-${idx}`} className={cn('flex flex-col', msg.role === 'user' ? 'items-end' : 'items-start mx-auto w-[95%]')}>
+              <div key={`${msg.id}-${idx}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
                 {msg.content && (
                   <div
                     className={cn(
-                      'prose prose-sm dark:prose-invert',
-                      msg.role === 'user'
-                        ? 'ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]'
-                        : 'w-full',
-                      msg.thoughtMode && 'animate-pulse' // activeMessage の思考表示
+                      "prose prose-sm dark:prose-invert",
+                      msg.role === "user"
+                        ? "ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]"
+                        : "w-full",
+                      msg.thoughtMode && "animate-pulse"
                     )}
                   >
                     <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
@@ -843,7 +849,7 @@ export function NewChatPanel({
             );
           })}
 
-          {/* 統合したので activeMessage の別描画は削除 */}
+          {/* 統合済みのため、activeMessage の別描画ブロックは削除 */}
           <div ref={scrollAnchorRef} />
         </div>
       </div>

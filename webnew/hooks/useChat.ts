@@ -109,6 +109,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     activeMessageRef.current = activeMessage;
   }, [activeMessage]);
 
+  const clearActiveThought = useCallback(() => {
+    setActiveMessage(prev => (prev?.thoughtMode ? null : prev));
+  }, []);
+
   const historyState = useRef({
     oldestTs: null as number | null,
     loadedIds: new Set<string>(),
@@ -126,6 +130,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
     // WebSocketからのメッセージ処理ロジックをsubscribeで登録
     const unsubscribe = subscribe((msg: any) => {
+      // 0) サーバからの明示クリアイベント
+      if (msg.method === 'clearActiveThought') {
+        clearActiveThought();
+        return;
+      }
+
       // 1) ストリーム（既存）: activeMessage にだけ反映
       if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
@@ -161,6 +171,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
       // 2) ツールカード（ライブ）
       if (msg.method === 'pushToolCall') {
+        clearActiveThought();
         const params = msg.params || {};
         const toolId = params.toolCallId || `tool-${Date.now()}`;
         setMessages(prev => ([
@@ -184,8 +195,14 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
       // 3) ツール更新
       if (msg.method === 'updateToolCall') {
-        const toolId = msg.params?.callId ?? msg.params?.toolCallId;
         const { status, content } = msg.params || {};
+
+        // 状態が running/pending 相当ならフォールバックで思考を消す
+        if (status === 'running' || status === 'pending' || status === undefined) {
+          clearActiveThought();
+        }
+
+        const toolId = msg.params?.callId ?? msg.params?.toolCallId;
         if (!toolId) return;
 
         setMessages(prev => {

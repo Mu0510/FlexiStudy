@@ -244,6 +244,9 @@ function handleCliMessage(jsonString, wss) {
               content: '',
             });
           }
+          // 思考クリア（許可要求の段階で見た目上ツール開始扱いにしたい）
+          broadcast(wss, { jsonrpc: '2.0', method: 'clearActiveThought' });
+
           // リアルタイム表示用に pushToolCall をブロードキャスト
           const pushMsg = {
             jsonrpc: '2.0',
@@ -351,6 +354,9 @@ function handleSessionUpdate(upd, wss) {
         status: 'running',
         content: '',
       });
+
+      // 思考(assistant_thought)を即クリアさせる
+      broadcast(wss, { jsonrpc: '2.0', method: 'clearActiveThought' });
 
       // リアルタイム描画用の push イベントも送る
       const toolMsg = {
