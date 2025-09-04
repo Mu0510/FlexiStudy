@@ -84,7 +84,7 @@ function mapToolStatus(status) {
     case 'success':
     case 'completed': return 'finished';
     case 'failure': return 'error';
-    default: return status;
+    default: return status || 'running';
   }
 }
 
@@ -368,59 +368,28 @@ function handleSessionUpdate(upd, wss) {
     }
 
     case 'tool_call_update': {
-      // content を UI 用に整形
-      let content = undefined;
+      const mappedStatus = mapToolStatus(upd.status);
+      let content;
       if (Array.isArray(upd.content) && upd.content.length > 0) {
         const c = upd.content[0];
         if (c.type === 'content' && c.content?.type === 'text') {
           content = { type: 'markdown', markdown: c.content.text };
         } else if (c.type === 'diff') {
-          // diff はクライアント側で表示するならプレーンで送る
           content = { type: 'diff', oldText: c.oldText || '', newText: c.newText || '' };
         }
       }
-      const mappedStatus = mapToolStatus(upd.status);
-
-      // 履歴の該当ツールカードを更新
       const idx = findLastToolHistoryIndex(upd.toolCallId);
       if (idx !== -1) {
-        // 既存の正規化メッセージを更新
         const rec = history[idx];
-        if (content?.__headerPatch) {
-          const { icon, label, command } = content.__headerPatch;
-          if (icon) rec.icon = icon;
-          if (label) rec.label = label;
-          if (command) rec.command = command;
-        } else if (content) {
-          if (content.type === 'markdown') {
+        if (content?.type === 'markdown') {
             rec.content = content.markdown;
-          } else if (content.type === 'diff') {
-            // diff はクライアント側で表示するならプレーンで送る
+        } else if (content?.type === 'diff') {
             rec.content = JSON.stringify(content);
-          }
         }
-        if (mappedStatus) rec.status = mappedStatus;
-        // タイムスタンプも更新しておくと後段の並びが安定
-        rec.ts = nowTs;
-      } else {
-        // 念のため見つからない場合は新規に入れる（フォールバック）
-        pushNormalizedToolHistory({
-          toolCallId: upd.toolCallId,
-          icon: 'tool',
-          label: String('tool'),
-          command: '',
-          status: mappedStatus || 'running',
-          content: content && content.type === 'markdown' ? content.markdown : '',
-        });
+        rec.status = mappedStatus;
+        rec.ts = Date.now();
       }
-
-      // クライアント向けの更新イベントは従来どおり送る
-      const updateMsg = {
-        jsonrpc: '2.0',
-        method: 'updateToolCall',
-        params: { toolCallId: upd.toolCallId, status: mappedStatus, content }
-      };
-      broadcast(wss, updateMsg);
+      broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: upd.toolCallId, status: mappedStatus, content } });
       break;
     }
   }

@@ -182,63 +182,58 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         return;
       }
 
-      // 3) ツール更新（既存・必要ならそのまま）
+      // 3) ツール更新
       if (msg.method === 'updateToolCall') {
-        const toolId = msg.params.callId ?? msg.params.toolCallId;
-        const { status, content } = msg.params;
+        const toolId = msg.params?.callId ?? msg.params?.toolCallId;
+        const { status, content } = msg.params || {};
+        if (!toolId) return;
 
-        setMessages(prevMessages => {
-          const newMessages = [...prevMessages];
-          let toolMessageIndex = newMessages.findIndex(m => m.id === toolId);
-
-          // フォールバック: pushToolCall が未着でもカードを作る
-          if (toolMessageIndex === -1) {
-            newMessages.push({
+        setMessages(prev => {
+          const next = [...prev];
+          let idx = next.findIndex(m => m.id === toolId);
+          if (idx === -1) {
+            // フォールバック: pushToolCall を受け取っていなくても作る
+            next.push({
               id: toolId,
               ts: Date.now(),
               role: 'tool',
               type: 'tool',
               toolCallId: toolId,
-              icon: undefined,
-              label: undefined,
-              command: '',
               status: 'running',
               content: '',
-            });
-            toolMessageIndex = newMessages.length - 1;
+            } as any);
+            idx = next.length - 1;
           }
 
-          const toolMessage = { ...newMessages[toolMessageIndex] };
+          const m = { ...next[idx] };
 
           // ヘッダーパッチ
           if (content?.__headerPatch) {
             const { icon, label, command } = content.__headerPatch;
-            toolMessage.icon = icon ?? toolMessage.icon;
-            toolMessage.label = label ?? toolMessage.label;
-            toolMessage.command = command ?? toolMessage.command;
+            if (icon !== undefined) m.icon = icon;
+            if (label !== undefined) m.label = label;
+            if (command !== undefined) m.command = command;
           } else if (content) {
-            // 本文
-            if (content.type === 'markdown') {
-              toolMessage.content = content.markdown;
+            // 本文パッチ
+            if (content.type === 'markdown' && typeof content.markdown === 'string') {
+              m.content = content.markdown;
             } else if (content.type === 'diff') {
-              toolMessage.content = generateContextualDiffHtml(content.oldText || '', content.newText || '');
+              m.content = JSON.stringify(content);
             } else if (typeof content === 'string') {
-              toolMessage.content = `<pre>${content}</pre>`;
+              m.content = content;
             } else {
-              toolMessage.content = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+              m.content = JSON.stringify(content);
             }
           }
 
-          // ステータス
-          toolMessage.status = status || toolMessage.status;
+          if (status) m.status = status; // 'finished' が来る想定（server 側で正規化）
 
-          newMessages[toolMessageIndex] = toolMessage;
-          return newMessages;
+          m.ts = Date.now();
+          next[idx] = m;
+          return next;
         });
 
-        if (status === 'finished') {
-          setActiveMessage(null);
-        }
+        // 注意: ツール完了では activeMessage を消さない（ここが今回の修正点）
         onMessageReceived?.();
         return;
       }
@@ -277,10 +272,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         return;
       }
 
-      // 5) 完了通知（ここで activeMessage を消す。messages への追加は addMessage に任せる）
-      if (msg.method === 'messageCompleted' || msg.method === 'agentMessageFinished') {
-        setActiveMessage(null);
-        setIsGeneratingResponse(false);
+      // 5) ストリーム確定（サーバが送る messageCompleted を受ける）
+      if (msg.method === 'messageCompleted') {
+        const id = msg.params?.messageId;
+        if (id) {
+          setActiveMessage(null);
+          setIsGeneratingResponse(false);
+        }
         return;
       }
 
