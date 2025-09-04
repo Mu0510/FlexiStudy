@@ -458,6 +458,26 @@ app.prepare().then(() => {
       }
 
       // 5. WebSocketメッセージハンドラの更新
+      if (msg.method === 'cancelSendMessage') {
+        // 可能ならLLM側への割り込みも試す（未対応でもUIは確定される）
+        try {
+          // ACP が対応していればセッション割り込み
+          acpSend('session/interrupt', { sessionId: acpSessionId });
+        } catch (e) {
+          // 未対応なら無視してUI側のみ確定
+          console.log('[ACP] session/interrupt not available or failed, flushing locally:', e?.message || e);
+        }
+
+        // 現在のストリーム内容を確定して全クライアントへ配信
+        flushAssistantMessage(wss, 'canceled');
+
+        // JSON-RPC 応答
+        try {
+          ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
+        } catch {} // エラーハンドリングは最小限に留める
+        return;
+      }
+
       if (msg.method === 'sendUserMessage') {
         flushAssistantMessage(wss, 'interrupted');
         const { text: userText, files, goal, session, messageId, features } = msg.params?.chunks?.[0] || {};

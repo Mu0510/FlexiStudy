@@ -516,15 +516,36 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   }, [ws, sendWsMessage]);
 
   const cancelSendMessage = useCallback(() => {
-    if (!ws || !lastSentRequestId.current) return;
+    if (!ws) return;
 
+    // サーバにキャンセル要求（IDは新規でOK）
     const req = {
-      jsonrpc: '2.0', // ← '20' から修正
-      id: lastSentRequestId.current,
+      jsonrpc: '2.0',
+      id: requestIdCounter.current++,
       method: 'cancelSendMessage',
       params: {}
     };
     sendWsMessage(req);
+
+    // フロント側フォールバック: 現在のストリームを確定させてからクリア
+    setMessages(prev => {
+      const am = activeMessageRef.current;
+      if (!am || !am.content || !am.content.trim()) return prev;
+
+      // 既に確定済みでない場合にだけ追加（idで重複排除）
+      if (prev.some(m => m.id === am.id)) return prev;
+
+      const finalized: Message = {
+        id: am.id,
+        ts: am.ts || Date.now(),
+        role: 'assistant',
+        content: am.content,
+        type: 'text',
+      };
+      return [...prev, finalized];
+    });
+
+    setActiveMessage(null);
     setIsGeneratingResponse(false);
   }, [ws, sendWsMessage]);
 

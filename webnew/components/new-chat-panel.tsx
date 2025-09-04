@@ -755,14 +755,35 @@ export function NewChatPanel({
           </div>
         )}
         {useMemo(() => {
+          // 1) messages と activeMessage をまとめて「時間順」に並べる
+          const list = [...(messages || [])];
+          if (activeMessage) {
+            list.push({
+              id: `active-${activeMessage.id}`,
+              ts: activeMessage.ts,
+              role: 'assistant',
+              type: 'text',
+              content: activeMessage.content,
+              // thoughtMode を付けておくと見た目を切り替え可能
+              thoughtMode: activeMessage.thoughtMode,
+            } as any);
+          }
+
+          // 重複排除（idベース）。active は固有IDなのでそのまま残る
           const seen = new Set<string>();
-          return (messages || []).filter(m => {
-            const k = String(m.id ?? '')
-            if (seen.has(k)) return false; seen.add(k); return true;
+          const dedup = list.filter(m => {
+            const k = String(m.id ?? '');
+            if (seen.has(k)) return false;
+            seen.add(k);
+            return true;
           });
-        }, [messages]).map((msg, idx) => {
-          // Render tool messages
-          if (msg.type === "tool") {
+
+          // ts 昇順で整列（未定義は0扱い）
+          dedup.sort((a: any, b: any) => (a.ts ?? 0) - (b.ts ?? 0));
+          return dedup;
+        }, [messages, activeMessage]).map((msg: any, idx: number) => {
+          // 2) ツールカード
+          if (msg.type === "tool" || msg.role === "tool") {
             return (
               <Card key={`${msg.id}-${idx}`} className={cn(
                 "tool-card bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-gray-100 rounded-lg p-3 shadow-md",
@@ -802,96 +823,31 @@ export function NewChatPanel({
                 </CardContent>
               </Card>
             );
-          } else {
-            // Render user/assistant messages
-            return (
-              <div key={`${msg.id}-${idx}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
-                {/* File Cards for User Messages */}
-                {msg.role === 'user' && msg.goal && (
-                  <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
-                    <div className="bg-gray-100 dark:bg-slate-700 rounded-xl p-3 flex items-center space-x-2 text-sm w-auto max-w-full">
-                      <Play className="h-5 w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.goal.task}>
-                          {msg.goal.task}
-                        </p>
-                        <p className="text-gray-500 dark:text-gray-400 text-xs">
-                          {msg.goal.subject}
-                          {msg.goal.tags && msg.goal.tags.length > 0 && ` - ${msg.goal.tags.join(', ')}`}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {msg.role === 'user' && msg.session && (
-                  <div className="w-full max-w-[65%] flex flex-col items-end mb-4">
-                    <div className="bg-gray-100 dark:bg-slate-700 rounded-xl p-3 flex items-center space-x-2 text-sm w-auto max-w-full">
-                      {msg.session.type === "START" && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
-                      {msg.session.type === "BREAK" && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
-                      {msg.session.type === "RESUME" && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.session.content || "休憩"}>
-                          {msg.session.content || "休憩"}
-                        </p>
-                        <p className="text-gray-500 dark:text-gray-400 text-xs">
-                           {msg.session.start_time} ({msg.session.duration_minutes}分)
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {msg.role === 'user' && msg.files && msg.files.length > 0 && (
-                  <div className="w-full max-w-[65%] flex flex-col items-end mb-2">
-                    <div className="w-full flex flex-col gap-2 items-end">
-                      {msg.files.map((file, index) => (
-                        <div key={index} className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm w-auto max-w-full">
-                          <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400 flex-shrink-0" />
-                          <span className="font-medium text-gray-700 dark:text-gray-300 truncate">{file.name}</span>
-                          <span className="text-gray-500 dark:text-gray-400 text-xs flex-shrink-0">{formatFileSize(file.size)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Message Bubble */}
-                {msg.content && (
-                  <div
-                      className={cn(
-                        "prose prose-sm dark:prose-invert",
-                        msg.role === "user" ? "ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]" : "w-full",
-                      )}
-                    >
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm, remarkBreaks]}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
-                    </div>
-                )}
-              </div>
-            );
           }
+
+          // 3) 通常メッセージ（active の一時バブル含む）
+          return (
+            <div key={`${msg.id}-${idx}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
+              {msg.content && (
+                <div
+                  className={cn(
+                    "prose prose-sm dark:prose-invert",
+                    msg.role === "user"
+                      ? "ml-auto bg-gray-100 text-gray-900 dark:bg-blue-600 dark:text-white rounded-2xl px-4 py-1 max-w-[65%]"
+                      : "w-full",
+                    msg.thoughtMode && "animate-pulse"
+                  )}
+                >
+                  <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>
+                    {msg.content}
+                  </ReactMarkdown>
+                </div>
+              )}
+            </div>
+          );
         })}
 
-        {/* Render activeMessage (thinking bubble or streaming assistant message) */}
-        {activeMessage && (
-          <div key={`active-${activeMessage.id}`} className={cn("flex space-x-3", "justify-start")}>
-            <div
-              className={cn(
-                "prose prose-sm dark:prose-invert mx-auto w-[95%]",
-                activeMessage.thoughtMode && "animate-pulse" // Apply pulse for thought mode
-              )}
-            >
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-              >
-                {activeMessage.content}
-              </ReactMarkdown>
-              {console.log("Active Message Content:", activeMessage.content)} {/* ここにログを追加 */}
-            </div>
-          </div>
-        )}
+        {/* ここで別枠の activeMessage 表示は不要（統合したため削除） */}
         <div ref={scrollAnchorRef} />
         </div>
       </div>
