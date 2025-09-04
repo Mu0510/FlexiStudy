@@ -142,29 +142,49 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const { chunk } = msg.params;
         const incomingMessageId = msg.params.messageId;
 
-        setActiveMessage(prev => {
-          const id = prev?.id || incomingMessageId || msg.id || `assistant-${Date.now()}`;
-          const ts = prev?.ts || Date.now();
-          let content = prev?.content || '';
-          let type = prev?.type || 'thought';
-          let thoughtMode = prev?.thoughtMode || false;
+        // 変更後（サーバIDを最優先）
+        const currentIdFromServer = incomingMessageId || msg.id || `assistant-${Date.now()}`;
 
+        setActiveMessage(prevActiveMessage => {
+          // 既存の値を初期化
+          let currentId = prevActiveMessage?.id ?? currentIdFromServer;
+          let currentTs = prevActiveMessage?.ts || Date.now();
+          let newContent = prevActiveMessage?.content || '';
+          let newType = prevActiveMessage?.type || 'thought';
+          let newThoughtMode = prevActiveMessage?.thoughtMode || false;
+
+          // thought chunk
           if (chunk?.thought !== undefined) {
-            content = chunk.thought.trim();
-            type = 'thought';
-            thoughtMode = true;
-          }
-          if (chunk?.text !== undefined) {
-            if (thoughtMode) {
-              content = chunk.text;
-            } else {
-              content += chunk.text;
-            }
-            type = 'assistant';
-            thoughtMode = false;
+            newContent = chunk.thought.trim();
+            newType = 'thought';
+            newThoughtMode = true;
           }
 
-          return { id, ts, type, content, thoughtMode };
+          // text chunk
+          if (chunk?.text !== undefined) {
+            // thought から text へ切り替わる最初のタイミングで、サーバの messageId に乗り換える
+            if (newType === 'thought' && incomingMessageId) {
+              currentId = incomingMessageId; // ← ここが重要（仮IDから正式IDへスイッチ）
+            }
+            // コンテンツの差し替え/追記
+            if (newType === 'thought') {
+              newContent = chunk.text.replace(/^\n+/, '');
+            } else {
+              newContent = (prevActiveMessage?.content || '') + chunk.text.replace(/^\n+/, '');
+            }
+            newType = 'assistant';
+            newThoughtMode = false;
+          }
+
+          if (chunk?.ts) currentTs = chunk.ts;
+
+          return {
+            id: currentId || currentIdFromServer,
+            ts: currentTs,
+            type: newType as 'thought' | 'assistant',
+            content: newContent,
+            thoughtMode: newThoughtMode,
+          };
         });
         onMessageReceived?.();
         return;
@@ -356,6 +376,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           if (prev.some(x => x.id === converted.id)) return prev; // 重複防止
           return [...prev, converted];
         });
+
+        if (converted.role === 'assistant') {
+          // サーバが確定メッセージを出したので、アクティブ中のバブルは即消す
+          setActiveMessage(null);
+        }
 
         // 最新タイムスタンプを更新（履歴delta用）
         if (typeof converted.ts === 'number') {
