@@ -66,6 +66,18 @@ function acpSend(method, params) {
   });
 }
 
+// JSON-RPC の「応答」を送る（permission など双方向RPCで必要）
+function acpRespond(id, result) {
+  if (!geminiProcess || !geminiProcess.stdin || geminiProcess.stdin.destroyed) return;
+  const resp = { jsonrpc: '2.0', id, result };
+  try {
+    geminiProcess.stdin.write(JSON.stringify(resp) + '\n');
+    console.log('[ACP < RESP]', JSON.stringify(resp));
+  } catch (e) {
+    console.error('[ACP] Failed to send response:', e);
+  }
+}
+
 function mapToolStatus(status) {
   switch (status) {
     case 'pending': return 'running';
@@ -182,12 +194,18 @@ function handleCliMessage(jsonString, wss) {
         handleSessionUpdate(msg.params.update, wss);
         break;
       case 'session/request_permission':
-        const opts = msg.params?.options || [];
-        const allow = opts.find(o => o.kind === 'allow_once') || opts[0];
-        acpSend('session/provide_permission', {
+        {
+          // options 例:
+          // [{ optionId: 'proceed_always', kind: 'allow_always' }, { optionId: 'proceed_once', kind: 'allow_once' }, { optionId: 'cancel', kind: 'reject_once' }]
+          const opts = msg.params?.options || [];
+          const allowOnce = opts.find(o => o.kind === 'allow_once') || opts.find(o => o.optionId === 'proceed_once') || opts[0];
+          const optionId = allowOnce?.optionId || 'proceed_once';
+          // JSON-RPC の「応答」で返す（メソッド呼び出しではない）
+          acpRespond(msg.id, {
             sessionId: acpSessionId,
-            outcome: { outcome: 'selected', optionId: allow?.optionId || 'allow_once' }
-        }).catch(e => console.error('[ACP] Error providing permission:', e));
+            outcome: { outcome: 'selected', optionId }
+          });
+        }
         break;
     }
     return;

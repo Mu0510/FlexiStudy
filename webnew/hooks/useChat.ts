@@ -1,6 +1,5 @@
 // webnew/hooks/useChat.ts (修正後の完成形コード)
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { flushSync } from 'react-dom';
 import { marked } from 'marked';
 import * as Diff from 'diff';
 import { useWebSocket } from '@/context/WebSocketContext';
@@ -102,7 +101,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const [activeMessage, setActiveMessage] = useState<ActiveMessage | null>(null);
   const activeMessageRef = useRef<ActiveMessage | null>(null);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
-  const { ws, isConnected, subscribe, sendMessage: sendWsMessage } = useWebSocket(); // WebSocketContextから取得
+  const { ws, subscribe, sendMessage: sendWsMessage } = useWebSocket(); // WebSocketContextから取得
   const requestIdCounter = useRef<number>(1);
   const lastSentRequestId = useRef<number | null>(null);
 
@@ -388,85 +387,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     };
   }, [ws, subscribe]);
 
-  const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
-    if (!ws) return; // ws.current から ws に変更
-
-    const req = {
-      jsonrpc: '2.0',
-      id: requestIdCounter.current++,
-      method: 'confirmToolCall',
-      params: { toolCallId, result }
-    };
-    sendWsMessage(req); // sendWsMessage を使用
-
-    // 確認後はツールメッセージのステータスを更新
-    setMessages(prev => prev.map(m => {
-      if (m.id === toolCallId) {
-        return { ...m, status: 'finished' }; // または 'confirmed' など、適切なステータスに更新
-      }
-      return m;
-    }));
-
-  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
-
-  const requestHistory = useCallback((isInitialLoad = false) => {
-    console.log('[useChat DEBUG] requestHistory called. isFetchingHistory:', historyState.current.isFetchingHistory, 'finished:', historyState.current.finished); // 追加
-    if (historyState.current.isFetchingHistory || historyState.current.finished) return;
-
-    historyState.current.isFetchingHistory = true;
-    const id = ++historyState.current.histReqId;
-    historyState.current.pendingHistory.add(id);
-    const limit = isInitialLoad ? 30 : 20;
-
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log('[useChat DEBUG] Sending fetchHistory request with id:', id, 'limit:', limit, 'before:', historyState.current.oldestTs); // 追加
-      sendWsMessage({
-        jsonrpc: '2.0',
-        id,
-        method: 'fetchHistory',
-        params: { limit: limit, before: historyState.current.oldestTs }
-      });
-      historyState.current.requestMeta.set(id, { mode: isInitialLoad ? 'initial' : 'older' });
-    } else {
-      console.warn("WebSocket is not open, cannot fetch history.");
-      historyState.current.isFetchingHistory = false;
-    }
-  }, [ws, sendWsMessage]); // wsとsendWsMessageを依存配列に追加
-
-  const requestDelta = useCallback(() => {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    if (historyState.current.isFetchingHistory) return;
-    const after = latestTsRef.current;
-    if (!after) return; // 初回は通常ロード
-    const id = ++historyState.current.histReqId;
-    historyState.current.pendingHistory.add(id);
-    historyState.current.requestMeta.set(id, { mode: 'newer' });
-    console.log('[useChat DEBUG] Sending fetchHistory delta with id:', id, 'after:', after);
-    sendWsMessage({ jsonrpc: '2.0', id, method: 'fetchHistory', params: { after } });
-  }, [ws, sendWsMessage]);
-
-  const cancelSendMessage = useCallback(() => {
-    if (!ws || !lastSentRequestId.current) return;
-
-    const req = {
-      jsonrpc: '2.0', // ← '20' から修正
-      id: lastSentRequestId.current,
-      method: 'cancelSendMessage',
-      params: {}
-    };
-    sendWsMessage(req);
-    setIsGeneratingResponse(false);
-  }, [ws, sendWsMessage]);
-
-  useEffect(() => {
-    // クリーンアップ関数は、ws インスタンスが変更されたり、コンポーネントがアンマウントされたりする際に実行される
-    return () => {
-      // ここでは ws.close() を直接呼ばない
-      // WebSocketProvider が接続のライフサイクルを管理するため
-      console.log('Cleaning up useChat WebSocket listeners.');
-      unsubscribe(); // subscribeで返されたunsubscribe関数を呼び出す
-    };
-  }, [ws, subscribe]); // wsとsubscribeを依存配列に追加
+  /* 重複定義と不要なクリーンアップ useEffect を削除しました。
+     sendToolConfirmation / requestHistory / requestDelta / cancelSendMessage は
+     この後方に定義されているものを正とします。 */
 
   const sendMessage = useCallback((messageData: SendMessageData) => {
     if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) { // ws.current から ws に変更
