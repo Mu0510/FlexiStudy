@@ -79,13 +79,12 @@ function acpRespond(id, result) {
 }
 
 function mapToolStatus(status) {
-  switch (status) {
-    case 'pending': return 'running';
-    case 'success':
-    case 'completed': return 'finished';
-    case 'failure': return 'error';
-    default: return status || 'running';
-  }
+  if (!status) return undefined;
+  const s = String(status).toLowerCase();
+  if (s === 'completed' || s === 'complete' || s === 'done' || s === 'finished' || s === 'success' || s === 'succeeded') return 'finished';
+  if (s === 'in_progress' || s === 'running' || s === 'pending' || s === 'started') return 'running';
+  if (s === 'error' || s === 'failed' || s === 'failure') return 'error';
+  return undefined;
 }
 
 function broadcast(wss, json) {
