@@ -189,36 +189,49 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
         setMessages(prevMessages => {
           const newMessages = [...prevMessages];
-          const toolMessageIndex = newMessages.findIndex(m => m.id === toolId);
+          let toolMessageIndex = newMessages.findIndex(m => m.id === toolId);
+
+          // フォールバック: pushToolCall が未着でもカードを作る
           if (toolMessageIndex === -1) {
-            console.warn(`[updateToolCall] Tool message with id ${toolId} not found.`);
-            return prevMessages;
+            newMessages.push({
+              id: toolId,
+              ts: Date.now(),
+              role: 'tool',
+              type: 'tool',
+              toolCallId: toolId,
+              icon: undefined,
+              label: undefined,
+              command: '',
+              status: 'running',
+              content: '',
+            });
+            toolMessageIndex = newMessages.length - 1;
           }
+
           const toolMessage = { ...newMessages[toolMessageIndex] };
 
+          // ヘッダーパッチ
           if (content?.__headerPatch) {
             const { icon, label, command } = content.__headerPatch;
             toolMessage.icon = icon ?? toolMessage.icon;
             toolMessage.label = label ?? toolMessage.label;
             toolMessage.command = command ?? toolMessage.command;
-            newMessages[toolMessageIndex] = toolMessage;
-            return newMessages;
-          }
-
-          let processedContent = '';
-          if (content) {
+          } else if (content) {
+            // 本文
             if (content.type === 'markdown') {
-              processedContent = content.markdown;
+              toolMessage.content = content.markdown;
             } else if (content.type === 'diff') {
-              processedContent = generateContextualDiffHtml(content.oldText, content.newText);
+              toolMessage.content = generateContextualDiffHtml(content.oldText || '', content.newText || '');
             } else if (typeof content === 'string') {
-              processedContent = `<pre>${content}</pre>`;
+              toolMessage.content = `<pre>${content}</pre>`;
             } else {
-              processedContent = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+              toolMessage.content = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
             }
           }
-          toolMessage.status = status;
-          toolMessage.content = processedContent;
+
+          // ステータス
+          toolMessage.status = status || toolMessage.status;
+
           newMessages[toolMessageIndex] = toolMessage;
           return newMessages;
         });

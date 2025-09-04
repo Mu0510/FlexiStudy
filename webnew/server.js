@@ -81,7 +81,8 @@ function acpRespond(id, result) {
 function mapToolStatus(status) {
   switch (status) {
     case 'pending': return 'running';
-    case 'success': return 'finished';
+    case 'success':
+    case 'completed': return 'finished';
     case 'failure': return 'error';
     default: return status;
   }
@@ -193,20 +194,37 @@ function handleCliMessage(jsonString, wss) {
       case 'session/update':
         handleSessionUpdate(msg.params.update, wss);
         break;
-      case 'session/request_permission':
-        {
-          // options 例:
-          // [{ optionId: 'proceed_always', kind: 'allow_always' }, { optionId: 'proceed_once', kind: 'allow_once' }, { optionId: 'cancel', kind: 'reject_once' }]
-          const opts = msg.params?.options || [];
-          const allowOnce = opts.find(o => o.kind === 'allow_once') || opts.find(o => o.optionId === 'proceed_once') || opts[0];
-          const optionId = allowOnce?.optionId || 'proceed_once';
-          // JSON-RPC の「応答」で返す（メソッド呼び出しではない）
-          acpRespond(msg.id, {
-            sessionId: acpSessionId,
-            outcome: { outcome: 'selected', optionId }
-          });
+      case 'session/request_permission': {
+        // まずツールカードのヘッダを全クライアントへ通知（permissionだけでtool_callが来ないため）
+        const tc = msg.params?.toolCall;
+        if (tc && tc.toolCallId) {
+          const nowTs = Date.now();
+          const pushMsg = {
+            jsonrpc: '2.0',
+            method: 'pushToolCall',
+            params: {
+              toolCallId: tc.toolCallId,
+              icon: tc.kind || 'tool',
+              label: tc.title || String(tc.kind || 'tool'),
+              locations: tc.locations || [],
+              // フロントは params.confirmation.command を読んで表示しているためここで提供
+              confirmation: { command: (tc.title || '').split(' (')[0] }
+            }
+          };
+          history.push({ ...pushMsg, ts: nowTs, type: 'tool' });
+          broadcast(wss, pushMsg);
         }
+
+        // 既存の permission 応答処理
+        const opts = msg.params?.options || [];
+        const allowOnce = opts.find(o => o.kind === 'allow_once') || opts.find(o => o.optionId === 'proceed_once') || opts[0];
+        const optionId = allowOnce?.optionId || 'proceed_once';
+        acpRespond(msg.id, {
+          sessionId: acpSessionId,
+          outcome: { outcome: 'selected', optionId }
+        });
         break;
+      }
     }
     return;
   }
