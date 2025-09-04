@@ -503,6 +503,23 @@ app.prepare().then(() => {
       }
 
       if (msg.method === 'fetchHistory') {
+        // 未確定テキストを「同一ID」で確定してから返す（ここが修正点）
+        if (currentAssistantMessage.id && currentAssistantMessage.text) {
+          const id = currentAssistantMessage.id;
+          const rec = {
+            id,
+            ts: Date.now(),
+            role: 'assistant',
+            text: currentAssistantMessage.text.trimEnd(),
+          };
+          // 既に同一IDの最終メッセージが履歴にあるか確認して重複を避ける
+          const exists = history.some(h => h.id === id);
+          if (!exists) {
+            history.push(rec);
+          }
+          // active テキストはここでは消さない（最終 addMessage と競合しないよう ID のみ合わせる）
+        }
+
         const { limit = 50, before, after } = msg.params || {};
 
         let chunk = history;

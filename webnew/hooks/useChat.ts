@@ -377,9 +377,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           return [...prev, converted];
         });
 
+        // 保険: 確定メッセージが来たらアクティブは即消す（ID一致で二重描画防止）
         if (converted.role === 'assistant') {
-          // サーバが確定メッセージを出したので、アクティブ中のバブルは即消す
-          setActiveMessage(null);
+          setActiveMessage(curr => (curr?.id === converted.id ? null : curr));
         }
 
         // 最新タイムスタンプを更新（履歴delta用）
