@@ -902,12 +902,20 @@ app.prepare().then(() => {
                 const optionId = allowOnce?.optionId || 'proceed_once';
                 acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
                 acpProvideSelected(optionId);
+                try {
+                  const hidx = findLastToolHistoryIndex(toolCallId);
+                  if (hidx !== -1) { history[hidx].status = 'running'; history[hidx].updatedTs = Date.now(); }
+                } catch {}
                 broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
               } else {
                 if (!json.tools.denyAlways.includes(cmdKey)) json.tools.denyAlways.push(cmdKey);
                 if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
                 else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
                 if (denyOpt?.optionId) acpProvideSelected(denyOpt.optionId);
+                try {
+                  const hidx = findLastToolHistoryIndex(toolCallId);
+                  if (hidx !== -1) { history[hidx].status = 'error'; history[hidx].updatedTs = Date.now(); }
+                } catch {}
                 broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
               }
               const tmp = settingsPath + '.tmp';
@@ -925,11 +933,19 @@ app.prepare().then(() => {
             const optionId = allowOnce?.optionId || 'proceed_once';
             acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
             acpProvideSelected(optionId);
+            try {
+              const hidx = findLastToolHistoryIndex(toolCallId);
+              if (hidx !== -1) { history[hidx].status = 'running'; history[hidx].updatedTs = Date.now(); }
+            } catch {}
             broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
           } else {
             if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
             else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
             if (denyOpt?.optionId) acpProvideSelected(denyOpt.optionId);
+            try {
+              const hidx = findLastToolHistoryIndex(toolCallId);
+              if (hidx !== -1) { history[hidx].status = 'error'; history[hidx].updatedTs = Date.now(); }
+            } catch {}
             broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
           }
           try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { ok: true } })); } catch {}

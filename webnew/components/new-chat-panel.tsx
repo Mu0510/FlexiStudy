@@ -808,7 +808,7 @@ export function NewChatPanel({
                         {getToolIconText(msg.icon)}
                       </span>
                       <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-                        {msg.label || (msg.cmdKey ? msg.cmdKey : "Tool Call")}
+                        {msg.label || "Tool Call"}
                       </CardTitle>
                     </div>
                     <div className="tool-card__line-break"></div>
@@ -832,14 +832,9 @@ export function NewChatPanel({
                     </div>
                     {msg.status === 'pending' && (
                       <div className="p-2">
-                        {/* What is being requested */}
-                        <div className="text-xs text-gray-700 dark:text-gray-300 mb-1">
-                          実行確認: <span className="font-semibold">{(msg.cmdKey || '').replace(/^shell:/,'').replace(/^npm:run:/,'npm run ') || getRelativePath(msg.command)}</span>
-                        </div>
-                        {/* Action area: responsive wrap */}
-                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
-                          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto" onClick={() => sendToolApproval?.(msg.id, 'allow_once')}>一度だけ許可</Button>
-                          <div className="flex gap-2 flex-wrap">
+                        <div className="flex flex-col gap-2">
+                          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white w-full" onClick={() => sendToolApproval?.(msg.id, 'allow_once')}>一度だけ許可</Button>
+                          <div className="grid grid-cols-3 gap-2">
                             <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'allow_always')}>常に許可</Button>
                             <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'deny')}>拒否</Button>
                             <Button size="sm" variant="ghost" onClick={() => sendToolApproval?.(msg.id, 'deny_always')}>常に拒否</Button>
