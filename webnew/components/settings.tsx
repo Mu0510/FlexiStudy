@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useTheme } from "next-themes"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { getSubjectStyle } from "@/lib/utils";
-import { SettingsIcon, User, Bell, Palette, Shield, Download, Upload, Trash2, Save } from "lucide-react"
+import { SettingsIcon, User, Bell, Palette, Shield, Download, Upload, Trash2, Save, Loader2, CheckCircle, XCircle } from "lucide-react"
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
 
 interface SettingsProps {
   uniqueSubjects: string[];
@@ -27,6 +28,9 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [notifications, setNotifications] = useState(true)
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
+  const [testIntent, setTestIntent] = useState<string>('study_reminder')
+  const [isTesting, setIsTesting] = useState(false)
+  const [testResult, setTestResult] = useState<null | { decision: string; reason?: string; notification?: { title?: string; body?: string; action_url?: string; tag?: string; category?: string }; sent?: boolean }>(null)
   const [weeklyPeriod, setWeeklyPeriod] = useState('this_week');
   const [weekStart, setWeekStart] = useState<'sunday' | 'monday'>('sunday');
   const [appInfo, setAppInfo] = useState<{ version: string | null; lastCommitDate: string | null; git: { branch?: string | null; commit?: string | null } | null } | null>(() => {
@@ -89,6 +93,77 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Push notifications subscribe/unsubscribe on toggle
+  const pushEffectReady = useRef(false);
+  useEffect(() => {
+    const urlB64ToUint8Array = (base64String: string) => {
+      const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = typeof window !== 'undefined' ? window.atob(base64) : Buffer.from(base64, 'base64').toString('binary');
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+      return outputArray;
+    };
+
+    const enablePush = async () => {
+      if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { toast.error('通知の許可が必要です'); return; }
+      const reg = await navigator.serviceWorker.ready;
+      try {
+        const existing = await reg.pushManager.getSubscription();
+        if (existing) {
+          // Ensure server knows about it
+          await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', subscription: existing }) });
+          toast.info('既存のプッシュ購読を使用します');
+          return;
+        }
+      } catch {}
+      try {
+        const keyRes = await fetch('/api/push/vapidPublicKey');
+        const keyJson = await keyRes.json();
+        const pub = keyJson?.key;
+        if (!pub) { toast.error('通知キーが未設定です'); return; }
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(pub) });
+        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', subscription: sub }) });
+        toast.success('プッシュ通知を有効化しました');
+      } catch (e: any) {
+        console.error('Push subscribe failed:', e);
+        toast.error(`Push登録に失敗しました: ${e?.message || e}`);
+      }
+    };
+
+    const disablePush = async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) {
+          await fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', endpoint: sub.endpoint }) });
+          await sub.unsubscribe();
+        }
+      } catch {}
+      toast.info('プッシュ通知を無効化しました');
+    };
+
+    // Initialize: detect existing subscription to avoid auto-register errors
+    (async () => {
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        setNotifications(Boolean(sub));
+      } catch {}
+      pushEffectReady.current = true;
+    })();
+
+    const handler = async () => {
+      if (!pushEffectReady.current) return;
+      if (notifications) await enablePush();
+      else await disablePush();
+    };
+    handler();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifications]);
   useEffect(() => {
     // Fetch app and git info for display（ローカルキャッシュ→上書き）
     fetch('/api/app-info')
@@ -357,6 +432,81 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                   <p className="text-sm text-slate-600 dark:text-slate-400">毎週の学習サマリーを受け取る</p>
                 </div>
                 <Switch id="weeklyReports" checked={weeklyReports} onCheckedChange={setWeeklyReports} />
+              </div>
+
+              <div className="mt-4 p-3 rounded-md border border-dashed border-slate-300 dark:border-slate-600">
+                <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">通知テスト</div>
+                <div className="flex items-center gap-2">
+                  <Select value={testIntent} onValueChange={setTestIntent} disabled={isTesting}>
+                    <SelectTrigger className="w-48">
+                      <SelectValue placeholder="インテントを選択" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="study_reminder">study_reminder</SelectItem>
+                      <SelectItem value="exam_check">exam_check</SelectItem>
+                      <SelectItem value="chat_followup">chat_followup</SelectItem>
+                      <SelectItem value="auto">auto</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="default"
+                    disabled={isTesting}
+                    onClick={async () => {
+                      setIsTesting(true);
+                      setTestResult(null);
+                      try {
+                        const r = await fetch('/api/notify/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intent: testIntent === 'auto' ? undefined : testIntent, context: { userId: 'local' } }) });
+                        if (r.status === 409) {
+                          setTestResult({ decision: 'skip', reason: 'busy (chat/notify in progress)' });
+                          toast.info('現在は生成中のためテストを実行できません');
+                          return;
+                        }
+                        const j = await r.json();
+                        const p = j?.payload || null;
+                        if (p?.decision === 'send' && p?.notification) {
+                          await fetch('/api/notify/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', notification: p.notification }) });
+                          setTestResult({ decision: 'send', notification: p.notification, sent: true });
+                          toast.success('テスト通知を送信しました');
+                        } else {
+                          setTestResult({ decision: String(p?.decision || 'skip'), reason: p?.reason || 'no_reason' });
+                          toast.info(`送信スキップ: ${p?.reason || 'no_reason'}`);
+                        }
+                      } catch (e) {
+                        setTestResult({ decision: 'error', reason: 'request_failed' });
+                        toast.error('通知テストに失敗しました');
+                      } finally {
+                        setIsTesting(false);
+                      }
+                    }}
+                  >
+                    {isTesting ? (
+                      <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> 実行中...</span>
+                    ) : (
+                      '通知をテスト'
+                    )}
+                  </Button>
+                </div>
+                {testResult && (
+                  <div className="mt-3 rounded-md border border-slate-200 dark:border-slate-700 p-3 text-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      {testResult.decision === 'send' ? <CheckCircle className="w-4 h-4 text-green-600" /> : testResult.decision === 'error' ? <XCircle className="w-4 h-4 text-red-600" /> : <XCircle className="w-4 h-4 text-slate-400" />}
+                      <span className="font-medium">結果: {testResult.decision}</span>
+                      {testResult.sent ? <span className="ml-2 text-green-600">送信済み</span> : null}
+                    </div>
+                    {testResult.reason && (
+                      <div className="text-slate-600 dark:text-slate-300">理由: {testResult.reason}</div>
+                    )}
+                    {testResult.notification && (
+                      <div className="mt-2 rounded bg-slate-50 dark:bg-slate-900/40 p-2">
+                        <div className="text-slate-800 dark:text-slate-100 font-semibold">{testResult.notification.title || '(タイトル未設定)'}</div>
+                        <div className="text-slate-600 dark:text-slate-300 whitespace-pre-wrap">{testResult.notification.body || '(本文未設定)'}</div>
+                        {testResult.notification.action_url && (
+                          <div className="text-slate-500 dark:text-slate-400 text-xs mt-1">action: {testResult.notification.action_url}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

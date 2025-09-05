@@ -1,0 +1,12 @@
+{
+  "cron": "0 20 * * *",
+  "events": {
+    "study_log_updated": { "cooldown_minutes": 60 },
+    "exam_approaching": { "days_before": [14, 7, 1] }
+  },
+  "ai_poll": {
+    "interval_minutes": 60,
+    "intents": ["study_reminder", "exam_check", "chat_followup"]
+  }
+}
+

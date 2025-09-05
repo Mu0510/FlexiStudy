@@ -1,0 +1,30 @@
+{
+  "study_reminder": {
+    "enabled": true,
+    "min_interval_minutes": 240,
+    "tag": "study_reminder",
+    "category": "engagement",
+    "cta_url": "/today",
+    "guardrails": { "require_no_recent_sent": 180, "avoid_quiet_hours": true },
+    "data_needs": ["study_stats_7d", "last_notifications", "chat_pending"]
+  },
+  "exam_check": {
+    "enabled": true,
+    "min_interval_minutes": 720,
+    "tag": "exam_check",
+    "category": "deadline",
+    "cta_url": "/exam",
+    "guardrails": { "require_no_recent_sent": 720, "avoid_quiet_hours": true },
+    "data_needs": ["exam_calendar", "last_notifications"]
+  },
+  "chat_followup": {
+    "enabled": true,
+    "min_interval_minutes": 360,
+    "tag": "chat_followup",
+    "category": "reengagement",
+    "cta_url": "/chat",
+    "guardrails": { "require_no_recent_sent": 360, "avoid_quiet_hours": true },
+    "data_needs": ["last_chat_threads", "last_notifications"]
+  }
+}
+

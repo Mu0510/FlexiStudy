@@ -18,7 +18,7 @@ const nextConfig = {
     : {}),
 };
 
-// Next-PWA with GenerateSW. Keep HTML/API dynamic by not caching them.
+// Example runtime strategies (used by our custom SW, not by InjectManifest options)
 const runtimeCaching = [
   {
     // Images
@@ -64,8 +64,9 @@ const withPwa = withPWA({
   skipWaiting: true,
   clientsClaim: true,
   cleanupOutdatedCaches: true,
-  disable: false, // Keep PWA enabled in dev per requirements
-  runtimeCaching,
+  // Disable next-pwa in dev to avoid InjectManifest issues; use sw-dev.js instead
+  disable: process.env.NODE_ENV !== 'production',
+  swSrc: 'sw.js', // Use our custom Service Worker (InjectManifest)
   buildExcludes: [/middleware-manifest\.json$/i, /\.map$/i],
 });
 

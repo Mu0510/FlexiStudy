@@ -6,6 +6,7 @@ import { ViewportController } from '@/components/viewport-controller'
 import { ThemeProvider } from "@/components/theme-provider"
 import { WebSocketProvider } from '@/context/WebSocketContext';
 import DebugConsole from '@/components/debug-console'
+import { DevSWRegister } from '@/components/dev-sw-register'
 
 export const metadata: Metadata = {
   title: 'FlexiStudy',
@@ -38,7 +39,7 @@ html {
       <body>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
+          defaultTheme="light"
           enableSystem
           disableTransitionOnChange
         >
@@ -46,6 +47,7 @@ html {
           <WebSocketProvider>
             {children}
           </WebSocketProvider>
+          <DevSWRegister />
           {/* In-app logs enabled via ?debug=1 or localStorage('app.debug.console'='1') */}
           <DebugConsole />
         </ThemeProvider>

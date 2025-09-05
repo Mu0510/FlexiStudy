@@ -95,6 +95,8 @@ interface NewChatPanelProps {
   // --- File related props ---
   selectedFiles: File[];
   setSelectedFiles: (files: File[]) => void;
+  // --- Lock input while notification decision is running ---
+  inputLocked?: boolean;
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -160,6 +162,7 @@ export function NewChatPanel({
   // --- File related props ---
   selectedFiles,
   setSelectedFiles,
+  inputLocked,
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
   const isMobile = useIsMobile();
@@ -1033,10 +1036,10 @@ export function NewChatPanel({
               )}
 
               {/* Offline notice inside input area */}
-              {!online && (
+              {(!online || inputLocked) && (
                 <div className="mb-2 px-3 py-2 text-xs text-yellow-800 bg-yellow-100 border border-yellow-300 rounded-md flex items-center gap-2">
                   <XCircle className="h-4 w-4" />
-                  <span>オフラインです。接続後に送信してください。</span>
+                  <span>{!online ? 'オフラインです。接続後に送信してください。' : '通知を生成中です。完了するまで送信できません。'}</span>
                 </div>
               )}
 
@@ -1071,10 +1074,10 @@ export function NewChatPanel({
                   handleKeyDown(e);
                 }}
                 onPaste={handlePaste}
-                placeholder={online ? "システムと対話... (Alt+Enterで送信)" : "オフライン中は送信できません"}
+                placeholder={online ? (inputLocked ? "通知を生成中です…" : "システムと対話... (Alt+Enterで送信)") : "オフライン中は送信できません"}
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1 text-base"
                 rows={1}
-                disabled={isUploading || !online}
+                disabled={isUploading || !online || Boolean(inputLocked)}
               />
               {slashOpen && filteredSlash.length > 0 && (
                 <div className="absolute -top-2 translate-y-[-100%] left-2 z-50 w-64 rounded-md border bg-popover text-popover-foreground shadow-md">
@@ -1095,12 +1098,12 @@ export function NewChatPanel({
               )}
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading || !online}>
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading || !online || Boolean(inputLocked)}>
                         <Plus className="w-5 h-5" />
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 px-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-1" disabled={isUploading || !online}>
+                        <Button variant="ghost" className="h-8 px-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 flex items-center gap-1" disabled={isUploading || !online || Boolean(inputLocked)}>
                           <SlidersHorizontal className="w-4 h-4" />
                           <span className="text-sm font-light">ツール</span>
                         </Button>
@@ -1173,7 +1176,7 @@ export function NewChatPanel({
                       "w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400",
                       isRecording && "bg-red-500/20 text-red-500 hover:bg-red-500/30 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
                     )}
-                    disabled={isGeneratingResponse || isUploading || !online}
+                    disabled={isGeneratingResponse || isUploading || !online || Boolean(inputLocked)}
                     onClick={handleMicClick}
                   >
                     <Mic className="w-5 h-5" />
@@ -1181,9 +1184,9 @@ export function NewChatPanel({
                   <Button
                     onClick={(isGeneratingResponse || isUploading) ? handleCancel : handleSendMessage}
                     disabled={
-                      (isGeneratingResponse || isUploading)
+                      inputLocked ? true : ((isGeneratingResponse || isUploading)
                         ? false // 生成中・アップロード中はキャンセルボタンとして常に有効
-                        : (!online || (!input.trim() && !interimTranscript.trim() && selectedFiles.length === 0)) // オフラインまたは入力なしで無効
+                        : (!online || (!input.trim() && !interimTranscript.trim() && selectedFiles.length === 0))) // オフラインまたは入力なしで無効
                     }
                     className="w-7 h-7 p-0 flex-shrink-0 bg-black dark:bg-white hover:bg-gray-800 dark:hover:bg-gray-200 text-white dark:text-black rounded-full flex items-center justify-center"
                   >

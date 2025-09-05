@@ -65,7 +65,7 @@ export default function StudyApp() {
   const online = useOnlineStatus();
   const { subscribe } = useWebSocket();
 
-  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages, sendToolApproval } = useChat({
+  const { messages, activeMessage, isGeneratingResponse, isNotifyBusy, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages, sendToolApproval } = useChat({
     onMessageReceived: () => {
       // messagesContainerRef は NewChatPanel 内にあるため、ここでは直接操作できない
       // NewChatPanel 内でスクロールロジックを維持する
@@ -304,6 +304,28 @@ export default function StudyApp() {
     const unsub = subscribe((msg: any) => {
       const { method, params } = msg || {};
       if (!method || !params) return;
+
+      // Server-initiated notification: show via Service Worker
+      if (method === 'notify') {
+        const n = params?.notification || {};
+        (async () => {
+          try {
+            if (!('Notification' in window)) return;
+            const perm = await Notification.requestPermission();
+            if (perm !== 'granted') return;
+            if ('serviceWorker' in navigator) {
+              const reg = await navigator.serviceWorker.ready;
+              await reg.showNotification(n.title || 'FlexiStudy', {
+                body: n.body || '', icon: '/FlexiStudy_icon.svg', badge: '/FlexiStudy_icon.svg',
+                tag: n.tag || 'general', data: { url: n.action_url || '/' }, requireInteraction: false,
+              });
+            } else {
+              new Notification(n.title || 'FlexiStudy', { body: n.body || '' });
+            }
+          } catch {}
+        })();
+        return;
+      }
 
       // Goals → Dashboard.todayGoals を最小パッチ + StudyRecords.daily_summary.goals をピンポイント更新
       if (method === 'goalAdded' || method === 'goalUpdated' || method === 'goalDeleted') {
@@ -583,6 +605,7 @@ export default function StudyApp() {
             setInput={setChatInput}
                   selectedFiles={selectedFilesForChat}
                   setSelectedFiles={setSelectedFilesForChat}
+                  inputLocked={isNotifyBusy}
                   selectedGoal={selectedGoalForChat}
                   onClearSelectedGoal={handleClearSelectedGoal}
                   selectedSession={selectedSessionForChat}
@@ -667,7 +690,7 @@ export default function StudyApp() {
         )}
         
         {activeView !== 'system-chat' && (
-          <NewChatPanel 
+          <NewChatPanel
             showAs="floating"
             isOpen={isNewChatOpen} 
             onClose={() => {
@@ -698,9 +721,11 @@ export default function StudyApp() {
             setInput={setChatInput}
             selectedFiles={selectedFilesForChat}
             setSelectedFiles={setSelectedFilesForChat}
+            inputLocked={isNotifyBusy}
           />
         )}
       </div>
     </div>
   )
 }
+      

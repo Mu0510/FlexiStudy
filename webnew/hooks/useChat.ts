@@ -120,10 +120,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   // 直前に確定した assistant 本文のプレフィクスを、次のストリーム先頭で一度だけトリム
   const pendingTrimPrefixRef = useRef<string | null>(null);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
+  const [isNotifyBusy, setIsNotifyBusy] = useState<boolean>(false);
   const { ws, subscribe, sendMessage: sendWsMessage, isConnected } = useWebSocket();
   const requestIdCounter = useRef<number>(1);
   const lastSentRequestId = useRef<number | null>(null);
   const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingUserByReqId = useRef<Map<number, string>>(new Map());
 
   useEffect(() => {
     activeMessageRef.current = activeMessage;
@@ -195,7 +197,23 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         return;
       }
 
+      // 通知生成のビジーフラグ（送信ガード用）
+      if (msg?.method === 'notifyBusy') {
+        setIsNotifyBusy(Boolean(msg?.params?.active));
+        return;
+      }
+
       // ストリーム完了通知（ターン終端）。確定処理を実行
+      if (msg?.id !== undefined && msg?.error && typeof msg.error?.message === 'string') {
+        // Roll back optimistic user message if server rejected (e.g., notify_busy)
+        const mid = pendingUserByReqId.current.get(Number(msg.id));
+        if (mid) {
+          pendingUserByReqId.current.delete(Number(msg.id));
+          setMessages(prev => prev.filter(m => m.id !== mid));
+        }
+        return;
+      }
+
       if (msg?.method === 'messageCompleted') {
         // After a turn completes, reconcile with server to heal any missed chunks
         if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current);
@@ -426,16 +444,22 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           }
 
           const m: any = { ...list[idx] };
+          const prevContent: any = list[idx]?.content;
+          const prevLooksLikeDiff = typeof prevContent === 'string' && prevContent.includes('diff-prefix');
           if (content?.__headerPatch) {
             const { icon, label, command } = content.__headerPatch;
             if (icon !== undefined) m.icon = icon;
             if (label !== undefined) m.label = label;
             if (command !== undefined) m.command = command;
           } else if (content) {
-            if (content.type === 'markdown' && typeof content.markdown === 'string') m.content = content.markdown;
-            else if (content.type === 'diff') m.content = generateContextualDiffHtml(content.oldText, content.newText);
-            else if (typeof content === 'string') m.content = `<pre>${content}</pre>`;
-            else m.content = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+            // If we already show a diff, do not overwrite it unless a new diff arrives
+            if (content.type === 'diff') {
+              m.content = generateContextualDiffHtml(content.oldText, content.newText);
+            } else if (!prevLooksLikeDiff) {
+              if (content.type === 'markdown' && typeof content.markdown === 'string') m.content = content.markdown;
+              else if (typeof content === 'string') m.content = `<pre>${content}</pre>`;
+              else m.content = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
+            }
           }
           if (normalized) m.status = normalized;
           list[idx] = m;
@@ -469,23 +493,43 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         // サーバーからの順序を尊重しつつ、既存の shadow をサーバー値で置換する
         setMessages(prev => {
           const list = [...prev];
-          const converted = (uniqueRaw as any[]).map((m: any) => ({
-            id: m.id,
-            ts: m.ts,
-            updatedTs: m.updatedTs,
-            role: m.role,
-            content: m.text || m.content,
-            files: m.files || [],
-            goal: m.goal || null,
-            session: m.session || null,
-            type: m.type,
-            toolCallId: m.toolCallId,
-            status: m.status,
-            icon: m.icon,
-            label: m.label,
-            command: m.command,
-            origin: 'server' as const,
-          } as Message));
+          const converted = (uniqueRaw as any[]).map((rm: any) => {
+            // Normalize tool content for history (render diff/markdown as in live updates)
+            let normalizedContent: any = rm.text ?? rm.content;
+            if (rm.role === 'tool') {
+              try {
+                let obj = normalizedContent;
+                if (typeof obj === 'string') {
+                  const s = obj.trim();
+                  if (s.startsWith('{') || s.startsWith('[')) {
+                    try { obj = JSON.parse(s); } catch {}
+                  }
+                }
+                if (obj && typeof obj === 'object') {
+                  if (obj.type === 'diff') normalizedContent = generateContextualDiffHtml(obj.oldText || '', obj.newText || '');
+                  else if (obj.type === 'markdown' && typeof obj.markdown === 'string') normalizedContent = obj.markdown;
+                }
+              } catch {}
+            }
+            const msg: Message = {
+              id: rm.id,
+              ts: rm.ts,
+              updatedTs: rm.updatedTs,
+              role: rm.role,
+              content: normalizedContent,
+              files: rm.files || [],
+              goal: rm.goal || null,
+              session: rm.session || null,
+              type: rm.type,
+              toolCallId: rm.toolCallId,
+              status: rm.status,
+              icon: rm.icon,
+              label: rm.label,
+              command: rm.command,
+              origin: 'server' as const,
+            };
+            return msg;
+          });
 
         const toInsert: Message[] = [];
         for (const m of converted) {
@@ -536,7 +580,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   }, [ws, subscribe, sendWsMessage, finalizeTurn, onMessageReceived]);
 
   const sendMessage = useCallback((messageData: SendMessageData): boolean => {
-    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse || isNotifyBusy) {
       console.warn("WebSocket is not open or busy, cannot send message.");
       return false;
     }
@@ -557,9 +601,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       jsonrpc: '2.0', id: reqId, method: 'sendUserMessage',
       params: { chunks: [{ text, files, goal, messageId: newMessage.id, session, features }] }
     };
+    // map req -> messageId for rollback on error
+    pendingUserByReqId.current.set(reqId, newMessage.id);
     sendWsMessage(req);
     return true;
-  }, [ws, isGeneratingResponse, sendWsMessage]);
+  }, [ws, isGeneratingResponse, isNotifyBusy, sendWsMessage]);
 
   const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
     if (!ws) return;
@@ -699,6 +745,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     messages,
     activeMessage,
     isGeneratingResponse,
+    isNotifyBusy,
     isFetchingHistory: historyState.current.isFetchingHistory,
     historyFinished: historyState.current.finished,
     sendMessage,
