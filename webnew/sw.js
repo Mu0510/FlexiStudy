@@ -42,3 +42,35 @@ registerRoute(
 // Note: We intentionally do NOT cache HTML navigations or APIs here
 // to avoid stale SSR content in a highly dynamic app. Add routes as needed.
 
+// --- Push Notifications (runtime) ---
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event?.data ? event.data.json() : {}; } catch {}
+  const title = data.title || 'FlexiStudy';
+  const options = {
+    body: data.body || '',
+    icon: '/FlexiStudy_icon.svg',
+    badge: '/FlexiStudy_icon.svg',
+    tag: data.tag || 'general',
+    data: { url: data.action_url || '/', notificationId: data.id || null },
+    requireInteraction: false,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event?.notification?.data?.url || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const scope = self.registration.scope || '/';
+      const existing = list.find((c) => (c.url || '').includes(scope));
+      if (existing) {
+        try { existing.focus(); } catch {}
+        try { return existing.navigate(url); } catch {}
+        return existing;
+      }
+      return clients.openWindow(url);
+    })
+  );
+});

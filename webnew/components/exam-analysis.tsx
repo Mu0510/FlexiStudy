@@ -73,17 +73,18 @@ export function ExamAnalysis() {
     <div className="space-y-6 pt-16 lg:pt-0 relative">
       <FeatureOverlay
         enabled={overlayAllowed && showOverlay}
+        mode="fixed"
         title="この機能は未実装です"
-        message={"模試分析は、あなたとAIの協働で小さく進めるのがコツです。難しい処理はAIに任せ、あなたは“何をしたいか”を短く伝えていきましょう。\n\nまずは『結果をPDFにする→AIに分析させる→要約をGeminiに共有→画面用JSONに整形→表示』の順で最小構成から。"}
+        message={"AIと一緒に機能を実装してみませんか？\nコツは “何をしたいか” を詳しく具体的に伝えることです。\n\nまずは『結果をPDFにする→外部のAIエージェントに分析させる→要約をこのアプリのAIに共有→画面用JSONに整形→表示』の順で最小構成で実装してみましょう。"}
         bullets={[
           "紙の成績表をスキャン（またはサイトからDL）してPDF化する",
-          "GPTのエージェントモードにPDFを渡し、科目ごとの強み/弱み・設問分析・伸ばす勉強方針を作ってもらう",
+          "高機能AIエージェントにPDFを渡し、科目ごとの強み/弱み・設問分析・伸ばす勉強方針を作ってもらう",
           "そのレポートをGeminiに共有し、『画面表示用のJSON（科目・テーマ・優先度・学習タスク案）』を生成してもらう",
           "この画面では生成されたJSONを読み取り、カードやグラフで表示する",
           "慣れてきたら自動取り込み（DriveやDownloads監視）や比較グラフなどに拡張",
         ]}
-        buttonLabel="Geminiと一緒に実装を始める"
-        requestChatPrompt={'この「模試分析」を一緒に設計・実装したい。まず目的と最小要件を短くすり合わせ、その後、小さなタスクに分解して進めよう。'}
+        buttonLabel="AIと一緒に実装を始める"
+        requestChatPrompt={'webnew以下のウェブアプリに関して、「模試分析」機能を実装したい。まずはどんな機能にするか一緒に話し合おう。'}
         secondaryLabel="サンプルを見る"
         onSecondary={() => setShowOverlay(false)}
       />

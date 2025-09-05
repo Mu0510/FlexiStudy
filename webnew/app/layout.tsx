@@ -28,6 +28,12 @@ html {
 }
         `}</style>
         <link rel="manifest" href="/manifest.json" />
+        {/* Favicon: prefer ICO for broad compatibility */}
+        <link rel="icon" href="/favicon.ico" sizes="any" />
+        {/* Optional: SVG for modern browsers */}
+        <link rel="icon" href="/FlexiStudy_icon.svg" type="image/svg+xml" />
+        {/* Apple touch icon (PNG) */}
+        <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
       </head>
       <body>
         <ThemeProvider

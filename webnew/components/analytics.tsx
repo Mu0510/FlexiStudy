@@ -7,6 +7,7 @@ import { BarChart3, TrendingUp, Clock, Target, Calendar, Award, BookOpen, Zap, A
 import { SubjectStudyTimeChart } from "@/components/subject-study-time-chart"
 import { useEffect, useState } from "react"
 import { FeatureOverlay } from "@/components/feature-overlay"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 
 interface WeeklyData {
   day: string;
@@ -78,7 +79,21 @@ export function Analytics() {
   };
 
   useEffect(() => {
-    fetchAll();
+    // First, try to sync settings from server
+    const sync = async () => {
+      try {
+        const r = await fetch('/api/settings?keys=weeklyPeriod,weekStart');
+        const data = await r.json();
+        const s = data?.settings || {};
+        let changed = false;
+        if (s['weeklyPeriod'] && s['weeklyPeriod'] !== weeklyPeriod) { setWeeklyPeriod(s['weeklyPeriod']); try { localStorage.setItem('weeklyPeriod', s['weeklyPeriod']); } catch {}; changed = true; }
+        if (s['weekStart'] && s['weekStart'] !== weekStart) { setWeekStart(s['weekStart']); try { localStorage.setItem('weekStart', s['weekStart']); } catch {}; changed = true; }
+        fetchAll();
+      } catch {
+        fetchAll();
+      }
+    };
+    sync();
   }, [weeklyPeriod, weekStart]);
 
   // アナリティクスはDBライブ更新不要。
@@ -121,6 +136,8 @@ export function Analytics() {
   };
 
   const [showInsightsOverlay, setShowInsightsOverlay] = useState(true);
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   return (
     <div className="space-y-6 pt-16 lg:pt-0 relative">
@@ -132,14 +149,87 @@ export function Analytics() {
         </div>
 
         <div className="flex items-center space-x-3">
-          <Button variant="outline" size="sm" className="border-neutral-300 text-neutral-700 bg-transparent">
-            <Calendar className="w-4 h-4 mr-2" />
-            期間選択
-          </Button>
-          <Button variant="outline" size="sm" className="border-neutral-300 text-neutral-700 bg-transparent">
-            <BarChart3 className="w-4 h-4 mr-2" />
-            エクスポート
-          </Button>
+          <Popover open={periodOpen} onOpenChange={setPeriodOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-neutral-300 text-neutral-700 bg-transparent"
+              >
+                <Calendar className="w-4 h-4 mr-2" />
+                期間選択
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80">
+              <div className="space-y-2">
+                <div className="flex items-center text-sm font-semibold text-neutral-800 dark:text-slate-100">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 mr-2" />
+                  この機能は未実装です
+                </div>
+                <p className="text-sm text-neutral-700 dark:text-slate-300">
+                  AIと一緒に実装してみませんか？
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('chat:open-with-prompt', {
+                        detail: { text: 'webnew以下のウェブアプリに関して、グラフ分析パネルの「期間選択」機能を実装したい。\nまずはどんな機能にするか一緒に話し合おう。' }
+                      }))
+                      setPeriodOpen(false)
+                    }}
+                  >
+                    AIと一緒に実装
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setPeriodOpen(false)}>
+                    閉じる
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          <Popover open={exportOpen} onOpenChange={setExportOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-neutral-300 text-neutral-700 bg-transparent"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                エクスポート
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-80">
+              <div className="space-y-2">
+                <div className="flex items-center text-sm font-semibold text-neutral-800 dark:text-slate-100">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 mr-2" />
+                  この機能は未実装です
+                </div>
+                <p className="text-sm text-neutral-700 dark:text-slate-300">
+                  どの形式で出力するか（CSV/PNG/PDF）から一緒に決めましょう。
+                </p>
+                <div className="flex gap-2 pt-1">
+                  <Button
+                    size="sm"
+                    className="bg-blue-600 text-white hover:bg-blue-700"
+                    onClick={() => {
+                      window.dispatchEvent(new CustomEvent('chat:open-with-prompt', {
+                        detail: { text: 'webnew以下のウェブアプリに関して、グラフ分析パネルの「エクスポート」機能を実装したい。まずはどんな機能にするか一緒に話し合おう。' }
+                      }))
+                      setExportOpen(false)
+                    }}
+                  >
+                    AIと一緒に実装
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setExportOpen(false)}>
+                    閉じる
+                  </Button>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -189,7 +279,7 @@ export function Analytics() {
                 <div className="text-2xl font-bold text-accent-800 dark:text-slate-100">
                   {isLoading ? '...' : `${Math.round(dashboardData?.studyStats.goalAchievementRate ?? 0)}%`}
                 </div>
-                <div className="text-sm text-accent-700 dark:text-slate-400">目標達成率</div>
+                <div className="text-sm text-accent-700 dark:text-slate-400">時間達成率</div>
               </div>
             </div>
           </CardContent>
@@ -205,7 +295,7 @@ export function Analytics() {
                 <div className="text-2xl font-bold text-neutral-800 dark:text-slate-100">
                   {isLoading ? '...' : formatTime(dashboardData?.studyStats.monthlyTime ?? 0)}
                 </div>
-                <div className="text-sm text-neutral-700 dark:text-slate-400">直近30日間</div>
+                <div className="text-sm text-neutral-700 dark:text-slate-400">過去30日間</div>
               </div>
             </div>
           </CardContent>
@@ -299,9 +389,9 @@ export function Analytics() {
           <FeatureOverlay
             enabled={(process.env.NEXT_PUBLIC_SHOW_IDEA_OVERLAYS ?? '1') !== '0' && showInsightsOverlay}
             title="この機能は未実装です"
-            message={'学習インサイトは、あなたとAIの協働で少しずつ作るのがコツです。まずは「どんな気づきが欲しいか」を短く共有して、一緒に小さく作っていきましょう。'}
-            buttonLabel="Geminiと一緒に実装を始める"
-            requestChatPrompt={'この「学習インサイト」を一緒に設計・実装したい。まず欲しい気づきを短く決め、その後、小さなタスクに分解して進めよう。'}
+            message={'学習インサイトを実装してみませんか？\nまずは「どんな分析が欲しいか」を共有して、AIと一緒に作っていきましょう。\n「gemini -p "プロンプト"」コマンドを利用して、AIに分析を生成させると面白そうです。'}
+            buttonLabel="AIと一緒に実装を始める"
+            requestChatPrompt={'webnew以下のウェブアプリに関して、グラフ分析パネルの「学習インサイト」機能を実装したい。まずはどんな機能にするか一緒に話し合おう。'}
             secondaryLabel="サンプルを見る"
             onSecondary={() => setShowInsightsOverlay(false)}
           />
@@ -314,14 +404,14 @@ export function Analytics() {
         <div className="mt-10">
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800">
             <CardHeader>
-              <CardTitle className="text-neutral-800 dark:text-slate-100">グラフを増やしたい方へ（アイディア）</CardTitle>
+              <CardTitle className="text-neutral-800 dark:text-slate-100">グラフを増やしたい方へ</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-neutral-700 dark:text-slate-300">
               <p>
-                『こんなグラフが欲しい』を短く伝えて、必要に応じてAIと対話しながら決めていきましょう。次の分解が助けになります。
+                『こんなグラフが欲しい』具体的に詳しく伝えて、AIと対話しながら実装していきましょう。
               </p>
               <ul className="list-disc pl-5 space-y-1">
-                <li>知りたいことを1文で（例：教科×直近8週の推移、曜日×時間帯の集中度）</li>
+                <li>表示したい内容を具体的に（例：教科×直近8週の推移、曜日×時間帯の集中度）</li>
                 <li>必要なデータ項目（期間・科目・合計時間・平均スコア など）</li>
                 <li>集計の粒度と並び順（週/日/時間帯、降順など）</li>
                 <li>グラフ型（棒/折れ線/ヒートマップ/ドーナツ）と注釈（目標ライン/前週比）</li>
@@ -330,12 +420,12 @@ export function Analytics() {
               <div>
                 <Button
                   onClick={() => window.dispatchEvent(new CustomEvent('chat:open-with-prompt', {
-                    detail: { text: 'この「グラフ分析」を一緒に設計・実装したい。まず目的と最小のグラフから短く決め、その後、小さなタスクに分解して進めよう。' }
+                    detail: { text: 'webnew以下のウェブアプリに関して、「グラフ分析」を実装したい。まずはどんな機能にするか一緒に話し合おう。' }
                   }))}
                   className="bg-blue-600 text-white hover:bg-blue-700"
                   size="sm"
                 >
-                  Geminiと一緒に実装を始める
+                  AIと一緒に実装を始める
                 </Button>
               </div>
             </CardContent>

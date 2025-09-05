@@ -60,3 +60,36 @@ self.addEventListener('fetch', (event) => {
   // Everything else: pass-through (network)
   // Keep SSR and dev static fresh; no offline fallback in dev
 });
+
+// --- Push Notifications for dev ---
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event?.data ? event.data.json() : {}; } catch {}
+  const title = data.title || 'FlexiStudy';
+  const options = {
+    body: data.body || '',
+    icon: '/FlexiStudy_icon.svg',
+    badge: '/FlexiStudy_icon.svg',
+    tag: data.tag || 'general',
+    data: { url: data.action_url || '/', notificationId: data.id || null },
+    requireInteraction: false,
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = event?.notification?.data?.url || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      const scope = self.registration.scope || '/';
+      const existing = list.find((c) => (c.url || '').includes(scope));
+      if (existing) {
+        try { existing.focus(); } catch {}
+        try { return existing.navigate(url); } catch {}
+        return existing;
+      }
+      return clients.openWindow(url);
+    })
+  );
+});

@@ -46,6 +46,10 @@ const acpPending = new Map();
 const pendingPrompts = [];
 let isSessionReady = false;
 let currentAssistantMessage = { id: null, text: '', thought: '' };
+// Hidden-prompt support: suppress broadcast/history for the next assistant turn
+let suppressNextAssistantBroadcast = false;
+// Waiters that resolve with the next assistant final text (used by hidden prompts)
+const assistantTurnWaiters = [];
 // Map toolCallId -> { requestId, options, cmdKey }
 const permissionWaiters = new Map();
 
@@ -541,24 +545,36 @@ function flushAssistantMessage(wss, stopReason) {
   // テキストがある場合のみ処理
   if (currentAssistantMessage.id && currentAssistantMessage.text) {
     const trimmed = currentAssistantMessage.text.trim();
-    const last = history.length > 0 ? history[history.length - 1] : null;
-    const isExactDup = last && last.id === currentAssistantMessage.id && last.role === 'assistant' && last.text === trimmed;
-    if (!isExactDup) {
-      const assistantMessage = {
-        id: currentAssistantMessage.id,
-        ts: Date.now(),
-        role: 'assistant',
-        text: trimmed,
-      };
-      // 1. 履歴に保存する
-      history.push(assistantMessage);
-      // 2. addMessage で全クライアントに確定したメッセージを通知
-      broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+    // hidden-prompt モードでは履歴保存・ブロードキャストを抑制し、待機者にのみ返す
+    if (suppressNextAssistantBroadcast) {
+      try {
+        while (assistantTurnWaiters.length) {
+          const resolve = assistantTurnWaiters.shift();
+          try { resolve({ text: trimmed, stopReason: stopReason || 'end_turn' }); } catch {}
+        }
+      } finally {
+        suppressNextAssistantBroadcast = false;
+      }
+    } else {
+      const last = history.length > 0 ? history[history.length - 1] : null;
+      const isExactDup = last && last.id === currentAssistantMessage.id && last.role === 'assistant' && last.text === trimmed;
+      if (!isExactDup) {
+        const assistantMessage = {
+          id: currentAssistantMessage.id,
+          ts: Date.now(),
+          role: 'assistant',
+          text: trimmed,
+        };
+        // 1. 履歴に保存する
+        history.push(assistantMessage);
+        // 2. addMessage で全クライアントに確定したメッセージを通知
+        broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+      }
     }
   }
 
   // 3. messageCompleted でストリームの終了を通知する
-  if (currentAssistantMessage.id) {
+  if (currentAssistantMessage.id && !suppressNextAssistantBroadcast) {
     broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { messageId: currentAssistantMessage.id, stopReason: stopReason || 'end_turn' } });
   }
   
@@ -734,7 +750,75 @@ const httpsOptions = {
 app.prepare().then(() => {
   const httpsServer = createHttpsServer(httpsOptions, async (req, res) => {
     try {
-      await handle(req, res, parse(req.url, true));
+      const { pathname, query } = parse(req.url, true);
+      // Minimal built-in API endpoints (bypass Next routing) -----------------
+      if (req.method === 'POST' && pathname === '/api/notify/decide') {
+        let body = '';
+        req.on('data', (chunk) => { body += chunk; if (body.length > 512 * 1024) req.destroy(); });
+        req.on('end', async () => {
+          try {
+            const json = body ? JSON.parse(body) : {};
+            const { intent, context } = json || {};
+            // Build a focused system+user prompt for hidden decision
+            const nowIso = new Date().toISOString();
+            const system = [
+              'あなたは学習支援アプリの通知プランナー兼意思決定エージェントです。',
+              '目的: 現在の状況と設定に基づいて、1件の通知を「送る/送らない」を判断し、必要なら文面を組み立てます。',
+              '厳守事項:',
+              '- 出力はJSONのみ。プレーンテキストや前置きは一切禁止。',
+              '- ツール呼び出しは禁止。手元の入力情報のみを使って短時間で決定。',
+              '- title<=40文字, body<=120文字, 日本語、落ち着いた励ましトーン。',
+              '- 個人名や機微な得点などは含めない。',
+              '- 静音時間/頻度/重複を避ける判断が必要であればreasonに根拠を書く。',
+              '出力スキーマ:',
+              '{"decision":"send|skip","reason":"string","intent_id":"string|null","notification":{"title":"...","body":"...","action_url":"/path","tag":"...","category":"..."}|null,"evidence":{"now":"ISO","intent":"string","context":{}}}'
+            ].join('\n');
+            const user = {
+              now: nowIso,
+              intent: intent || 'auto',
+              context: context || {},
+            };
+
+            // Enqueue hidden prompt and await the assistant's final text
+            const promptText = `${system}\n\n[入力]\n${JSON.stringify(user)}`;
+            const result = await new Promise((resolve, reject) => {
+              suppressNextAssistantBroadcast = true;
+              assistantTurnWaiters.push(resolve);
+              try {
+                if (isSessionReady && acpSessionId) {
+                  acpSend('session/prompt', { sessionId: acpSessionId, prompt: [{ type: 'text', text: promptText }] })
+                    .catch(e => reject(e));
+                } else {
+                  pendingPrompts.push({ text: promptText, messageId: `hidden-${Date.now()}` });
+                  // Fallback: wait a short time then reject if no session
+                  setTimeout(() => reject(new Error('ACP session not ready')), 1500);
+                }
+              } catch (e) {
+                reject(e);
+              }
+              // Safety timeout
+              setTimeout(() => {
+                try { resolve({ text: '' }); } catch {}
+              }, 8000);
+            });
+
+            let data = null;
+            try { data = result && result.text ? JSON.parse(result.text) : null; } catch {}
+            const payload = data && typeof data === 'object' ? data : { decision: 'skip', reason: 'invalid_json' };
+            res.statusCode = 200;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ ok: true, payload }));
+          } catch (e) {
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json; charset=utf-8');
+            res.end(JSON.stringify({ ok: false, error: String(e?.message || e) }));
+          }
+        });
+        return;
+      }
+
+      // Fallback to Next handler
+      await handle(req, res, { pathname, query });
     } catch (err) {
       res.statusCode = 500;
       res.end('internal server error');

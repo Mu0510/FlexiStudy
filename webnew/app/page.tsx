@@ -97,6 +97,23 @@ export default function StudyApp() {
     }
   }, []);
 
+  // On first mount, sync server settings into localStorage then fetch dashboard
+  useEffect(() => {
+    const sync = async () => {
+      try {
+        const r = await fetch('/api/settings?keys=weeklyPeriod,weekStart,tools.yolo');
+        const data = await r.json();
+        const s = data?.settings || {};
+        let changed = false;
+        if (s['weeklyPeriod']) { try { localStorage.setItem('weeklyPeriod', String(s['weeklyPeriod'])); changed = true; } catch {} }
+        if (s['weekStart']) { try { localStorage.setItem('weekStart', String(s['weekStart'])); changed = true; } catch {} }
+        if (typeof s['tools.yolo'] === 'boolean') { try { localStorage.setItem('tools.yolo', String(Boolean(s['tools.yolo']))); } catch {} }
+        if (changed) fetchDashboardData();
+      } catch {}
+    };
+    sync();
+  }, [fetchDashboardData]);
+
   const fetchLogData = useCallback(async (date: string) => {
     console.log(`[page.tsx] fetchLogData triggered for date: ${date}`);
     setIsLoading(true);

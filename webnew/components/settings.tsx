@@ -29,39 +29,60 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [weeklyReports, setWeeklyReports] = useState(true)
   const [weeklyPeriod, setWeeklyPeriod] = useState('this_week');
   const [weekStart, setWeekStart] = useState<'sunday' | 'monday'>('sunday');
-  const [appInfo, setAppInfo] = useState<{ version: string | null; lastCommitDate: string | null; git: { branch?: string | null; commit?: string | null } | null } | null>(null)
-  // Tools / YOLO mode
-  const [yoloMode, setYoloMode] = useState<boolean>(true);
+  const [appInfo, setAppInfo] = useState<{ version: string | null; lastCommitDate: string | null; git: { branch?: string | null; commit?: string | null } | null } | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try { const raw = localStorage.getItem('app.info'); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  })
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  // Tools / YOLO mode（ローカルキャッシュ優先で即表示。サーバ同期で上書き）
+  const [yoloMode, setYoloMode] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    try { const v = localStorage.getItem('tools.yolo'); return v === null ? true : v === 'true'; } catch { return true; }
+  });
   const [rulesOpen, setRulesOpen] = useState(false);
   const [allowAlways, setAllowAlways] = useState<string[]>([]);
   const [denyAlways, setDenyAlways] = useState<string[]>([]);
   const SHOW_TEMPLATES = false; // 将来的に使うテンプレート群は非表示
 
   useEffect(() => {
-    const savedPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
-    setWeeklyPeriod(savedPeriod);
-    const savedStart = (localStorage.getItem('weekStart') as 'sunday' | 'monday') || 'sunday';
-    setWeekStart(savedStart);
-    // Load server-side settings
-    try {
-      fetch('/api/settings?keys=tools.yolo')
-        .then(r => r.json())
-        .then(d => {
-          const v = d?.settings?.['tools.yolo'];
-          if (typeof v === 'boolean') setYoloMode(v);
-        })
-        .catch(() => {});
-    } catch {}
+    // Load server-side settings first; fallback to localStorage
+    const load = async () => {
+      try {
+        const r = await fetch('/api/settings?keys=weeklyPeriod,weekStart,tools.yolo');
+        const data = await r.json();
+        const s = data?.settings || {};
+        const p = (s['weeklyPeriod'] as string) || localStorage.getItem('weeklyPeriod') || 'this_week';
+        const w = (s['weekStart'] as 'sunday'|'monday') || (localStorage.getItem('weekStart') as any) || 'sunday';
+        if (typeof s['tools.yolo'] === 'boolean') {
+          const v = Boolean(s['tools.yolo']);
+          setYoloMode(v);
+          try { localStorage.setItem('tools.yolo', String(v)); } catch {}
+        }
+        setWeeklyPeriod(p);
+        setWeekStart(w);
+        try { localStorage.setItem('weeklyPeriod', p); localStorage.setItem('weekStart', w); } catch {}
+        setSettingsLoaded(true);
+      } catch {
+        const savedPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
+        setWeeklyPeriod(savedPeriod);
+        const savedStart = (localStorage.getItem('weekStart') as 'sunday' | 'monday') || 'sunday';
+        setWeekStart(savedStart);
+        setSettingsLoaded(true);
+      }
+    };
+    load();
   }, []);
 
   const handleWeeklyPeriodChange = (value: string) => {
     setWeeklyPeriod(value);
     localStorage.setItem('weeklyPeriod', value);
+    try { fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'weeklyPeriod', value }) }); } catch {}
     toast.info(`集計期間を「${value === 'this_week' ? '今週' : '過去7日間'}」に変更しました。`);
   };
   const handleWeekStartChange = (value: 'sunday' | 'monday') => {
     setWeekStart(value);
     localStorage.setItem('weekStart', value);
+    try { fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'weekStart', value }) }); } catch {}
     toast.info(`週の開始曜日を「${value === 'sunday' ? '日曜' : '月曜'}」に変更しました。`);
   };
   
@@ -69,11 +90,11 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
     setMounted(true)
   }, [])
   useEffect(() => {
-    // Fetch app and git info for display
+    // Fetch app and git info for display（ローカルキャッシュ→上書き）
     fetch('/api/app-info')
       .then((r) => r.json())
-      .then((data) => setAppInfo(data))
-      .catch(() => setAppInfo(null))
+      .then((data) => { setAppInfo(data); try { localStorage.setItem('app.info', JSON.stringify(data)); } catch {} })
+      .catch(() => {/* keep cached */})
   }, [])
 
   const handleSave = async () => {
@@ -87,6 +108,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
 
   const handleToggleYolo = async (on: boolean) => {
     setYoloMode(on);
+    try { localStorage.setItem('tools.yolo', String(on)); } catch {}
     try {
       await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'tools.yolo', value: on }) });
       toast.success(on ? 'YOLOモードを有効化（自動許可）' : 'YOLOモードを無効化（実行前に確認）');
@@ -113,7 +135,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
     } catch {}
   };
 
-  if (!mounted) {
+  if (!mounted || !settingsLoaded) {
     return null
   }
 
