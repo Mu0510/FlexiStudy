@@ -221,6 +221,38 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           return { id, ts, type: type as any, content, thoughtMode };
         });
 
+        // タイムライン内に仮のアシスタントメッセージを配置・更新（受信順を維持）
+        const shadowId = incomingMessageId || (activeMessageRef.current?.id);
+        if (shadowId) {
+          flushSync(() => {
+            setMessages(prev => {
+              const list = [...prev];
+              const idx = list.findIndex(m => m.id === shadowId);
+              const nowTs = (chunk?.ts) || Date.now();
+              const content = (chunk?.text !== undefined)
+                ? ((activeMessageRef.current?.type === 'thought')
+                    ? String(chunk.text || '').replace(/^\n+/, '')
+                    : (list[idx]?.content || '') + String(chunk.text || '').replace(/^\n+/, ''))
+                : String(chunk?.thought || '').trim();
+              const entry: any = {
+                id: shadowId,
+                ts: nowTs,
+                role: 'assistant',
+                content,
+                origin: 'shadow',
+                type: 'text',
+                thoughtMode: chunk?.thought !== undefined && !(chunk?.text !== undefined),
+              };
+              if (idx !== -1) {
+                list[idx] = { ...list[idx], ...entry };
+              } else {
+                list.push(entry);
+              }
+              return list;
+            });
+          });
+        }
+
         if (msg.id !== undefined && ws) sendWsMessage({ jsonrpc: '2.0', id: msg.id, result: null });
         onMessageReceived?.();
         return;
@@ -273,11 +305,17 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         flushSync(() => {
           setMessages(prev => {
             const newMessages = [...prev];
-            if (activeMessageRef.current && activeMessageRef.current.type === 'assistant') {
-              const am = activeMessageRef.current;
-              const partId = `${am.id}#pre#${toolId}`;
-              if (!newMessages.some(m => m.id === partId)) {
-                newMessages.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content, origin: 'shadow' as const });
+            const am = activeMessageRef.current;
+            if (am) {
+              // 進行中の仮エントリ（am.id）を一旦取り除く
+              const streamIdx = newMessages.findIndex(m => m.id === am.id);
+              if (streamIdx !== -1) newMessages.splice(streamIdx, 1);
+              if (am.type === 'assistant') {
+                // assistant 本文が進行中ならスナップショットを残す
+                const partId = `${am.id}#pre#${toolId}`;
+                if (!newMessages.some(m => m.id === partId)) {
+                  newMessages.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content, origin: 'shadow' as const });
+                }
               }
             }
             newMessages.push({
@@ -348,33 +386,56 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const meta = historyState.current.requestMeta.get(msg.id);
         const raw = msg.result.messages;
 
-        const rawMessages = raw.filter((m: any) => !historyState.current.loadedIds.has(m.id));
-        if (rawMessages.length > 0) {
-          // サーバーからの配列順を信頼して並び替えしない（到着順維持）
-
-          setMessages(prev => {
-            const prevIds = new Set(prev.map(p => p.id));
-            const newUIMessages = rawMessages
-              .map((m: any) => {
-                  historyState.current.loadedIds.add(m.id);
-                  return {
-                      id: m.id, ts: m.ts, role: m.role, content: m.text || m.content,
-                      files: m.files || [], goal: m.goal || null, session: m.session || null,
-                      type: m.type, toolCallId: m.toolCallId, status: m.status, icon: m.icon,
-                      label: m.label, command: m.command, origin: 'server'
-                  };
-              })
-              .filter((m: Message) => !prevIds.has(m.id));
-
-            if (meta?.mode === 'older' || meta?.mode === 'initial') {
-                historyState.current.oldestTs = Math.min(historyState.current.oldestTs ?? Infinity, ...raw.map((m:any) => m.ts));
-                return [...newUIMessages, ...prev];
-            } else {
-                historyState.current.newestTs = Math.max(historyState.current.newestTs ?? 0, ...raw.map((m:any) => m.ts));
-                return [...prev, ...newUIMessages];
-            }
-          });
+        // サーバーが同一 id を重複して返すケース（途中確定→最終確定など）に備え、
+        // 同一 id は「最後に現れたもの」を採用してバッチ内重複を除去する。
+        const idOrder: string[] = [];
+        const lastById = new Map<string, any>();
+        for (const r of raw as any[]) {
+          if (!lastById.has(r.id)) idOrder.push(r.id);
+          lastById.set(r.id, r);
         }
+        const uniqueRaw = idOrder.map(id => lastById.get(id));
+
+        // サーバーからの順序を尊重しつつ、既存の shadow をサーバー値で置換する
+        setMessages(prev => {
+          const list = [...prev];
+          const converted = (uniqueRaw as any[]).map((m: any) => ({
+            id: m.id,
+            ts: m.ts,
+            role: m.role,
+            content: m.text || m.content,
+            files: m.files || [],
+            goal: m.goal || null,
+            session: m.session || null,
+            type: m.type,
+            toolCallId: m.toolCallId,
+            status: m.status,
+            icon: m.icon,
+            label: m.label,
+            command: m.command,
+            origin: 'server' as const,
+          } as Message));
+
+        const toInsert: Message[] = [];
+        for (const m of converted) {
+          const idx = list.findIndex(x => x.id === m.id);
+          if (idx !== -1) {
+            list[idx] = { ...list[idx], ...m };
+          } else {
+            // 未表示のものだけ挿入（list が真実のソース）
+            toInsert.push(m);
+          }
+          historyState.current.loadedIds.add(m.id);
+        }
+
+        if (meta?.mode === 'older' || meta?.mode === 'initial') {
+          historyState.current.oldestTs = Math.min(historyState.current.oldestTs ?? Infinity, ...uniqueRaw.map((m:any) => m.ts));
+          return [...toInsert, ...list];
+        } else {
+          historyState.current.newestTs = Math.max(historyState.current.newestTs ?? 0, ...uniqueRaw.map((m:any) => m.ts));
+          return [...list, ...toInsert];
+        }
+        });
 
         const reqMeta = historyState.current.requestMeta.get(msg.id);
         const reqLimit = reqMeta?.limit ?? (reqMeta?.mode === 'initial' ? 30 : 20);
@@ -424,6 +485,23 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
   const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
     if (!ws) return;
+    // ツール確認時も、進行中ストリームを整理（思考は捨て、本文はスナップショット）
+    flushSync(() => {
+      const am = activeMessageRef.current;
+      if (am) {
+        setMessages(prev => {
+          const list = [...prev];
+          const idx = list.findIndex(m => m.id === am.id);
+          if (idx !== -1) list.splice(idx, 1);
+          if (am.type === 'assistant') {
+            const partId = `${am.id}#pre#${toolCallId}`;
+            if (!list.some(m => m.id === partId)) list.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content, origin: 'shadow' });
+          }
+          return list;
+        });
+        setActiveMessage(null);
+      }
+    });
     const req = {
       jsonrpc: '2.0', id: requestIdCounter.current++, method: 'confirmToolCall',
       params: { toolCallId, result }

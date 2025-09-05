@@ -756,21 +756,9 @@ export function NewChatPanel({
           )}
 
           {useMemo(() => {
-            // サーバー到着順（useChat内の配列順）を維持する
-            const list: any[] = [...(messages || [])];
-            if (activeMessage) {
-              list.push({
-                id: `active-${activeMessage.id}`,
-                ts: activeMessage.ts ?? Date.now(),
-                role: 'assistant',
-                type: 'text',
-                content: activeMessage.content,
-                thoughtMode: activeMessage.thoughtMode,
-                __isActive: true,
-              });
-            }
-            return list;
-          }, [messages, activeMessage]).map((msg: any, idx: number) => {
+            // サーバー到着順（useChat内の配列順）を維持する。アクティブなストリームはタイムライン内（messages）に反映。
+            return [...(messages || [])];
+          }, [messages]).map((msg: any, idx: number) => {
             // ツールカード（role===tool も許容）
             if (msg.type === "tool" || msg.role === "tool") {
               return (
