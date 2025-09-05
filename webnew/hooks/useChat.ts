@@ -262,6 +262,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               if (chunk?.text !== undefined) {
                 const incoming = String(chunk.text || '').replace(/^\n+/, '');
                 const baseText = idxText !== -1 ? (list[idxText]?.content || '') : '';
+                // テキストが始まったら、対応する thought バブルは消す
+                if (idxThought !== -1) list.splice(idxThought, 1);
                 let textPart = '';
                 if (baseText) {
                   textPart = baseText + incoming;
@@ -360,9 +362,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             const newMessages = [...prev];
             const am = activeMessageRef.current;
             if (am) {
-              // 進行中の仮エントリ（am.id とその thought）を一旦取り除く
-              const streamIdx = newMessages.findIndex(m => m.id === am.id);
-              if (streamIdx !== -1) newMessages.splice(streamIdx, 1);
+              // 進行中の仮エントリ（am.id）は残す。順序維持のため削除しない
               // 思考バブルも除去
               const thoughtIdx = newMessages.findIndex(m => m.id === `${am.id}#thought`);
               if (thoughtIdx !== -1) newMessages.splice(thoughtIdx, 1);
