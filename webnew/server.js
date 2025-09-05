@@ -149,6 +149,15 @@ function acpRespond(id, result) {
   }
 }
 
+// As a safety, directly provide permission via method too (some agents expect explicit RPC)
+function acpProvideSelected(optionId) {
+  try {
+    if (!optionId) return;
+    acpSend('session/provide_permission', { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } })
+      .catch(e => console.warn('[ACP] provide_permission failed:', e?.message || e));
+  } catch {}
+}
+
 // JSON-RPC エラーレスポンスを送る
 function acpRespondError(id, code, message, details) {
   if (!geminiProcess || !geminiProcess.stdin || geminiProcess.stdin.destroyed) return;
@@ -378,9 +387,14 @@ function handleCliMessage(jsonString, wss) {
         function respondAllowed() {
           const optionId = allowOnce?.optionId || 'proceed_once';
           acpRespond(msg.id, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+          acpProvideSelected(optionId);
         }
         function respondDenied() {
-          if (denyOpt?.optionId) return acpRespond(msg.id, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
+          if (denyOpt?.optionId) {
+            acpRespond(msg.id, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
+            acpProvideSelected(denyOpt.optionId);
+            return;
+          }
           acpRespond(msg.id, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
         }
 
@@ -437,11 +451,13 @@ function handleCliMessage(jsonString, wss) {
               // allow this time as well
               const optionId = allowOnce?.optionId || 'proceed_once';
               acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+              acpProvideSelected(optionId);
               broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
             } else {
               if (!json.tools.denyAlways.includes(cmdKey)) json.tools.denyAlways.push(cmdKey);
               if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
               else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+              if (denyOpt?.optionId) acpProvideSelected(denyOpt.optionId);
               broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
             }
             const tmp = settingsPath + '.tmp';
@@ -869,16 +885,20 @@ app.prepare().then(() => {
               const settingsPath = path.join(__dirname, 'mnt', 'settings.json');
               const raw = fs.existsSync(settingsPath) ? fs.readFileSync(settingsPath, 'utf8') : '{}';
               const json = JSON.parse(raw || '{}');
-              json.tools = json.tools || { yolo: true, allowAlways: [], denyAlways: [] };
+              if (!json.tools || typeof json.tools !== 'object') json.tools = { yolo: true, allowAlways: [], denyAlways: [] };
+              if (!Array.isArray(json.tools.allowAlways)) json.tools.allowAlways = [];
+              if (!Array.isArray(json.tools.denyAlways)) json.tools.denyAlways = [];
               if (mode === 'allow_always') {
                 if (!json.tools.allowAlways.includes(cmdKey)) json.tools.allowAlways.push(cmdKey);
                 const optionId = allowOnce?.optionId || 'proceed_once';
                 acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+                acpProvideSelected(optionId);
                 broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
               } else {
                 if (!json.tools.denyAlways.includes(cmdKey)) json.tools.denyAlways.push(cmdKey);
                 if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
                 else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+                if (denyOpt?.optionId) acpProvideSelected(denyOpt.optionId);
                 broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
               }
               const tmp = settingsPath + '.tmp';
@@ -895,10 +915,12 @@ app.prepare().then(() => {
           if (result) {
             const optionId = allowOnce?.optionId || 'proceed_once';
             acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+            acpProvideSelected(optionId);
             broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
           } else {
             if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
             else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+            if (denyOpt?.optionId) acpProvideSelected(denyOpt.optionId);
             broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
           }
           try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { ok: true } })); } catch {}
