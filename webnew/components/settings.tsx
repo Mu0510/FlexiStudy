@@ -33,6 +33,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [testResult, setTestResult] = useState<null | { decision: string; reason?: string; notification?: { title?: string; body?: string; action_url?: string; tag?: string; category?: string }; sent?: boolean }>(null)
   const [weeklyPeriod, setWeeklyPeriod] = useState('this_week');
   const [weekStart, setWeekStart] = useState<'sunday' | 'monday'>('sunday');
+  const SHOW_INTENT_SWITCHES = false; // 学習リマインダー/週次レポートのスイッチは現状未実装のため非表示
   const [appInfo, setAppInfo] = useState<{ version: string | null; lastCommitDate: string | null; git: { branch?: string | null; commit?: string | null } | null } | null>(() => {
     if (typeof window === 'undefined') return null;
     try { const raw = localStorage.getItem('app.info'); return raw ? JSON.parse(raw) : null; } catch { return null; }
@@ -414,25 +415,29 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                 <Switch id="notifications" checked={notifications} onCheckedChange={setNotifications} />
               </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="studyReminders" className="text-base font-medium text-slate-800 dark:text-slate-200">
-                    学習リマインダー
-                  </Label>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">設定した時間に学習を促す通知</p>
-                </div>
-                <Switch id="studyReminders" checked={studyReminders} onCheckedChange={setStudyReminders} />
-              </div>
+              {SHOW_INTENT_SWITCHES && (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="studyReminders" className="text-base font-medium text-slate-800 dark:text-slate-200">
+                        学習リマインダー
+                      </Label>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">設定した時間に学習を促す通知</p>
+                    </div>
+                    <Switch id="studyReminders" checked={studyReminders} onCheckedChange={setStudyReminders} />
+                  </div>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label htmlFor="weeklyReports" className="text-base font-medium text-slate-800 dark:text-slate-200">
-                    週次レポート
-                  </Label>
-                  <p className="text-sm text-slate-600 dark:text-slate-400">毎週の学習サマリーを受け取る</p>
-                </div>
-                <Switch id="weeklyReports" checked={weeklyReports} onCheckedChange={setWeeklyReports} />
-              </div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label htmlFor="weeklyReports" className="text-base font-medium text-slate-800 dark:text-slate-200">
+                        週次レポート
+                      </Label>
+                      <p className="text-sm text-slate-600 dark:text-slate-400">毎週の学習サマリーを受け取る</p>
+                    </div>
+                    <Switch id="weeklyReports" checked={weeklyReports} onCheckedChange={setWeeklyReports} />
+                  </div>
+                </>
+              )}
 
               <div className="mt-4 p-3 rounded-md border border-dashed border-slate-300 dark:border-slate-600">
                 <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">通知テスト</div>
@@ -503,6 +508,33 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                         {testResult.notification.action_url && (
                           <div className="text-slate-500 dark:text-slate-400 text-xs mt-1">action: {testResult.notification.action_url}</div>
                         )}
+                      </div>
+                    )}
+                    {testResult.decision !== 'send' && (
+                      <div className="mt-3">
+                        <Button
+                          variant="outline"
+                          disabled={isTesting}
+                          onClick={async () => {
+                            setIsTesting(true)
+                            try {
+                              const r = await fetch('/api/notify/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intent: testIntent === 'auto' ? undefined : testIntent, context: { userId: 'local', force: true } }) });
+                              const j = await r.json();
+                              const p = j?.payload || null;
+                              if (p?.decision === 'send' && p?.notification) {
+                                await fetch('/api/notify/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', notification: p.notification }) });
+                                setTestResult({ decision: 'send', notification: p.notification, sent: true });
+                                toast.success('テスト通知（強制）を送信しました');
+                              } else {
+                                toast.error('強制生成に失敗しました');
+                              }
+                            } catch (e) {
+                              toast.error('強制通知の送信に失敗しました');
+                            } finally {
+                              setIsTesting(false)
+                            }
+                          }}
+                        >{isTesting ? <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> 実行中...</span> : '強制生成して送信'}</Button>
                       </div>
                     )}
                   </div>

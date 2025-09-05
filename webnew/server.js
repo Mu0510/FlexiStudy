@@ -900,8 +900,11 @@ async function runHiddenDecision({ intent, context, userId }) {
   let data = parseDecisionText(result && result.text);
   let payload = data && typeof data === 'object' ? data : { decision: 'skip', reason: 'invalid_json' };
 
+  const force = Boolean((user && user.context && user.context.force) || (user && user.force_send));
+
   // Final server-side guardrails (quiet hours, caps, dedupe)
   try {
+    if (force) throw new Error('skip_guardrails');
     const qh = String(policy.quiet_hours || '').trim();
     const [h1, h2] = qh.split('-');
     const hourNow = new Date(nowIso).getHours();
@@ -932,8 +935,22 @@ async function runHiddenDecision({ intent, context, userId }) {
       else if (sameTagRecent) payload = { decision: 'skip', reason: 'dedupe_window' };
     }
   } catch {}
+  if (force) {
+    try {
+      const intentsMap = intents || {};
+      const chosenKey = payload?.intent_id || (intent || 'study_reminder');
+      const chosen = intentsMap[chosenKey] || {};
+      const tag = payload?.notification?.tag || chosen?.tag || 'test';
+      const cta = payload?.notification?.action_url || chosen?.cta_url || '/';
+      const cat = payload?.notification?.category || chosen?.category || 'engagement';
+      const notif = payload?.notification || { title: 'テスト通知', body: 'これはテスト用に強制生成された通知です。', action_url: cta, tag, category: cat };
+      return { decision: 'send', reason: (payload?.reason || 'force_send'), intent_id: chosenKey, notification: notif };
+    } catch { return { decision: 'send', reason: 'force_send', intent_id: intent || 'study_reminder', notification: { title: 'テスト通知', body: 'これはテスト用に強制生成された通知です。', action_url: '/', tag: 'test', category: 'engagement' } }; }
+  }
+
   return payload;
 }
+
 
 function persistNotificationLog({ userId, payload }) {
   try {
