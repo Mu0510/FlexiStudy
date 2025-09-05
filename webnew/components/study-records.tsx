@@ -243,20 +243,10 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
     isRangeOpenSm || isRangeOpenMd
   );
 
-  useEffect(() => {
-    console.log('[StudyRecords] Subscribing to WebSocket updates.');
-    const unsubscribe = subscribe((message: any) => {
-      if (message.method === 'databaseUpdated') {
-        console.log(`[StudyRecords] Received databaseUpdated. Calling onRefresh for date: ${selectedDate}`);
-        onRefresh?.();
-      }
-    });
+  // Quiet granular updates are handled in app/page.tsx via WebSocket events.
+  // Avoid triggering panel-wide reloads from here.
 
-    return () => {
-      console.log('[StudyRecords] Unsubscribing from WebSocket updates.');
-      unsubscribe();
-    };
-  }, [subscribe, onRefresh, selectedDate]);
+  // フォーカス/可視化時の再取得は page.tsx 側で静かに実施（ここでは何もしない）
 
   const handleMoveGoal = async (goal: Goal) => {
     try {
@@ -770,8 +760,23 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
               }}
                onFocus={() => setIsSearchFocused(true)}
                   placeholder="#タグ や キーワードで検索..."
-              className="h-9 pl-10 w-full bg-transparent border-0 shadow-none focus:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:ring-0 focus:outline-none dark:text-slate-200 placeholder:text-slate-400"
+              className="h-9 pl-10 pr-8 w-full bg-transparent border-0 shadow-none focus:border-transparent focus-visible:ring-0 focus-visible:ring-offset-0 focus:ring-0 focus:outline-none dark:text-slate-200 placeholder:text-slate-400"
                 />
+                {searchInput && (
+                  <button
+                    type="button"
+                    aria-label="入力をクリア"
+                    title="入力をクリア"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 w-7 h-7 inline-flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 dark:text-slate-400 dark:hover:text-slate-200"
+                    onClick={() => {
+                      setSearchInput('');
+                      setShowSuggestions(false);
+                      setTimeout(() => searchInputRef.current?.focus(), 0);
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
                 {showSuggestions && tagSuggestions.length > 0 && (
                   <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg max-h-60 overflow-auto">
                     {tagSuggestions.map((t, idx) => (
@@ -1476,17 +1481,120 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                         )}
 
                         {item._expanded && (
-                          <div className="mt-2 text-xs text-slate-500">詳細表示（今後拡張）</div>
+                          <div className="mt-2 text-sm text-slate-700 dark:text-slate-300 space-y-2">
+                            {item._loadingDetails && (
+                              <div className="text-xs text-slate-500">詳細を取得中...</div>
+                            )}
+                            {!item._loadingDetails && item.kind === 'entry' && item._details && (
+                              <div className="space-y-1">
+                                <div><span className="text-xs text-slate-500">種別:</span> {item._details.event_type}</div>
+                                <div><span className="text-xs text-slate-500">教科:</span> {item._details.subject || '(なし)'}</div>
+                                <div><span className="text-xs text-slate-500">内容:</span> {item._details.content || '(なし)'}</div>
+                                {item._details.summary && (<div><span className="text-xs text-slate-500">セッションサマリー:</span> {item._details.summary}</div>)}
+                                {item._details.memo && (<div><span className="text-xs text-slate-500">メモ:</span> <span className="whitespace-pre-wrap">{item._details.memo}</span></div>)}
+                                {item._details.impression && (<div><span className="text-xs text-slate-500">所感:</span> <span className="whitespace-pre-wrap">{item._details.impression}</span></div>)}
+                                <div><span className="text-xs text-slate-500">開始:</span> {item._details.start_time || '(不明)'} / <span className="text-xs text-slate-500">終了:</span> {item._details.end_time || '(未設定)'}</div>
+                                <div><span className="text-xs text-slate-500">学習時間:</span> {typeof item._details.duration_minutes === 'number' ? `${item._details.duration_minutes}分` : '(不明)'}</div>
+                              </div>
+                            )}
+                            {!item._loadingDetails && item.kind === 'goal' && item._details && (
+                              <div className="space-y-1">
+                                <div><span className="text-xs text-slate-500">教科:</span> {item._details.subject || '(なし)'}</div>
+                                <div><span className="text-xs text-slate-500">タスク:</span> {item._details.task}</div>
+                                {item._details.details && (<div><span className="text-xs text-slate-500">詳細:</span> <span className="whitespace-pre-wrap">{item._details.details}</span></div>)}
+                                {Array.isArray(item._details.tags) && item._details.tags.length > 0 && (
+                                  <div className="flex items-center flex-wrap gap-1"><span className="text-xs text-slate-500 mr-1">タグ:</span>
+                                    {item._details.tags.map((t: string, i: number) => (
+                                      <Badge key={i} variant="secondary" className="px-1.5 py-0.5 text-xs font-normal">#{t}</Badge>
+                                    ))}
+                                  </div>
+                                )}
+                                {(item._details.total_problems != null) && (
+                                  <div><span className="text-xs text-slate-500">問題数:</span> {item._details.completed_problems ?? 0}/{item._details.total_problems} 問</div>
+                                )}
+                                <div><span className="text-xs text-slate-500">完了:</span> {item._details.completed ? '済' : '未'}</div>
+                              </div>
+                            )}
+                            {!item._loadingDetails && item.kind === 'summary' && (
+                              <div className="space-y-1">
+                                <div className="text-xs text-slate-500">この日のまとめ</div>
+                                <div className="whitespace-pre-wrap">{item._details?.summary ?? '(サマリーなし)'}</div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                       <div className="flex items-center gap-2 flex-shrink-0">
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            const p = results.slice();
-                            p[idx]._expanded = !p[idx]._expanded;
-                            setResults(p);
+                          onClick={async () => {
+                            const captured = { id: item.id, kind: item.kind, date: item.date };
+                            // Step 1: toggle expand and, if needed, mark loading via functional update
+                            let needFetch = false;
+                            setResults(prev => {
+                              const arr = [...prev];
+                              const i = arr.findIndex((it: any) => it.id === captured.id && it.kind === captured.kind && it.date === captured.date);
+                              if (i === -1) return prev;
+                              const curI = { ...arr[i] } as any;
+                              const expandTo = !curI._expanded;
+                              curI._expanded = expandTo;
+                              if (expandTo && !curI._details && !curI._loadingDetails) {
+                                curI._loadingDetails = true;
+                                needFetch = true;
+                              }
+                              arr[i] = curI;
+                              return arr;
+                            });
+
+                            if (!needFetch) return;
+
+                            // Step 2: fetch details outside setState, then commit via functional update
+                            try {
+                              if (captured.kind === 'entry') {
+                                const res = await fetch(`/api/logs/entry/${captured.id}`);
+                                const data = await res.json();
+                                const entry = data?.entry || {};
+                                setResults(prev => {
+                                  const arr = [...prev];
+                                  const i = arr.findIndex((it: any) => it.id === captured.id && it.kind === captured.kind && it.date === captured.date);
+                                  if (i === -1) return prev;
+                                  arr[i] = { ...arr[i], _details: entry, _loadingDetails: false };
+                                  return arr;
+                                });
+                              } else if (captured.kind === 'goal') {
+                                const res = await fetch(`/api/goals/${captured.id}`);
+                                const data = await res.json();
+                                let goal = data?.goal || data?.data || data || {};
+                                try { if (goal && typeof goal.tags === 'string') goal.tags = JSON.parse(goal.tags); } catch {}
+                                setResults(prev => {
+                                  const arr = [...prev];
+                                  const i = arr.findIndex((it: any) => it.id === captured.id && it.kind === captured.kind && it.date === captured.date);
+                                  if (i === -1) return prev;
+                                  arr[i] = { ...arr[i], _details: goal, _loadingDetails: false };
+                                  return arr;
+                                });
+                              } else if (captured.kind === 'summary') {
+                                const res = await fetch(`/api/logs/${captured.date}`);
+                                const data = await res.json();
+                                const summary = data?.daily_summary?.summary ?? null;
+                                setResults(prev => {
+                                  const arr = [...prev];
+                                  const i = arr.findIndex((it: any) => it.id === captured.id && it.kind === captured.kind && it.date === captured.date);
+                                  if (i === -1) return prev;
+                                  arr[i] = { ...arr[i], _details: { summary }, _loadingDetails: false };
+                                  return arr;
+                                });
+                              }
+                            } catch {
+                              setResults(prev => {
+                                const arr = [...prev];
+                                const i = arr.findIndex((it: any) => it.id === captured.id && it.kind === captured.kind && it.date === captured.date);
+                                if (i === -1) return prev;
+                                arr[i] = { ...arr[i], _loadingDetails: false };
+                                return arr;
+                              });
+                            }
                           }}
                         >
                           詳細

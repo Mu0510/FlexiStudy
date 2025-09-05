@@ -1,5 +1,6 @@
 "use client"
 
+import React from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -10,6 +11,19 @@ import { DailyGoalsCard } from "@/components/daily-goals-card"
 
 export function Dashboard({ dashboardData, subjectColors, onSelectGoal }) {
   const { studyStats, todayGoals, recentSessions } = dashboardData || {};
+  const [weeklyLabel, setWeeklyLabel] = React.useState<string>('今週の学習時間');
+  React.useEffect(() => {
+    const read = () => {
+      try {
+        const v = localStorage.getItem('weeklyPeriod') || 'this_week';
+        setWeeklyLabel(v === '7_days' ? '過去7日間' : '今週の学習時間');
+      } catch {}
+    };
+    read();
+    const onStorage = (e: StorageEvent) => { if (e.key === 'weeklyPeriod') read(); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
 
   if (!dashboardData) {
     return (
@@ -74,7 +88,7 @@ export function Dashboard({ dashboardData, subjectColors, onSelectGoal }) {
               </div>
               <div>
                 <div className="text-2xl font-bold text-secondary-800 dark:text-neutral-100">{studyStats.weeklyTime}分</div>
-                <div className="text-sm text-secondary-700 dark:text-neutral-400">今週の学習時間</div>
+                <div className="text-sm text-secondary-700 dark:text-neutral-400">{weeklyLabel}</div>
               </div>
             </div>
           </CardContent>

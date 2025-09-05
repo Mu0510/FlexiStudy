@@ -87,6 +87,8 @@ interface NewChatPanelProps {
   isFetchingHistory: boolean;
   historyFinished: boolean;
   clearMessages: () => void;
+  // tool approvals (optional)
+  sendToolApproval?: (toolCallId: string, decision: 'allow_once'|'allow_always'|'deny'|'deny_always') => void;
   // --- Input related props ---
   input: string;
   setInput: (input: string) => void;
@@ -130,7 +132,7 @@ const formatFileSize = (bytes: number): string => {
 };
 
 
-export function NewChatPanel({ 
+export function NewChatPanel({
   showAs = 'floating',
   isOpen, 
   onClose, 
@@ -151,6 +153,7 @@ export function NewChatPanel({
   isFetchingHistory,
   historyFinished,
   clearMessages,
+  sendToolApproval,
   // --- Input related props ---
   input,
   setInput,
@@ -370,9 +373,7 @@ export function NewChatPanel({
     // If not recording, send immediately.
     const finalMessage = (input + interimTranscript).trim();
 
-    // Clear inputs immediately
-    setInput('');
-    setInterimTranscript('');
+    // 入力はアップロード完了まで保持（表示は残す）。編集は disabled で禁止。
 
     if (!finalMessage && selectedFiles.length === 0) {
       // If there's nothing to send, just return.
@@ -478,6 +479,9 @@ export function NewChatPanel({
     }
 
     // Reset other states
+    // 入力はここでクリア（アップロード完了・送信後）
+    setInput('');
+    setInterimTranscript('');
     setSelectedFiles([]);
     if (onClearSelectedGoal) {
       onClearSelectedGoal();
@@ -807,7 +811,7 @@ export function NewChatPanel({
                     <div className="tool-card__status-indicator">
                       {msg.status === "finished" && <CheckCircle className="h-4 w-4 text-green-500" />}
                       {msg.status === "error" && <XCircle className="h-4 w-4 text-red-500" />}
-                      {msg.status === "running" && (
+                      {(msg.status === "running" || msg.status === undefined) && (
                         <span className="relative flex h-3 w-3">
                           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
                           <span className="relative inline-flex rounded-full h-3 w-3 bg-sky-500"></span>
@@ -819,6 +823,14 @@ export function NewChatPanel({
                     <div className="tool-card__body text-xs whitespace-pre font-mono bg-gray-800 dark:bg-gray-900 p-2 rounded not-prose max-h-48 overflow-y-auto overflow-x-auto">
                       <div className="text-gray-200 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: msg.content }} />
                     </div>
+                    {msg.status === 'pending' && (
+                      <div className="p-2 flex items-center gap-2">
+                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => sendToolApproval?.(msg.id, 'allow_once')}>一度だけ許可</Button>
+                        <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'allow_always')}>常に許可</Button>
+                        <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'deny')}>拒否</Button>
+                        <Button size="sm" variant="ghost" onClick={() => sendToolApproval?.(msg.id, 'deny_always')}>常に拒否</Button>
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -827,6 +839,61 @@ export function NewChatPanel({
             // 通常メッセージ（ユーザー/アシスタント/ストリーミング中）
             return (
               <div key={`${msg.id}-${idx}`} className={cn("flex flex-col", msg.role === "user" ? "items-end" : "items-start mx-auto w-[95%]")}>
+                {/* 添付（ファイル/目標/学習記録）はユーザーメッセージの上に表示 */}
+                {(msg.files?.length > 0 || msg.goal || msg.session) && (
+                  <div className={cn("mb-2 space-y-1", msg.role === "user" ? "ml-auto max-w-[65%]" : "w-full") }>
+                    {/* Goal Card (同じ見た目) */}
+                    {msg.goal && (
+                      <div className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm">
+                        <Play className="h-5 w-5 text-primary-600 dark:text-primary-400 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.goal.task}>
+                            {msg.goal.task}
+                          </p>
+                          <p className="text-gray-500 dark:text-gray-400 text-xs">
+                            {msg.goal.subject}
+                            {msg.goal.tags && msg.goal.tags.length > 0 && ` - ${msg.goal.tags.join(', ')}`}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {/* Session Card (添付時と同じ見た目) */}
+                    {msg.session && (
+                      <div className="bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm">
+                        {msg.session.type === 'START' && <Play className="h-5 w-5 text-green-600 dark:text-green-400 flex-shrink-0" />}
+                        {msg.session.type === 'BREAK' && <Pause className="h-5 w-5 text-orange-600 dark:text-orange-400 flex-shrink-0" />}
+                        {(!msg.session.type || msg.session.type === 'RESUME') && <Play className="h-5 w-5 text-blue-600 dark:text-blue-400 flex-shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-gray-700 dark:text-gray-300 truncate" title={msg.session.content || '学習記録'}>
+                            {msg.session.content || '学習記録'}
+                          </p>
+                          <p className="text-gray-500 dark:text-gray-400 text-xs">
+                            {msg.session.start_time}
+                            {msg.session.duration_minutes ? ` (${msg.session.duration_minutes}分)` : ''}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {/* Files (添付時と全く同じ見た目に合わせる: グレーの角丸ボックス、アイコン/名前/サイズ。削除ボタン・進捗は表示しない) */}
+                    {Array.isArray(msg.files) && msg.files.length > 0 && (
+                      <div className="flex space-x-2 overflow-x-auto">
+                        {msg.files.map((f: any, i: number) => (
+                          <div key={i} className={cn(
+                            "flex-shrink-0 bg-gray-100 dark:bg-slate-700 rounded-lg p-2 flex items-center space-x-2 text-sm relative"
+                          )}>
+                            <FileIcon className="h-5 w-5 text-gray-500 dark:text-gray-400" />
+                            <span className="font-medium text-gray-700 dark:text-gray-300 truncate max-w-[100px]" title={f.name || getRelativePath(f.path)}>
+                              {f.name || getRelativePath(f.path)}
+                            </span>
+                            {typeof f.size === 'number' && (
+                              <span className="text-gray-500 dark:text-gray-400 text-xs">{formatFileSize(f.size)}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
                 {msg.content && (
                   <div
                     className={cn(

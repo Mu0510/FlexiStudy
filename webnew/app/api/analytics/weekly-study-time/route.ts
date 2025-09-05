@@ -4,9 +4,19 @@ import { promisify } from "util";
 
 const execAsync = promisify(exec);
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const command = `python3 /home/geminicli/GeminiCLI/manage_log.py --api-mode execute '{"action": "data.weekly_study_time", "params": {}}'`;
+    const url = new URL(req.url);
+    const mode = url.searchParams.get('mode'); // 'this_week' | 'last_7' (default)
+    const week_start = url.searchParams.get('week_start'); // 'sunday' | 'monday'
+
+    let payload: any;
+    if (mode === 'this_week') {
+      payload = { action: 'data.this_week_study_time', params: { week_start: week_start || 'sunday' } };
+    } else {
+      payload = { action: 'data.weekly_study_time', params: {} };
+    }
+    const command = `python3 /home/geminicli/GeminiCLI/manage_log.py --api-mode execute '${JSON.stringify(payload)}'`;
     const { stdout, stderr } = await execAsync(command);
 
     if (stderr) {

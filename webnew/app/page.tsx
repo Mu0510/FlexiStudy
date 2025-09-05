@@ -17,7 +17,10 @@ import { ExamAnalysis } from "@/components/exam-analysis"
 import { Settings } from "@/components/settings"
 
 import { NewChatPanel } from "@/components/new-chat-panel"
+import { useDbLiveSync } from "@/hooks/useDbLiveSync"
+import { reconcileDashboard, reconcileLogData } from "@/lib/reconcile"
 import { MobileHeader } from "@/components/mobile-header"
+import { useWebSocket } from "@/context/WebSocketContext"
 import { useOnlineStatus } from "@/hooks/useOnlineStatus"
 
 // Define Goal type, ideally this would be in a shared types file
@@ -60,28 +63,35 @@ export default function StudyApp() {
 
   const chatStateBeforeSystemView = useRef(false);
   const online = useOnlineStatus();
+  const { subscribe } = useWebSocket();
 
-  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages } = useChat({
+  const { messages, activeMessage, isGeneratingResponse, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages, sendToolApproval } = useChat({
     onMessageReceived: () => {
       // messagesContainerRef は NewChatPanel 内にあるため、ここでは直接操作できない
       // NewChatPanel 内でスクロールロジックを維持する
     },
   });
+  // expose tool approval via ws from useChat (ts loose cast)
+  const chatApprove = (useChat as any) ? (null as any) : null;
 
   const fetchDashboardData = useCallback(async () => {
     const weeklyPeriod = localStorage.getItem('weeklyPeriod') || 'this_week';
     const weeklyPeriodDays = weeklyPeriod === '7_days' ? 7 : null;
+    const weekStart = localStorage.getItem('weekStart') || 'sunday';
     
     try {
-      const apiUrl = weeklyPeriodDays 
-        ? `/api/dashboard?weekly_period=${weeklyPeriodDays}`
-        : '/api/dashboard';
+      let apiUrl = '/api/dashboard';
+      const params = new URLSearchParams();
+      if (weeklyPeriodDays) params.set('weekly_period', String(weeklyPeriodDays));
+      if (weekStart) params.set('week_start', weekStart);
+      const qs = params.toString();
+      if (qs) apiUrl += `?${qs}`;
       const response = await fetch(apiUrl);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       const data = await response.json();
-      setDashboardData(data);
+      setDashboardData((prev: any) => reconcileDashboard(prev, data));
     } catch (e) {
       console.error("Failed to fetch dashboard data:", e);
     }
@@ -117,10 +127,12 @@ export default function StudyApp() {
             start_time: session.session_start_time,
             end_time: session.session_end_time,
             total_duration: session.total_study_minutes,
-            logs: session.details.map((detail: any) => ({ ...detail, type: detail.event_type })).sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+            logs: session.details
+              .map((detail: any) => ({ ...detail, type: detail.event_type }))
+              .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
           })),
         };
-        setLogData(transformedData);
+        setLogData((prev: any) => reconcileLogData(prev, transformedData));
       }
     } catch (e: any) {
       setError(e.message);
@@ -128,6 +140,46 @@ export default function StudyApp() {
       setIsLoading(false);
     }
   }, []);
+
+  // Quiet refresh without toggling loading state or error banners
+  const fetchLogDataQuiet = useCallback(async (date: string) => {
+    try {
+      const response = await fetch(`/api/logs/${date}`, { cache: 'no-store' });
+      if (!response.ok) return;
+      const rawData = await response.json();
+      const transformedData = {
+        ...rawData,
+        sessions: rawData.sessions.map((session: any) => ({
+          ...session,
+          start_time: session.session_start_time,
+          end_time: session.session_end_time,
+          total_duration: session.total_study_minutes,
+          logs: session.details
+            .map((detail: any) => ({ ...detail, type: detail.event_type }))
+            .sort((a: any, b: any) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()),
+        })),
+      };
+      setLogData((prev: any) => reconcileLogData(prev, transformedData));
+    } catch {}
+  }, []);
+
+  // Debounced schedulers to coalesce rapid events
+  const dashFetchTimerRef = useRef<any>(null);
+  const logFetchTimerRef = useRef<any>(null);
+  const scheduleFetchDashboard = useCallback(() => {
+    if (dashFetchTimerRef.current) clearTimeout(dashFetchTimerRef.current);
+    dashFetchTimerRef.current = setTimeout(() => {
+      dashFetchTimerRef.current = null;
+      fetchDashboardData();
+    }, 250);
+  }, [fetchDashboardData]);
+  const scheduleFetchLogsQuiet = useCallback((date: string) => {
+    if (logFetchTimerRef.current) clearTimeout(logFetchTimerRef.current);
+    logFetchTimerRef.current = setTimeout(() => {
+      logFetchTimerRef.current = null;
+      fetchLogDataQuiet(date);
+    }, 250);
+  }, [fetchLogDataQuiet]);
 
   const handleViewChange = (view: string) => {
     if (view === 'system-chat') {
@@ -151,7 +203,7 @@ export default function StudyApp() {
     fetchDashboardData();
 
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'weeklyPeriod') {
+      if (e.key === 'weeklyPeriod' || e.key === 'weekStart') {
         fetchDashboardData();
       }
     };
@@ -163,6 +215,227 @@ export default function StudyApp() {
     };
 
   }, [fetchDashboardData]);
+
+  // DB更新を検出してダッシュボードを自動更新
+  // Poll fallback (WS不通時の保険)。間隔を延ばしてサーバ負荷を下げる
+  useDbLiveSync(() => scheduleFetchDashboard(), { intervalMs: 30000 });
+
+  // フォーカス復帰・可視化時: ダッシュボードは差分適用、学習記録は静かに再取得
+  useEffect(() => {
+    const onFocus = () => {
+      scheduleFetchDashboard();
+      scheduleFetchLogsQuiet(selectedDate);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        scheduleFetchDashboard();
+        scheduleFetchLogsQuiet(selectedDate);
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [fetchDashboardData, fetchLogDataQuiet, selectedDate]);
+
+  // Open chat with a pre-filled prompt from overlays
+  useEffect(() => {
+    const onOpenWithPrompt = (e: any) => {
+      try {
+        const text = String(e?.detail?.text || '').trim();
+        if (text) setChatInput(text);
+        setIsNewChatOpen(true);
+      } catch {
+        setIsNewChatOpen(true);
+      }
+    };
+    window.addEventListener('chat:open-with-prompt', onOpenWithPrompt as any);
+    return () => window.removeEventListener('chat:open-with-prompt', onOpenWithPrompt as any);
+  }, []);
+
+  // ---- Granular DB events: apply minimal patches ----
+  useEffect(() => {
+    // helper for YYYY-MM-DD in local time
+    const toYMD = (d: Date) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    };
+    const todayStr = toYMD(new Date());
+
+    const parseTagsIfNeeded = (tags: any): string[] | undefined => {
+      // Keep undefined as undefined to avoid accidentally adding empty arrays everywhere
+      if (tags === undefined) return undefined;
+      try {
+        if (Array.isArray(tags)) return tags.map(String).filter(Boolean);
+        if (typeof tags === 'string') {
+          const s = tags.trim();
+          if (!s) return [];
+          try {
+            const parsed = JSON.parse(s);
+            if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+          } catch {}
+          return s.split(',').map((t) => t.trim()).filter(Boolean);
+        }
+      } catch {}
+      return [];
+    };
+
+    const unsub = subscribe((msg: any) => {
+      const { method, params } = msg || {};
+      if (!method || !params) return;
+
+      // Goals → Dashboard.todayGoals を最小パッチ + StudyRecords.daily_summary.goals をピンポイント更新
+      if (method === 'goalAdded' || method === 'goalUpdated' || method === 'goalDeleted') {
+        const g = params.data || {};
+        const id = params.rowId ?? g.id;
+        const date = g.date;
+        // 今日の目標（ダッシュボード）
+        if (date === todayStr) {
+          setDashboardData((prev: any) => {
+            if (!prev) return prev;
+            const list: any[] = Array.isArray(prev.todayGoals) ? prev.todayGoals : [];
+            let nextList = list;
+            if (method === 'goalDeleted') {
+              nextList = list.filter(it => it.id !== id);
+            } else {
+              const idx = list.findIndex(it => it.id === id);
+              const normalized = { ...g, tags: parseTagsIfNeeded(g?.tags) };
+              const item = idx >= 0 ? { ...list[idx], ...normalized } : normalized;
+              nextList = idx >= 0 ? list.map((it, i) => (i === idx ? item : it)) : [...list, item];
+            }
+            if (nextList === list) return prev;
+            return { ...prev, todayGoals: nextList };
+          });
+        }
+
+        // 選択日の目標（学習記録パネル）
+        if (date === selectedDate) {
+          setLogData((prev: any) => {
+            if (!prev || !prev.daily_summary) return prev;
+            if (prev.daily_summary?.date !== selectedDate) return prev;
+            const goals: any[] = Array.isArray(prev.daily_summary.goals) ? prev.daily_summary.goals : [];
+            let nextGoals = goals;
+            if (method === 'goalDeleted') {
+              nextGoals = goals.filter(it => it.id !== id);
+            } else {
+              const idx = goals.findIndex(it => it.id === id);
+              const normalized = { ...g, tags: parseTagsIfNeeded(g?.tags) };
+              const item = idx >= 0 ? { ...goals[idx], ...normalized } : normalized;
+              nextGoals = idx >= 0 ? goals.map((it, i) => (i === idx ? item : it)) : [...goals, item];
+            }
+            if (nextGoals === goals) return prev;
+            return { ...prev, daily_summary: { ...prev.daily_summary, goals: nextGoals } };
+          });
+        }
+        return;
+      }
+
+      // Logs: 作成/削除は静かに再取得、更新はピンポイント更新
+      if (method === 'logCreated' || method === 'logDeleted') {
+        const l = params.data || {};
+        const ts: string = String(l.start_time || '');
+        const ymd = ts ? ts.slice(0, 10) : '';
+        if (ymd && ymd === selectedDate) scheduleFetchLogsQuiet(selectedDate);
+        // ダッシュボードの today stats も更新されうるので軽く再取得（差分適用される）
+        if (ymd && ymd === todayStr) scheduleFetchDashboard();
+        return;
+      }
+
+      if (method === 'logUpdated') {
+        const l = params.data || {};
+        const ts: string = String(l.start_time || '');
+        const ymd = ts ? ts.slice(0, 10) : '';
+        if (!(ymd && ymd === selectedDate)) return;
+
+        const toHHMM = (s?: string) => {
+          try { if (!s) return undefined as any; const d = new Date(s); const hh = String(d.getHours()).padStart(2,'0'); const mm = String(d.getMinutes()).padStart(2,'0'); return `${hh}:${mm}`; } catch { return undefined as any; }
+        };
+
+        setLogData((prev: any) => {
+          if (!prev || !Array.isArray(prev.sessions)) return prev;
+          let changed = false;
+          const nextSessions = prev.sessions.map((sess: any) => {
+            // 1) START行のsubject/summary更新 → セッション直値をピンポイント更新
+            if (l.event_type === 'START' && Number(sess.session_id) === Number(l.id)) {
+              const nextSubject = (l.subject !== undefined ? l.subject : sess.subject);
+              const nextSummary = (l.summary !== undefined ? l.summary : sess.summary);
+              if (nextSubject !== sess.subject || nextSummary !== sess.summary) {
+                changed = true;
+                // 後でsubjects再計算
+                return { ...sess, subject: nextSubject, summary: nextSummary };
+              }
+            }
+
+            // 2) セッション内の詳細ログも同期（content/times/durationなど）
+            const idx = Array.isArray(sess.logs) ? sess.logs.findIndex((d: any) => Number(d.id) === Number(l.id)) : -1;
+            if (idx >= 0) {
+              const oldDetail = sess.logs[idx];
+              const newStart = toHHMM(l.start_time) ?? oldDetail.start_time;
+              const newEnd = (l.end_time ? ` ${toHHMM(l.end_time)}` : (l.end_time === null ? '' : oldDetail.end_time));
+              const newDuration = (typeof l.duration_minutes === 'number') ? l.duration_minutes : oldDetail.duration_minutes;
+              const updatedDetail = {
+                ...oldDetail,
+                type: l.event_type || oldDetail.type,
+                content: (l.content !== undefined ? l.content : oldDetail.content),
+                start_time: newStart,
+                end_time: newEnd,
+                duration_minutes: newDuration,
+              };
+              const logs = sess.logs.map((it: any, i: number) => (i === idx ? updatedDetail : it));
+              let total = sess.total_duration;
+              if (updatedDetail.type === 'START' || updatedDetail.type === 'RESUME') {
+                const old = oldDetail.duration_minutes || 0;
+                const neu = newDuration || 0;
+                if (neu !== old) total = (total || 0) + (neu - old);
+              }
+              changed = true;
+              return { ...sess, logs, total_duration: total };
+            }
+            return sess;
+          });
+
+          if (!changed) return prev;
+          // subjects（学習した教科）を再計算
+          const subjects = Array.from(new Set(nextSessions.map((s: any) => s.subject))).sort();
+          const nextDaily = prev.daily_summary ? { ...prev.daily_summary, subjects } : prev.daily_summary;
+          return { ...prev, sessions: nextSessions, daily_summary: nextDaily };
+        });
+
+        // ダッシュボード（today）への影響は必要なときだけ軽く再取得
+        if (ymd === todayStr) scheduleFetchDashboard();
+        return;
+      }
+
+      // Undo/Redo等でイベントが取りこぼされるケース: DB全体変更の合図
+      if (method === 'databaseUpdated') {
+        scheduleFetchDashboard();
+        scheduleFetchLogsQuiet(selectedDate);
+        return;
+      }
+
+      // Daily summary のピンポイント更新
+      if (method === 'summaryAdded' || method === 'summaryUpdated' || method === 'summaryDeleted') {
+        const s = params.data || {};
+        const date = s.date;
+        if (date === selectedDate) {
+          setLogData((prev: any) => {
+            if (!prev || !prev.daily_summary) return prev;
+            if (prev.daily_summary?.date !== selectedDate) return prev;
+            const nextSummary = (method === 'summaryDeleted') ? null : (s.summary ?? null);
+            if (prev.daily_summary.summary === nextSummary) return prev;
+            return { ...prev, daily_summary: { ...prev.daily_summary, summary: nextSummary } };
+          });
+        }
+        return;
+      }
+    });
+
+    return () => unsub();
+  }, [subscribe, selectedDate, fetchLogDataQuiet, fetchDashboardData]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -287,9 +560,10 @@ export default function StudyApp() {
                   requestHistory={requestHistory}
                   isFetchingHistory={isFetchingHistory}
                   historyFinished={historyFinished}
-                  clearMessages={clearMessages}
-                  input={chatInput}
-                  setInput={setChatInput}
+            clearMessages={clearMessages}
+            sendToolApproval={sendToolApproval as any}
+            input={chatInput}
+            setInput={setChatInput}
                   selectedFiles={selectedFilesForChat}
                   setSelectedFiles={setSelectedFilesForChat}
                   selectedGoal={selectedGoalForChat}
@@ -402,6 +676,7 @@ export default function StudyApp() {
             isFetchingHistory={isFetchingHistory}
             historyFinished={historyFinished}
             clearMessages={clearMessages}
+            sendToolApproval={sendToolApproval as any}
             input={chatInput}
             setInput={setChatInput}
             selectedFiles={selectedFilesForChat}

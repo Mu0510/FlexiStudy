@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { FileText, TrendingUp, BarChart3, AlertCircle, Plus } from "lucide-react"
+import { FeatureOverlay } from "@/components/feature-overlay"
+import { useState } from 'react'
 
 export function ExamAnalysis() {
+  const overlayAllowed = (process.env.NEXT_PUBLIC_SHOW_IDEA_OVERLAYS ?? '1') !== '0';
+  const [showOverlay, setShowOverlay] = useState(true);
   const examResults = [
     {
       id: 1,
@@ -66,7 +70,23 @@ export function ExamAnalysis() {
   }
 
   return (
-    <div className="space-y-6 pt-16 lg:pt-0">
+    <div className="space-y-6 pt-16 lg:pt-0 relative">
+      <FeatureOverlay
+        enabled={overlayAllowed && showOverlay}
+        title="この機能は未実装です"
+        message={"模試分析は、あなたとAIの協働で小さく進めるのがコツです。難しい処理はAIに任せ、あなたは“何をしたいか”を短く伝えていきましょう。\n\nまずは『結果をPDFにする→AIに分析させる→要約をGeminiに共有→画面用JSONに整形→表示』の順で最小構成から。"}
+        bullets={[
+          "紙の成績表をスキャン（またはサイトからDL）してPDF化する",
+          "GPTのエージェントモードにPDFを渡し、科目ごとの強み/弱み・設問分析・伸ばす勉強方針を作ってもらう",
+          "そのレポートをGeminiに共有し、『画面表示用のJSON（科目・テーマ・優先度・学習タスク案）』を生成してもらう",
+          "この画面では生成されたJSONを読み取り、カードやグラフで表示する",
+          "慣れてきたら自動取り込み（DriveやDownloads監視）や比較グラフなどに拡張",
+        ]}
+        buttonLabel="Geminiと一緒に実装を始める"
+        requestChatPrompt={'この「模試分析」を一緒に設計・実装したい。まず目的と最小要件を短くすり合わせ、その後、小さなタスクに分解して進めよう。'}
+        secondaryLabel="サンプルを見る"
+        onSecondary={() => setShowOverlay(false)}
+      />
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
         <div>

@@ -46,6 +46,77 @@ const acpPending = new Map();
 const pendingPrompts = [];
 let isSessionReady = false;
 let currentAssistantMessage = { id: null, text: '', thought: '' };
+// Map toolCallId -> { requestId, options, cmdKey }
+const permissionWaiters = new Map();
+
+// ---- Permission helpers: robust command key derivation ----
+function splitCommandLine(cmd) {
+  // naive but handles simple quotes/escapes
+  const out = [];
+  let cur = '';
+  let quote = null;
+  for (let i = 0; i < cmd.length; i++) {
+    const ch = cmd[i];
+    if (quote) {
+      if (ch === quote) { quote = null; continue; }
+      if (ch === '\\' && i + 1 < cmd.length) { cur += cmd[++i]; continue; }
+      cur += ch; continue;
+    }
+    if (ch === '\'' || ch === '"') { quote = ch; continue; }
+    if (/\s/.test(ch)) { if (cur) { out.push(cur); cur = ''; } continue; }
+    cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+function deriveCommandKeyFromTokens(tokens) {
+  if (!tokens || tokens.length === 0) return '';
+  const skip = new Set(['sudo','env']);
+  let i = 0;
+  // Skip sudo/env and leading VAR=VALUE assignments and env flags
+  while (i < tokens.length) {
+    const t = tokens[i];
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(t)) { i++; continue; }
+    if (t === 'sudo') { i++; while (i < tokens.length && /^-/.test(tokens[i])) i++; continue; }
+    if (t === 'env') { i++; while (i < tokens.length && (/^-/.test(tokens[i]) || /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[i]))) i++; continue; }
+    break;
+  }
+  const head = tokens[i] || '';
+  if (!head) return '';
+  if (head === 'npm' && tokens[i+1] === 'run' && tokens[i+2]) return `npm:run:${tokens[i+2]}`;
+  if (head === 'npx' && tokens[i+1]) return `npx:${tokens[i+1]}`;
+  if ((head === 'pnpm' || head === 'yarn') && tokens[i+1]) return `${head}:${tokens[i+1]}`;
+  if (head === 'python' || head === 'python3' || head === 'node') return `${head}`;
+  return `shell:${head}`;
+}
+
+function deriveCommandKey(tc) {
+  try {
+    const title = String(tc?.title || '');
+    const kind = String(tc?.kind || '');
+    const locPath = (tc?.locations && tc.locations[0] && tc.locations[0].path) ? String(tc.locations[0].path) : '';
+    // Prefer explicit command string from locations when present
+    const cmdStr = locPath || title.split(':').slice(1).join(':');
+    if (/terminal|shell/i.test(kind) || /shell/i.test(title) || cmdStr) {
+      const tokens = splitCommandLine(cmdStr.trim());
+      // unwrap bash/sh -c/-lc "..."
+      if (tokens[0] && /^(bash|sh|zsh)$/.test(tokens[0]) && tokens[1] && /^-?l?c$/.test(tokens[1]) && tokens[2]) {
+        const inner = tokens.slice(2).join(' ');
+        const innerTokens = splitCommandLine(inner.replace(/^['"]|['"]$/g, ''));
+        const key = deriveCommandKeyFromTokens(innerTokens);
+        if (key) return key;
+      }
+      const key = deriveCommandKeyFromTokens(tokens);
+      if (key) return key;
+    }
+    // Fallback: use first word of title
+    const m = title.trim().split(/\s+/)[0] || 'tool';
+    return m.toLowerCase();
+  } catch {
+    return '';
+  }
+}
 
 function acpSend(method, params) {
   if (!geminiProcess || !geminiProcess.stdin || geminiProcess.stdin.destroyed) {
@@ -266,7 +337,7 @@ function handleCliMessage(jsonString, wss) {
               icon,
               label: rawLabel,
               command,
-              status: mapToolStatus(tc.status || 'pending'),
+              status: 'pending',
               content: '',
             });
           }
@@ -282,19 +353,116 @@ function handleCliMessage(jsonString, wss) {
               icon,
               label: rawLabel,
               locations: tc.locations || [],
+              status: 'pending',
             }
           };
           broadcast(wss, pushMsg);
         }
 
-        // 許可応答（既存ロジック）
+        // 設定とポリシーを確認
+        const settingsPath = path.join(__dirname, 'mnt', 'settings.json');
+        let yolo = true; let allowAlways = []; let denyAlways = [];
+        try {
+          const raw = fs.existsSync(settingsPath) ? fs.readFileSync(settingsPath, 'utf8') : '{}';
+          const json = JSON.parse(raw || '{}');
+          yolo = Boolean(json?.tools?.yolo ?? true);
+          allowAlways = Array.isArray(json?.tools?.allowAlways) ? json.tools.allowAlways : [];
+          denyAlways = Array.isArray(json?.tools?.denyAlways) ? json.tools.denyAlways : [];
+        } catch {}
+
+        const cmdKey = deriveCommandKey(tc);
         const opts = msg.params?.options || [];
         const allowOnce = opts.find(o => o.kind === 'allow_once') || opts.find(o => o.optionId === 'proceed_once') || opts[0];
-        const optionId = allowOnce?.optionId || 'proceed_once';
-        acpRespond(msg.id, {
-          sessionId: acpSessionId,
-          outcome: { outcome: 'selected', optionId }
-        });
+        const denyOpt = opts.find(o => o.kind === 'deny') || opts.find(o => o.optionId === 'cancel');
+
+        function respondAllowed() {
+          const optionId = allowOnce?.optionId || 'proceed_once';
+          acpRespond(msg.id, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+        }
+        function respondDenied() {
+          if (denyOpt?.optionId) return acpRespond(msg.id, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
+          acpRespond(msg.id, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+        }
+
+        if (denyAlways.includes(cmdKey)) {
+          respondDenied();
+          if (tc?.toolCallId) {
+            const idx = findLastToolHistoryIndex(tc.toolCallId);
+            if (idx !== -1) { history[idx].status = 'error'; history[idx].updatedTs = Date.now(); }
+            broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: tc.toolCallId, status: 'error' } });
+          }
+          break;
+        }
+        if (allowAlways.includes(cmdKey)) {
+          respondAllowed();
+          if (tc?.toolCallId) {
+            const idx = findLastToolHistoryIndex(tc.toolCallId);
+            if (idx !== -1) { history[idx].status = 'running'; history[idx].updatedTs = Date.now(); }
+            broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: tc.toolCallId, status: 'running' } });
+          }
+          break;
+        }
+        if (yolo) {
+          respondAllowed();
+          if (tc?.toolCallId) {
+            const idx = findLastToolHistoryIndex(tc.toolCallId);
+            if (idx !== -1) { history[idx].status = 'running'; history[idx].updatedTs = Date.now(); }
+            broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: tc.toolCallId, status: 'running' } });
+          }
+          break;
+        }
+
+        // 待機: クライアントからconfirmToolCallを待つ
+        permissionWaiters.set(tc.toolCallId, { requestId: msg.id, options: { allowOnce, denyOpt }, cmdKey });
+        // 何もしない（ユーザの応答を待つ）
+        break;
+      }
+      case 'confirmToolCall': {
+        const { toolCallId, result, mode } = msg.params || {};
+        const waiter = permissionWaiters.get(toolCallId);
+        if (!waiter) return; // nothing to do
+        permissionWaiters.delete(toolCallId);
+        const { requestId, options, cmdKey } = waiter;
+        const allowOnce = options?.allowOnce;
+        const denyOpt = options?.denyOpt;
+
+        if (mode === 'allow_always' || mode === 'deny_always') {
+          try {
+            const settingsPath = path.join(__dirname, 'mnt', 'settings.json');
+            const raw = fs.existsSync(settingsPath) ? fs.readFileSync(settingsPath, 'utf8') : '{}';
+            const json = JSON.parse(raw || '{}');
+            json.tools = json.tools || { yolo: true, allowAlways: [], denyAlways: [] };
+            if (mode === 'allow_always') {
+              if (!json.tools.allowAlways.includes(cmdKey)) json.tools.allowAlways.push(cmdKey);
+              // allow this time as well
+              const optionId = allowOnce?.optionId || 'proceed_once';
+              acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+              broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
+            } else {
+              if (!json.tools.denyAlways.includes(cmdKey)) json.tools.denyAlways.push(cmdKey);
+              if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
+              else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+              broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
+            }
+            const tmp = settingsPath + '.tmp';
+            fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+            fs.writeFileSync(tmp, JSON.stringify(json, null, 2), 'utf8');
+            fs.renameSync(tmp, settingsPath);
+          } catch (e) {
+            console.warn('[Settings] Failed to persist tool policy:', e?.message || e);
+          }
+          break;
+        }
+
+        if (result) {
+          const optionId = allowOnce?.optionId || 'proceed_once';
+          acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+          broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
+        } else {
+          if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
+          else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+          broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
+        }
         break;
       }
       case 'fs/read_text_file': {
@@ -666,8 +834,79 @@ app.prepare().then(() => {
           console.log('[ACP] session/interrupt not available or failed:', e?.message || e);
         }
         flushAssistantMessage(wss, 'canceled');
+        // Mark last pending/running tool as error
+        try {
+          for (let i = history.length - 1; i >= 0; i--) {
+            const rec = history[i];
+            if (!rec) continue;
+            if ((rec.role === 'tool' || rec.type === 'tool') && (rec.status === 'running' || rec.status === 'pending' || !rec.status)) {
+              rec.status = 'error';
+              rec.updatedTs = Date.now();
+              broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: rec.id, status: 'error' } });
+              break;
+            }
+          }
+        } catch {}
         try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null })); } catch {}
         return;
+      }
+
+      if (msg.method === 'confirmToolCall') {
+        try {
+          const { toolCallId, result, mode } = msg.params || {};
+          const waiter = permissionWaiters.get(toolCallId);
+          if (!waiter) {
+            try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { ok: false, reason: 'not_found' } })); } catch {}
+            return;
+          }
+          permissionWaiters.delete(toolCallId);
+          const { requestId, options, cmdKey } = waiter;
+          const allowOnce = options?.allowOnce;
+          const denyOpt = options?.denyOpt;
+
+          if (mode === 'allow_always' || mode === 'deny_always') {
+            try {
+              const settingsPath = path.join(__dirname, 'mnt', 'settings.json');
+              const raw = fs.existsSync(settingsPath) ? fs.readFileSync(settingsPath, 'utf8') : '{}';
+              const json = JSON.parse(raw || '{}');
+              json.tools = json.tools || { yolo: true, allowAlways: [], denyAlways: [] };
+              if (mode === 'allow_always') {
+                if (!json.tools.allowAlways.includes(cmdKey)) json.tools.allowAlways.push(cmdKey);
+                const optionId = allowOnce?.optionId || 'proceed_once';
+                acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+                broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
+              } else {
+                if (!json.tools.denyAlways.includes(cmdKey)) json.tools.denyAlways.push(cmdKey);
+                if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
+                else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+                broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
+              }
+              const tmp = settingsPath + '.tmp';
+              fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+              fs.writeFileSync(tmp, JSON.stringify(json, null, 2), 'utf8');
+              fs.renameSync(tmp, settingsPath);
+            } catch (e) {
+              console.warn('[Settings] Failed to persist tool policy:', e?.message || e);
+            }
+            try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { ok: true } })); } catch {}
+            return;
+          }
+
+          if (result) {
+            const optionId = allowOnce?.optionId || 'proceed_once';
+            acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId } });
+            broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'running' } });
+          } else {
+            if (denyOpt?.optionId) acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'selected', optionId: denyOpt.optionId } });
+            else acpRespond(requestId, { sessionId: acpSessionId, outcome: { outcome: 'rejected' } });
+            broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId, status: 'error' } });
+          }
+          try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { ok: true } })); } catch {}
+          return;
+        } catch (e) {
+          try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { message: e?.message || String(e) } })); } catch {}
+          return;
+        }
       }
     });
     ws.on('close', () => console.log('Client disconnected'));
@@ -676,6 +915,66 @@ app.prepare().then(() => {
   httpsServer.listen(port, hostname, () => {
     console.log(`> Ready on https://${hostname}:${port}`);
     startGemini(wss);
+    // Watch DB file changes and broadcast to clients
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const dbPath = path.join(__dirname, '..', 'study_log.db');
+      let dbNotifyTimer = null;
+      const scheduleDbNotify = () => {
+        if (dbNotifyTimer) return; // debounce: 一度だけまとめて通知
+        dbNotifyTimer = setTimeout(() => {
+          dbNotifyTimer = null;
+          try { broadcast(wss, { jsonrpc: '2.0', method: 'databaseUpdated', params: { ts: Date.now() } }); } catch {}
+        }, 250);
+      };
+      let lastEventId = 0;
+      async function fetchAndBroadcastEvents() {
+        try {
+          const { spawn } = require('child_process');
+          const pythonPath = require('path').join(__dirname, '..', 'manage_log.py');
+          const payload = { action: 'data.events_since', params: { since: lastEventId, limit: 100 } };
+          const proc = spawn('python3', [pythonPath, '--api-mode', 'execute', JSON.stringify(payload)]);
+          let out = '';
+          proc.stdout.on('data', (c) => out += String(c));
+          proc.on('close', () => {
+            try {
+              const json = JSON.parse(out || '{}');
+              const events = Array.isArray(json.events) ? json.events : [];
+              for (const ev of events) {
+                const payload = { table: ev.table_name, op: ev.op, rowId: ev.row_id, data: ev.snapshot ? JSON.parse(ev.snapshot) : null };
+                let method;
+                if (ev.table_name === 'study_logs') {
+                  method = (ev.op === 'insert' ? 'logCreated' : ev.op === 'update' ? 'logUpdated' : 'logDeleted');
+                } else if (ev.table_name === 'goals') {
+                  method = (ev.op === 'insert' ? 'goalAdded' : ev.op === 'update' ? 'goalUpdated' : 'goalDeleted');
+                } else if (ev.table_name === 'daily_summaries') {
+                  method = (ev.op === 'insert' ? 'summaryAdded' : ev.op === 'update' ? 'summaryUpdated' : 'summaryDeleted');
+                } else {
+                  // Fallback: just broadcast databaseUpdated to force quiet refresh
+                  method = 'databaseUpdated';
+                }
+                broadcast(wss, { jsonrpc: '2.0', method, params: payload });
+              }
+              if (typeof json.last === 'number') lastEventId = json.last;
+            } catch (e) { /* ignore */ }
+          });
+        } catch {}
+      }
+      if (fs.existsSync(dbPath)) {
+        fs.watchFile(dbPath, { interval: 400 }, (curr, prev) => {
+          if (curr && prev && curr.mtimeMs !== prev.mtimeMs) {
+            scheduleDbNotify();
+            fetchAndBroadcastEvents();
+          }
+        });
+        console.log('[DB Watch] Watching', dbPath);
+      } else {
+        console.warn('[DB Watch] DB file not found:', dbPath);
+      }
+    } catch (e) {
+      console.warn('[DB Watch] Failed to watch DB:', e?.message || e);
+    }
   });
 
   httpServer.listen(80, hostname, () => {

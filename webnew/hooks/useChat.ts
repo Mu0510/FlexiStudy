@@ -365,7 +365,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
       if (msg.method === 'pushToolCall') {
         const toolId = msg.params.toolCallId ?? msg.id;
-        const { icon, label, locations } = msg.params;
+        const { icon, label, locations, status } = msg.params;
         const command = locations?.[0]?.path ?? '';
 
         try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('chat:pre-mutate', { detail: { kind: 'tool', action: 'add', toolId } })); } catch {}
@@ -381,7 +381,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             }
             newMessages.push({
               id: toolId, ts: msg.ts || Date.now(), role: 'tool', type: 'tool', toolCallId: toolId,
-              icon, label, command, status: 'running', content: 'ツールを実行中...',
+              icon, label, command, status: (status as any) || 'running', content: (status === 'pending' ? '' : 'ツールを実行中...'),
             } as any);
             return newMessages;
           });
@@ -591,6 +591,17 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     }));
   }, [ws, sendWsMessage]);
 
+  // Advanced approval: 'allow_once' | 'allow_always' | 'deny' | 'deny_always'
+  const sendToolApproval = useCallback((toolCallId: string, decision: 'allow_once'|'allow_always'|'deny'|'deny_always') => {
+    if (!ws) return;
+    const req = {
+      jsonrpc: '2.0', id: requestIdCounter.current++, method: 'confirmToolCall',
+      params: { toolCallId, result: decision !== 'deny' && decision !== 'deny_always', mode: decision }
+    } as any;
+    sendWsMessage(req);
+    setMessages(prev => prev.map(m => (m.id === toolCallId ? { ...m, status: decision.startsWith('allow') ? 'running' : 'error' } : m)));
+  }, [ws, sendWsMessage]);
+
   const requestHistory = useCallback((isInitialLoad = false) => {
     if (historyState.current.isFetchingHistory || historyState.current.finished) return;
 
@@ -685,6 +696,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     cancelSendMessage,
     requestHistory,
     sendToolConfirmation,
+    sendToolApproval,
     clearMessages,
   };
 };

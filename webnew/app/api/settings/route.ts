@@ -35,7 +35,13 @@ export async function GET(request: Request) {
     const store = readStore();
     const out: Record<string, any> = {};
     if (keys) {
-      for (const k of keys) if (k in store) out[k] = store[k];
+      const getByPath = (obj: any, path: string) => {
+        return path.split('.').reduce((acc, p) => (acc && typeof acc === 'object') ? acc[p] : undefined, obj);
+      };
+      for (const k of keys) {
+        const v = getByPath(store, k);
+        if (v !== undefined) out[k] = v;
+      }
     } else {
       Object.assign(out, store);
     }
@@ -52,11 +58,22 @@ export async function POST(request: Request) {
     const value = body?.value;
     if (!key) return NextResponse.json({ error: 'key required' }, { status: 400 });
     const store = readStore();
-    store[key] = value;
+    // support dot-path (e.g., tools.yolo)
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let obj: any = store;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const p = parts[i];
+        if (typeof obj[p] !== 'object' || obj[p] === null) obj[p] = {};
+        obj = obj[p];
+      }
+      obj[parts[parts.length - 1]] = value;
+    } else {
+      store[key] = value;
+    }
     writeStore(store);
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'failed' }, { status: 500 });
   }
 }
-

@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
-import { getSubjectStyle } from "@/lib/utils"
+import { getSubjectStyle, normalizeTags } from "@/lib/utils"
 
 // 型定義
 interface Goal {
@@ -91,7 +91,7 @@ export function DailyGoalsCard({ goals, stats, title = "今日の目標", classN
                     >
                       {goal.subject}
                     </Badge>
-                    {goal.tags && goal.tags.map((tag, tagIndex) => (
+                    {normalizeTags(goal.tags).map((tag, tagIndex) => (
                       <Badge key={tagIndex} variant="outline" className="border-neutral-200 text-neutral-600 dark:border-neutral-700 dark:text-neutral-400">
                         {tag}
                       </Badge>

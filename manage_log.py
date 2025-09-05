@@ -958,6 +958,110 @@ def get_weekly_study_time():
             data.append({"day": day_name_ja, "time": total_minutes})
     return data[::-1] # 曜日順に並べるため逆順にする
 
+# ---- Event tracking for fine-grained UI diffs ----
+def ensure_event_triggers():
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              table_name TEXT,
+              op TEXT,
+              row_id INTEGER,
+              snapshot TEXT,
+              ts TEXT DEFAULT (datetime('now'))
+            )
+        """)
+
+        # study_logs triggers: only recreate if 'summary' is missing
+        def trigger_has_summary(name: str) -> bool:
+            try:
+                cursor.execute("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?", (name,))
+                row = cursor.fetchone()
+                if not row or not row[0]:
+                    return False
+                return 'summary' in row[0]
+            except Exception:
+                return False
+
+        for trig_name in (
+            'trg_study_logs_insert',
+            'trg_study_logs_update',
+            'trg_study_logs_delete',
+        ):
+            if not trigger_has_summary(trig_name):
+                try:
+                    cursor.execute(f"DROP TRIGGER IF EXISTS {trig_name}")
+                except Exception:
+                    pass
+        cursor.executescript("""
+            CREATE TRIGGER IF NOT EXISTS trg_study_logs_insert AFTER INSERT ON study_logs BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('study_logs','insert',NEW.id,
+                json_object('id',NEW.id,'event_type',NEW.event_type,'subject',NEW.subject,'content',NEW.content,'start_time',NEW.start_time,'end_time',NEW.end_time,'duration_minutes',NEW.duration_minutes,'summary',NEW.summary));
+            END;
+            CREATE TRIGGER IF NOT EXISTS trg_study_logs_update AFTER UPDATE ON study_logs BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('study_logs','update',NEW.id,
+                json_object('id',NEW.id,'event_type',NEW.event_type,'subject',NEW.subject,'content',NEW.content,'start_time',NEW.start_time,'end_time',NEW.end_time,'duration_minutes',NEW.duration_minutes,'summary',NEW.summary));
+            END;
+            CREATE TRIGGER IF NOT EXISTS trg_study_logs_delete AFTER DELETE ON study_logs BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('study_logs','delete',OLD.id,
+                json_object('id',OLD.id,'event_type',OLD.event_type,'subject',OLD.subject,'content',OLD.content,'start_time',OLD.start_time,'end_time',OLD.end_time,'duration_minutes',OLD.duration_minutes,'summary',OLD.summary));
+            END;
+        """)
+        # goals triggers
+        cursor.executescript("""
+            CREATE TRIGGER IF NOT EXISTS trg_goals_insert AFTER INSERT ON goals BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('goals','insert',NEW.id,
+                json_object('id',NEW.id,'date',NEW.date,'task',NEW.task,'completed',NEW.completed,'subject',NEW.subject,'total_problems',NEW.total_problems,'completed_problems',NEW.completed_problems,'tags',NEW.tags,'details',NEW.details));
+            END;
+            CREATE TRIGGER IF NOT EXISTS trg_goals_update AFTER UPDATE ON goals BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('goals','update',NEW.id,
+                json_object('id',NEW.id,'date',NEW.date,'task',NEW.task,'completed',NEW.completed,'subject',NEW.subject,'total_problems',NEW.total_problems,'completed_problems',NEW.completed_problems,'tags',NEW.tags,'details',NEW.details));
+            END;
+            CREATE TRIGGER IF NOT EXISTS trg_goals_delete AFTER DELETE ON goals BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('goals','delete',OLD.id,
+                json_object('id',OLD.id,'date',OLD.date,'task',OLD.task,'completed',OLD.completed,'subject',OLD.subject,'total_problems',OLD.total_problems,'completed_problems',OLD.completed_problems,'tags',OLD.tags,'details',OLD.details));
+            END;
+            -- daily_summaries triggers
+            CREATE TRIGGER IF NOT EXISTS trg_daily_summaries_insert AFTER INSERT ON daily_summaries BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('daily_summaries','insert',0,
+                json_object('date',NEW.date,'summary',NEW.summary));
+            END;
+            CREATE TRIGGER IF NOT EXISTS trg_daily_summaries_update AFTER UPDATE ON daily_summaries BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('daily_summaries','update',0,
+                json_object('date',NEW.date,'summary',NEW.summary));
+            END;
+            CREATE TRIGGER IF NOT EXISTS trg_daily_summaries_delete AFTER DELETE ON daily_summaries BEGIN
+              INSERT INTO events(table_name,op,row_id,snapshot)
+              VALUES('daily_summaries','delete',0,
+                json_object('date',OLD.date,'summary',OLD.summary));
+            END;
+        """)
+
+def action_data_events_since(params):
+    since = int((params or {}).get('since', 0))
+    limit = int((params or {}).get('limit', 100))
+    with get_connection() as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute("SELECT * FROM events WHERE id > ? ORDER BY id ASC LIMIT ?", (since, limit))
+        rows = [dict(r) for r in cur.fetchall()]
+        return { 'events': rows, 'last': rows[-1]['id'] if rows else since }
+
+# Ensure event triggers are present at import time
+try:
+    ensure_event_triggers()
+except Exception as _e:
+    pass
+
 def get_dashboard_data(weekly_period_days=None):
     """ダッシュボード用のデータを取得して返す"""
     today = datetime.date.today()
@@ -1733,6 +1837,38 @@ def action_data_weekly_study_time():
     """過去7日間の日ごとの合計学習時間を取得する"""
     return get_weekly_study_time()
 
+def get_this_week_study_time(week_start='sunday'):
+    """週の開始（日曜または月曜）を起点に、当週7日分の日別学習時間を返す"""
+    today = datetime.date.today()
+    if str(week_start).lower().startswith('mon'):
+        # 月曜始まり: Monday=0 .. Sunday=6
+        start_of_week = today - datetime.timedelta(days=today.weekday())
+    else:
+        # 日曜始まり: Sunday=6（weekday: Mon=0..Sun=6）→ 前の日曜まで戻す
+        offset = (today.weekday() + 1) % 7  # Mon(0)->1 ... Sun(6)->0
+        start_of_week = today - datetime.timedelta(days=offset)
+
+    data = []
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for i in range(7):
+            day = start_of_week + datetime.timedelta(days=i)
+            day_str = day.strftime('%Y-%m-%d')
+            day_name_en = day.strftime('%a')
+            day_map = {'Sun': '日', 'Mon': '月', 'Tue': '火', 'Wed': '水', 'Thu': '木', 'Fri': '金', 'Sat': '土'}
+            day_name_ja = day_map.get(day_name_en, '')
+            cursor.execute(
+                "SELECT SUM(duration_minutes) FROM study_logs WHERE DATE(start_time) = ? AND event_type IN ('START', 'RESUME')",
+                (day_str,)
+            )
+            total_minutes = cursor.fetchone()[0] or 0
+            data.append({"day": day_name_ja, "time": total_minutes})
+    return data
+
+def action_data_this_week_study_time(params):
+    week_start = (params or {}).get('week_start', 'sunday')
+    return get_this_week_study_time(week_start)
+
 def action_log_delete(params):
     """指定されたIDの学習ログを削除する"""
     log_id = params.get("id")
@@ -1857,6 +1993,8 @@ ACTION_HANDLERS = {
     "data.unique_subjects": action_data_unique_subjects,
     "data.study_time_by_subject": action_data_study_time_by_subject,
     "data.weekly_study_time": action_data_weekly_study_time,
+    "data.this_week_study_time": action_data_this_week_study_time,
+    "data.events_since": action_data_events_since,
     # new: tags + search
     "data.tags": lambda params: get_all_tags(params.get("prefix"), params.get("limit")),
     "data.search": lambda params: search_data(params),

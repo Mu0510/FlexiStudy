@@ -2,10 +2,17 @@ import { NextResponse } from 'next/server';
 import { spawn } from 'child_process';
 import path from 'path';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const url = new URL(req.url);
+    const weeklyParam = url.searchParams.get('weekly_period');
+    const weekly_period = weeklyParam ? Number(weeklyParam) : null;
+    const week_start = url.searchParams.get('week_start');
     const pythonScript = path.join(process.cwd(), '../manage_log.py');
-    const commandPayload = { action: 'data.dashboard', params: {} };
+    const commandPayload: any = { action: 'data.dashboard', params: {} };
+    // manage_logの実装では "days" パラメータのみ対応
+    if (weekly_period) commandPayload.params.days = weekly_period;
+    // week_start は未対応のため送らない（週次の合計はPython側で月曜起点固定）
     const args = ['--api-mode', 'execute', JSON.stringify(commandPayload)];
 
     const processPromise = new Promise((resolve, reject) => {

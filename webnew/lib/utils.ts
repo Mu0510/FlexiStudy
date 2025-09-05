@@ -47,3 +47,20 @@ export const getSubjectStyle = (subject: string | undefined, subjectColors: Reco
     borderStyle: 'solid',
   };
 };
+
+// Normalize possibly inconsistent tags field into a string array
+export const normalizeTags = (tags: unknown): string[] => {
+  if (Array.isArray(tags)) {
+    return tags.map(String).filter(Boolean);
+  }
+  if (typeof tags === 'string') {
+    const s = tags.trim();
+    if (!s) return [];
+    try {
+      const parsed = JSON.parse(s);
+      if (Array.isArray(parsed)) return parsed.map(String).filter(Boolean);
+    } catch {}
+    return s.split(',').map(t => t.trim()).filter(Boolean);
+  }
+  return [];
+};
