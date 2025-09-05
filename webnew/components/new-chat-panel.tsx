@@ -615,6 +615,20 @@ export function NewChatPanel({
     }
   }, [messages, activeMessage]);
 
+  // Listen for pre-mutation events from useChat (e.g., before tool add/update)
+  useEffect(() => {
+    const handler = () => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      const { scrollHeight, scrollTop, clientHeight } = container;
+      const NEAR_BOTTOM_TOLERANCE = 24;
+      const nearBottom = scrollHeight - scrollTop <= clientHeight + NEAR_BOTTOM_TOLERANCE;
+      shouldScrollToBottomRef.current = nearBottom;
+    };
+    window.addEventListener('chat:pre-mutate', handler as any);
+    return () => window.removeEventListener('chat:pre-mutate', handler as any);
+  }, []);
+
   // Effect to scroll to bottom on initial open
   useEffect(() => {
     if (isOpen || !isFloating) {

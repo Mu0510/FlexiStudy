@@ -360,6 +360,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const { icon, label, locations } = msg.params;
         const command = locations?.[0]?.path ?? '';
 
+        try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('chat:pre-mutate', { detail: { kind: 'tool', action: 'add', toolId } })); } catch {}
         flushSync(() => {
           setMessages(prev => {
             const newMessages = [...prev];
@@ -390,6 +391,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         const { status, content } = msg.params;
         const normalized = normalizeToolStatus(status) || undefined;
 
+        try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('chat:pre-mutate', { detail: { kind: 'tool', action: 'update', toolId } })); } catch {}
         setMessages(prevMessages => {
           const list = [...prevMessages];
           let idx = list.findIndex(m => m.id === toolId);
