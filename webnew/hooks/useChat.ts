@@ -21,7 +21,6 @@ interface Goal {
   completed_problems?: number | null;
 }
 
-// 追加: メッセージの出所タグ（重複掃除に使う）
 type MessageOrigin = 'server' | 'shadow';
 
 interface Message {
@@ -38,7 +37,7 @@ interface Message {
   label?: string;
   command?: string;
   session?: { session: any; logEntry: any } | null;
-  origin?: MessageOrigin; // ← 追加
+  origin?: MessageOrigin;
 }
 
 interface ActiveMessage {
@@ -99,7 +98,6 @@ function generateContextualDiffHtml(oldText: string, newText: string, ctx = 3): 
   return html;
 }
 
-// 追加: ツールステータス正規化
 function normalizeToolStatus(status?: string): 'running' | 'finished' | 'error' | undefined {
   if (!status) return undefined;
   const s = String(status).toLowerCase();
@@ -137,22 +135,32 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const latestTsRef = useRef<number | null>(null);
   const hasLoadedOnceRef = useRef(false);
 
-  // finalize: シャドウ確定＋ツールのフォールバック終了
   const finalizeTurn = useCallback(() => {
     const am = activeMessageRef.current;
     if (am && am.content?.trim()) {
       setMessages(prev => {
-        // 既に同一IDが確定済なら追加しない
-        if (prev.some(m => m.id === am.id)) return prev;
-        return [...prev, { id: am.id, ts: Date.now(), role: 'assistant', content: am.content, origin: 'shadow' }];
+        const idx = prev.findIndex(m => m.id === am.id);
+        if (idx !== -1) {
+          const list = [...prev];
+          const old = list[idx];
+          list[idx] = { ...old, content: am.content, ts: am.ts ?? old.ts, role: 'assistant', origin: old.origin ?? 'shadow' };
+          return list;
+        }
+        return [...prev, {
+          id: am.id,
+          ts: am.ts ?? Date.now(),
+          role: 'assistant',
+          content: am.content,
+          origin: 'shadow' as const,
+        }];
       });
     }
     setActiveMessage(null);
 
-    // 走っているツールを finished に落とす（表示側の整合のため）
     setMessages(prev => prev.map(m => {
       if ((m.role === 'tool' || m.type === 'tool') && (m.status === 'running' || m.status === 'in_progress' || !m.status)) {
-        return { ...m, status: 'finished', ts: Date.now() };
+        if (m.status === 'finished') return m;
+        return { ...m, status: 'finished' };
       }
       return m;
     }));
@@ -165,13 +173,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     if (!ws) return;
 
     const unsubscribe = subscribe((msg: any) => {
-      // WebSocket受信内: stopReason によるターン終了を確定
       if (msg?.result && typeof msg.result === 'object' && (msg.result.stopReason === 'end_turn' || msg.result.stopReason === 'message_end')) {
         finalizeTurn();
         return;
       }
 
-      // streamAssistantMessageChunk: thought→text 切替で server の messageId に乗り換え
       if (msg.method === 'streamAssistantMessageChunk') {
         const { chunk } = msg.params;
         const incomingMessageId = msg.params.messageId;
@@ -191,7 +197,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           }
 
           if (chunk?.text !== undefined) {
-            if (type === 'thought' && incomingMessageId) id = incomingMessageId; // 正式IDへ
+            if (type === 'thought' && incomingMessageId) id = incomingMessageId;
             content = (type === 'thought')
               ? chunk.text.replace(/^\n+/, '')
               : (prevActiveMessage?.content || '') + chunk.text.replace(/^\n+/, '');
@@ -209,14 +215,30 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         return;
       }
 
-      // addMessage: サーバ確定が来たらシャドウを掃除しスピナー停止
       if (msg.method === 'addMessage') {
         const { message } = msg.params;
 
         flushSync(() => {
           setMessages(prev => {
-            // 既に同じIDがあれば追加しない
-            if (prev.some(m => m.id === message.id)) return prev;
+            const idx = prev.findIndex(m => m.id === message.id);
+            if (idx !== -1) {
+              const existing = prev[idx];
+              if (existing.origin === 'shadow') {
+                const list = [...prev];
+                list[idx] = {
+                  id: message.id,
+                  ts: message.ts,
+                  role: message.role,
+                  content: message.text,
+                  files: message.files || [],
+                  goal: message.goal || null,
+                  session: message.session || null,
+                  origin: 'server' as const,
+                };
+                return list;
+              }
+              return prev;
+            }
 
             const next = [...prev, {
               id: message.id,
@@ -229,31 +251,18 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               origin: 'server' as const,
             }];
 
-            // 直近のシャドウ確定で内容が一致するものがあれば掃除
-            if (message.role === 'assistant' && message.text?.trim()) {
-              for (let i = next.length - 2; i >= 0 && i >= next.length - 6; i--) {
-                const m = next[i];
-                if (m.role === 'assistant' && m.origin === 'shadow' && (m.content || '').trim() === message.text.trim()) {
-                  next.splice(i, 1);
-                  break;
-                }
-              }
-            }
             return next;
           });
         });
 
         if (message.role === 'assistant') {
           setActiveMessage(null);
-          setIsGeneratingResponse(false); // スピナー停止
+          setIsGeneratingResponse(false);
         }
         onMessageReceived?.();
         return;
       }
 
-      // 既存の pushToolCall と requestToolCallConfirmation は、
-      // updateToolCall のフォールバックでカバーされるため、ここでは特に変更しない
-      // (元のコードベースにこれらのハンドラがあれば、それは維持される)
       if (msg.method === 'pushToolCall') {
         const toolId = msg.params.toolCallId ?? msg.id;
         const { icon, label, locations } = msg.params;
@@ -282,7 +291,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         return;
       }
 
-      // updateToolCall: ステータス正規化
       if (msg.method === 'updateToolCall') {
         const toolId = msg.params.callId ?? msg.params.toolCallId;
         const { status, content } = msg.params;
@@ -299,7 +307,15 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               if (!list.some(m => m.id === partId)) list.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content, origin: 'shadow' });
               setActiveMessage(null);
             }
-            list.push({ id: toolId, ts: Date.now(), role: 'tool', type: 'tool', toolCallId: toolId, status: normalized || 'running', content: '' } as any);
+            list.push({
+              id: toolId,
+              ts: Date.now(),
+              role: 'tool',
+              type: 'tool',
+              toolCallId: toolId,
+              status: normalized || 'running',
+              content: ''
+            } as any);
             idx = list.length - 1;
           }
 
@@ -316,7 +332,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             else m.content = `<pre>${JSON.stringify(content, null, 2)}</pre>`;
           }
           if (normalized) m.status = normalized;
-          m.ts = Date.now();
           list[idx] = m;
           return list;
         });
@@ -324,7 +339,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         return;
       }
 
-      // fetchHistory 応答（result.messages）は pendingHistory を問わず処理し、必ず解除
       if (msg.id !== undefined && msg.result?.messages) {
         const meta = historyState.current.requestMeta.get(msg.id);
         const raw = msg.result.messages;
@@ -350,30 +364,26 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             if (meta?.mode === 'older' || meta?.mode === 'initial') {
                 historyState.current.oldestTs = Math.min(historyState.current.oldestTs ?? Infinity, ...raw.map((m:any) => m.ts));
                 return [...newUIMessages, ...prev];
-            } else { // newer
+            } else {
                 historyState.current.newestTs = Math.max(historyState.current.newestTs ?? 0, ...raw.map((m:any) => m.ts));
                 return [...prev, ...newUIMessages];
             }
           });
         }
 
-        // 取りきり判定（依頼時に記録した limit を使う）
         const reqMeta = historyState.current.requestMeta.get(msg.id);
         const reqLimit = reqMeta?.limit ?? (reqMeta?.mode === 'initial' ? 30 : 20);
         if (reqMeta?.mode === 'older' || reqMeta?.mode === 'initial') {
           if (raw.length < reqLimit) historyState.current.finished = true;
         }
 
-        // 必ず解除
         historyState.current.isFetchingHistory = false;
         historyState.current.pendingHistory.delete(msg.id);
         historyState.current.requestMeta.delete(msg.id);
         return;
       }
 
-      // result:null ACK は完了扱いにしない（既存の finalize ロジックに任せる）
       if (msg.id !== undefined && msg.result === null) {
-        // no-op
         return;
       }
 
@@ -419,7 +429,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     }));
   }, [ws, sendWsMessage]);
 
-  // requestHistory: タイムアウト保険を追加、メタに mode と limit を保存
   const requestHistory = useCallback((isInitialLoad = false) => {
     if (historyState.current.isFetchingHistory || historyState.current.finished) return;
 
@@ -431,7 +440,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     if (ws && ws.readyState === WebSocket.OPEN) {
       sendWsMessage({ jsonrpc: '2.0', id, method: 'fetchHistory', params: { limit, before: historyState.current.oldestTs ?? undefined } });
       historyState.current.requestMeta.set(id, { mode: isInitialLoad ? 'initial' : 'older', limit });
-      // タイムアウトで解除（保険）
       setTimeout(() => {
         if (historyState.current.pendingHistory.has(id)) {
           console.warn('[useChat] fetchHistory timeout; forcing release.');
@@ -456,7 +464,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     sendWsMessage({ jsonrpc: '2.0', id, method: 'fetchHistory', params: { after } });
   }, [ws, sendWsMessage]);
 
-  // cancelSendMessage: jsonrpc を修正
   const cancelSendMessage = useCallback(() => {
     if (!ws || !lastSentRequestId.current) return;
     const req = { jsonrpc: '2.0', id: lastSentRequestId.current, method: 'cancelSendMessage', params: {} };
@@ -478,7 +485,6 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     }
   }, [ws, sendWsMessage]);
 
-  // 接続断時の保険
   useEffect(() => {
     if (isConnected === false) {
       setIsGeneratingResponse(false);
@@ -499,8 +505,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   }, [ws, requestHistory, requestDelta, messages.length]);
 
   useEffect(() => {
-    const maxTs = messages.reduce((acc, m) => Math.max(acc, m.ts || 0), latestTsRef.current ?? 0);
-    if (maxTs > (latestTsRef.current ?? 0)) latestTsRef.current = maxTs;
+    const maxTsFromServer = messages
+      .filter(m => m.origin === 'server')
+      .reduce((acc, m) => Math.max(acc, m.ts || 0), latestTsRef.current ?? 0);
+    if (maxTsFromServer > (latestTsRef.current ?? 0)) latestTsRef.current = maxTsFromServer;
   }, [messages]);
 
   return {
