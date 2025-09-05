@@ -412,7 +412,8 @@ function handleSessionUpdate(upd, wss) {
             rec.content = JSON.stringify(content);
         }
         rec.status = mappedStatus;
-        rec.ts = Date.now();
+        // 並び順を安定させるため、作成時刻(ts)は更新しない
+        rec.updatedTs = Date.now();
       }
       broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: upd.toolCallId, status: mappedStatus, content } });
       break;
