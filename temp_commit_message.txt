@@ -1,7 +1,0 @@
-feat: Enhance chat message timestamp handling and add file system ACP handlers
-
-- Introduce `updatedTs` to `Message` interface and update chat history logic to account for it.
-- Refine connection loss handling in `useChat` hook to prevent premature state resets.
-- Add `acpRespondError` and `safeResolveProjectPath` utilities in `webnew/server.js`.
-- Implement `fs/read_text_file` and `fs/write_text_file` ACP handlers for file system operations.
-- Remove `test_replace_file.txt`.

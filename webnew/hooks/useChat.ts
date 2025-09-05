@@ -347,8 +347,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           if (typeof (message as any).text === 'string' && (message as any).text.trim()) {
             try { pendingTrimPrefixRef.current = (message as any).text.trim(); } catch {}
           }
+          // サーバーからの addMessage（部分確定または確定）は、生成中フラグを落とさない。
+          // 真のターン終了は messageCompleted/stopReason で finalizeTurn し、そこで isGeneratingResponse を false にする。
           setActiveMessage(null);
-          setIsGeneratingResponse(false);
         }
         onMessageReceived?.();
         return;
