@@ -371,6 +371,7 @@ function handleCliMessage(jsonString, wss) {
               label: rawLabel,
               locations: tc.locations || [],
               status: 'pending',
+              cmdKey: deriveCommandKey(tc),
             }
           };
           broadcast(wss, pushMsg);

@@ -81,7 +81,7 @@ interface NewChatPanelProps {
   messages: Message[];
   activeMessage: ActiveMessage | null;
   isGeneratingResponse: boolean;
-  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; session?: any | null; features?: { webSearch?: boolean } }) => void;
+  sendMessage: (messageData: { text: string; files?: FileInfo[]; goal?: Goal | null; session?: any | null; features?: { webSearch?: boolean } }) => boolean;
   cancelSendMessage: () => void;
   requestHistory: (isInitialLoad?: boolean) => void;
   isFetchingHistory: boolean;
@@ -471,23 +471,30 @@ export function NewChatPanel({
     }
 
     // Send message with text, file info, and goal info
+    let sentOk = false;
     if (finalMessage || uploadedFiles.length > 0 || selectedGoal || selectedSession) {
       shouldScrollToBottomRef.current = true; // Force scroll to bottom on send
       const features = webSearchFlag ? { webSearch: true } : undefined;
-      sendMessage({ text: finalMessage, files: uploadedFiles, goal: selectedGoal, session: selectedSession, features });
+      sentOk = sendMessage({ text: finalMessage, files: uploadedFiles, goal: selectedGoal, session: selectedSession, features });
       if (webSearchFlag) setWebSearchFlag(false);
     }
 
-    // Reset other states
-    // 入力はここでクリア（アップロード完了・送信後）
-    setInput('');
-    setInterimTranscript('');
-    setSelectedFiles([]);
-    if (onClearSelectedGoal) {
-      onClearSelectedGoal();
-    }
-    if (onClearSelectedSession) {
-      onClearSelectedSession();
+    // Reset other states only if actually sent
+    if (sentOk) {
+      // 入力はここでクリア（アップロード完了・送信後）
+      setInput('');
+      setInterimTranscript('');
+      setSelectedFiles([]);
+      if (onClearSelectedGoal) {
+        onClearSelectedGoal();
+      }
+      if (onClearSelectedSession) {
+        onClearSelectedSession();
+      }
+    } else {
+      // 送れなかった場合、入力は残す＆通知
+      toast({ description: '接続準備中です。数秒後にもう一度お試しください。' });
+      return; // フォーカス/スクロール等は維持
     }
 
     if (chatInputRef.current) {
@@ -801,7 +808,7 @@ export function NewChatPanel({
                         {getToolIconText(msg.icon)}
                       </span>
                       <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-                        {msg.label || "Tool Call"}
+                        {msg.label || (msg.cmdKey ? msg.cmdKey : "Tool Call")}
                       </CardTitle>
                     </div>
                     <div className="tool-card__line-break"></div>
@@ -824,11 +831,20 @@ export function NewChatPanel({
                       <div className="text-gray-200 dark:text-gray-300" dangerouslySetInnerHTML={{ __html: msg.content }} />
                     </div>
                     {msg.status === 'pending' && (
-                      <div className="p-2 flex items-center gap-2">
-                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => sendToolApproval?.(msg.id, 'allow_once')}>一度だけ許可</Button>
-                        <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'allow_always')}>常に許可</Button>
-                        <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'deny')}>拒否</Button>
-                        <Button size="sm" variant="ghost" onClick={() => sendToolApproval?.(msg.id, 'deny_always')}>常に拒否</Button>
+                      <div className="p-2">
+                        {/* What is being requested */}
+                        <div className="text-xs text-gray-700 dark:text-gray-300 mb-1">
+                          実行確認: <span className="font-semibold">{(msg.cmdKey || '').replace(/^shell:/,'').replace(/^npm:run:/,'npm run ') || getRelativePath(msg.command)}</span>
+                        </div>
+                        {/* Action area: responsive wrap */}
+                        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
+                          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white w-full sm:w-auto" onClick={() => sendToolApproval?.(msg.id, 'allow_once')}>一度だけ許可</Button>
+                          <div className="flex gap-2 flex-wrap">
+                            <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'allow_always')}>常に許可</Button>
+                            <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'deny')}>拒否</Button>
+                            <Button size="sm" variant="ghost" onClick={() => sendToolApproval?.(msg.id, 'deny_always')}>常に拒否</Button>
+                          </div>
+                        </div>
                       </div>
                     )}
                   </CardContent>

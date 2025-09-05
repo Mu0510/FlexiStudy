@@ -37,6 +37,7 @@ interface Message {
   icon?: string;
   label?: string;
   command?: string;
+  cmdKey?: string;
   session?: { session: any; logEntry: any } | null;
   origin?: MessageOrigin;
 }
@@ -365,7 +366,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
       if (msg.method === 'pushToolCall') {
         const toolId = msg.params.toolCallId ?? msg.id;
-        const { icon, label, locations, status } = msg.params;
+        const { icon, label, locations, status, cmdKey } = msg.params;
         const command = locations?.[0]?.path ?? '';
 
         try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('chat:pre-mutate', { detail: { kind: 'tool', action: 'add', toolId } })); } catch {}
@@ -381,7 +382,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             }
             newMessages.push({
               id: toolId, ts: msg.ts || Date.now(), role: 'tool', type: 'tool', toolCallId: toolId,
-              icon, label, command, status: (status as any) || 'running', content: (status === 'pending' ? '' : 'ツールを実行中...'),
+              icon, label, command, cmdKey, status: (status as any) || 'running', content: (status === 'pending' ? '' : 'ツールを実行中...'),
             } as any);
             return newMessages;
           });
@@ -534,10 +535,10 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     return () => unsubscribe();
   }, [ws, subscribe, sendWsMessage, finalizeTurn, onMessageReceived]);
 
-  const sendMessage = useCallback((messageData: SendMessageData) => {
+  const sendMessage = useCallback((messageData: SendMessageData): boolean => {
     if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse) {
       console.warn("WebSocket is not open or busy, cannot send message.");
-      return;
+      return false;
     }
     setIsGeneratingResponse(true);
     const { text, files, goal, session, features } = messageData;
@@ -557,6 +558,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       params: { chunks: [{ text, files, goal, messageId: newMessage.id, session, features }] }
     };
     sendWsMessage(req);
+    return true;
   }, [ws, isGeneratingResponse, sendWsMessage]);
 
   const sendToolConfirmation = useCallback((toolCallId: string, result: boolean) => {
@@ -665,6 +667,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     if (isConnected === false) {
       // 進行中フラグは維持し、必要最低限のフラグのみ解除
       historyState.current.isFetchingHistory = false;
+    }
+  }, [isConnected]);
+
+  // After reconnect/focus, ensure send is not blocked by a stale generating flag
+  useEffect(() => {
+    if (isConnected) {
+      setIsGeneratingResponse(false);
     }
   }, [isConnected]);
 
