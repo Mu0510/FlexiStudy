@@ -97,13 +97,21 @@ function deriveCommandKey(tc) {
     const kind = String(tc?.kind || '');
     const locPath = (tc?.locations && tc.locations[0] && tc.locations[0].path) ? String(tc.locations[0].path) : '';
     // Prefer explicit command string from locations when present
-    const cmdStr = locPath || title.split(':').slice(1).join(':');
-    if (/terminal|shell/i.test(kind) || /shell/i.test(title) || cmdStr) {
-      const tokens = splitCommandLine(cmdStr.trim());
+    let titleCmd = null;
+    const mt = title.match(/^(?:Shell|Terminal)[:\s]+(.+)$/i);
+    if (mt && mt[1]) titleCmd = mt[1]; else if (/shell|terminal/i.test(title)) titleCmd = title;
+    const cmdStr = locPath || titleCmd || '';
+    if (/terminal|shell/i.test(kind) || cmdStr) {
+      let tokens = splitCommandLine(cmdStr.trim());
+      // keep only the first command segment before control operators
+      const opIdx = tokens.findIndex(t => t === '&&' || t === '||' || t === ';' || t === '|');
+      if (opIdx !== -1) tokens = tokens.slice(0, opIdx);
       // unwrap bash/sh -c/-lc "..."
       if (tokens[0] && /^(bash|sh|zsh)$/.test(tokens[0]) && tokens[1] && /^-?l?c$/.test(tokens[1]) && tokens[2]) {
         const inner = tokens.slice(2).join(' ');
-        const innerTokens = splitCommandLine(inner.replace(/^['"]|['"]$/g, ''));
+        let innerTokens = splitCommandLine(inner.replace(/^['"]|['"]$/g, ''));
+        const innerOp = innerTokens.findIndex(t => t === '&&' || t === '||' || t === ';' || t === '|');
+        if (innerOp !== -1) innerTokens = innerTokens.slice(0, innerOp);
         const key = deriveCommandKeyFromTokens(innerTokens);
         if (key) return key;
       }
