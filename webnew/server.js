@@ -31,7 +31,7 @@ const PROJECT_ROOT = path.join(__dirname, '..');
 function getGeminiSpawnSpec() {
   return {
     cmd: 'sudo',
-    args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.2.2', ...GEMINI_FLAGS],
+    args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.3.2', ...GEMINI_FLAGS],
   };
 }
 
