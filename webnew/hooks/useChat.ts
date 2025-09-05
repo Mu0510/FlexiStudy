@@ -113,6 +113,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const [messages, setMessages] = useState<Message[]>([]);
   const [activeMessage, setActiveMessage] = useState<ActiveMessage | null>(null);
   const activeMessageRef = useRef<ActiveMessage | null>(null);
+  // ツール開始時に残したスナップショット（同一 messageId の直前本文）を保持
+  const snapshotContentRef = useRef<Map<string, string>>(new Map());
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
   const { ws, subscribe, sendMessage: sendWsMessage, isConnected } = useWebSocket();
   const requestIdCounter = useRef<number>(1);
@@ -167,6 +169,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
     setIsGeneratingResponse(false);
     onMessageReceived?.();
+    // このターンのスナップショットは忘れる（同一IDの重複トリム不要に）
+    if (am?.id) snapshotContentRef.current.delete(am.id);
   }, [onMessageReceived]);
 
   useEffect(() => {
@@ -229,11 +233,34 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               const list = [...prev];
               const idx = list.findIndex(m => m.id === shadowId);
               const nowTs = (chunk?.ts) || Date.now();
-              const content = (chunk?.text !== undefined)
-                ? ((activeMessageRef.current?.type === 'thought')
-                    ? String(chunk.text || '').replace(/^\n+/, '')
-                    : (list[idx]?.content || '') + String(chunk.text || '').replace(/^\n+/, ''))
-                : String(chunk?.thought || '').trim();
+              let textPart = '';
+              if (chunk?.text !== undefined) {
+                const incoming = String(chunk.text || '').replace(/^\n+/, '');
+                const base = list[idx]?.content || '';
+                if (base) {
+                  // 既に本文が存在する場合は素直に追記
+                  textPart = base + incoming;
+                } else {
+                  // 新規作成（ツール後の再開など）。スナップショットと重複する先頭をトリム
+                  const snap = snapshotContentRef.current.get(shadowId)?.trim();
+                  const incTrim = incoming.trimStart();
+                  if (snap) {
+                    if (incTrim.startsWith(snap)) {
+                      textPart = incTrim.slice(snap.length);
+                    } else if (snap.startsWith(incTrim)) {
+                      // 完全に重複（先頭断片）ならこのチャンクは無視
+                      textPart = '';
+                    } else {
+                      textPart = incoming;
+                    }
+                    // 一度処理したらスナップショットは解除（以降は通常追記）
+                    snapshotContentRef.current.delete(shadowId);
+                  } else {
+                    textPart = incoming;
+                  }
+                }
+              }
+              const content = (chunk?.text !== undefined) ? textPart : String(chunk?.thought || '').trim();
               const entry: any = {
                 id: shadowId,
                 ts: nowTs,
@@ -246,7 +273,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               if (idx !== -1) {
                 list[idx] = { ...list[idx], ...entry };
               } else {
-                list.push(entry);
+                // 空文字は追加しない（完全重複の最初のチャンクを抑止）
+                if (entry.content && String(entry.content).length > 0) list.push(entry);
               }
               return list;
             });
@@ -315,6 +343,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                 const partId = `${am.id}#pre#${toolId}`;
                 if (!newMessages.some(m => m.id === partId)) {
                   newMessages.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content, origin: 'shadow' as const });
+                  // スナップショット内容を記録し、後続の再開時重複を除去する
+                  snapshotContentRef.current.set(am.id, am.content || '');
                 }
               }
             }

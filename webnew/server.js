@@ -225,6 +225,8 @@ function handleCliMessage(jsonString, wss) {
         handleSessionUpdate(msg.params.update, wss);
         break;
       case 'session/request_permission': {
+        // ツールカード描画前に、進行中の本文を確定（ターンは閉じない）
+        finalizeAssistantPartial(wss);
         // ツール実行の許可要求の段階で、ツールカードを作成・履歴へ永続化しておく（tool_call が来ないケースがあるため）
         const tc = msg.params?.toolCall;
         if (tc && tc.toolCallId) {
@@ -306,6 +308,22 @@ function flushAssistantMessage(wss, stopReason) {
   currentAssistantMessage = { id: null, text: '', thought: '' };
 }
 
+// ツール開始等でターンは閉じずに、現時点の本文のみ確定（addMessage）する
+function finalizeAssistantPartial(wss) {
+  if (currentAssistantMessage.id && currentAssistantMessage.text) {
+    const assistantMessage = {
+      id: currentAssistantMessage.id,
+      ts: Date.now(),
+      role: 'assistant',
+      text: currentAssistantMessage.text.trim(),
+    };
+    history.push(assistantMessage);
+    broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+  }
+  // 次のストリームは新しいIDで始まるようにリセット
+  currentAssistantMessage = { id: null, text: '', thought: '' };
+}
+
 function handleSessionUpdate(upd, wss) {
   const nowTs = Date.now();
   switch (upd.sessionUpdate) {
@@ -339,6 +357,8 @@ function handleSessionUpdate(upd, wss) {
       break;
 
     case 'tool_call': {
+      // ツールカード描画前に、進行中の本文を確定（ターンは閉じない）
+      finalizeAssistantPartial(wss);
       const toolCallId = upd.toolCallId || `tool-${nowTs}`;
       const icon = upd.kind || 'tool';
       const rawLabel = upd.title || String(upd.kind || 'tool');
