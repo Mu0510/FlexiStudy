@@ -756,9 +756,8 @@ export function NewChatPanel({
           )}
 
           {useMemo(() => {
-            // messages と activeMessage を統合して、時系列で1回だけ描画する
+            // サーバー到着順（useChat内の配列順）を維持する
             const list: any[] = [...(messages || [])];
-
             if (activeMessage) {
               list.push({
                 id: `active-${activeMessage.id}`,
@@ -770,19 +769,7 @@ export function NewChatPanel({
                 __isActive: true,
               });
             }
-
-            // 重複排除
-            const seen = new Set<string>();
-            const dedup = list.filter(m => {
-              const k = String(m.id ?? '');
-              if (seen.has(k)) return false;
-              seen.add(k);
-              return true;
-            });
-
-            // ts 昇順（未定義は0）
-            dedup.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
-            return dedup;
+            return list;
           }, [messages, activeMessage]).map((msg: any, idx: number) => {
             // ツールカード（role===tool も許容）
             if (msg.type === "tool" || msg.role === "tool") {

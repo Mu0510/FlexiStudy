@@ -221,26 +221,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         flushSync(() => {
           setMessages(prev => {
             const idx = prev.findIndex(m => m.id === message.id);
-            if (idx !== -1) {
-              const existing = prev[idx];
-              if (existing.origin === 'shadow') {
-                const list = [...prev];
-                list[idx] = {
-                  id: message.id,
-                  ts: message.ts,
-                  role: message.role,
-                  content: message.text,
-                  files: message.files || [],
-                  goal: message.goal || null,
-                  session: message.session || null,
-                  origin: 'server' as const,
-                };
-                return list;
-              }
-              return prev;
-            }
-
-            const next = [...prev, {
+            const updated = {
               id: message.id,
               ts: message.ts,
               role: message.role,
@@ -249,10 +230,20 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               goal: message.goal || null,
               session: message.session || null,
               origin: 'server' as const,
-            }];
+            } as Message;
 
+            if (idx !== -1) {
+              // サーバーが正とみなし、既存を置き換え（重複防止）
+              const list = [...prev];
+              list[idx] = { ...list[idx], ...updated };
+              return list;
+            }
+
+            const next = [...prev, updated];
             return next;
           });
+          // 重複履歴の再読込を防ぐ
+          historyState.current.loadedIds.add(message.id);
         });
 
         if (message.role === 'assistant') {
@@ -275,7 +266,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               const am = activeMessageRef.current;
               const partId = `${am.id}#pre#${toolId}`;
               if (!newMessages.some(m => m.id === partId)) {
-                newMessages.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content });
+                newMessages.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content, origin: 'shadow' as const });
               }
             }
             newMessages.push({
@@ -285,6 +276,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             return newMessages;
           });
           setActiveMessage(null);
+          // ツールIDも既読として記録（履歴との重複防止）
+          historyState.current.loadedIds.add(toolId);
         });
         if (ws) sendWsMessage({ jsonrpc: '2.0', id: msg.id, result: { id: toolId } });
         onMessageReceived?.();
@@ -317,6 +310,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               content: ''
             } as any);
             idx = list.length - 1;
+            historyState.current.loadedIds.add(toolId);
           }
 
           const m: any = { ...list[idx] };
@@ -345,7 +339,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
         const rawMessages = raw.filter((m: any) => !historyState.current.loadedIds.has(m.id));
         if (rawMessages.length > 0) {
-          rawMessages.sort((a: any, b: any) => a.ts - b.ts);
+          // サーバーからの配列順を信頼して並び替えしない（到着順維持）
 
           setMessages(prev => {
             const prevIds = new Set(prev.map(p => p.id));
@@ -403,8 +397,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`,
         ts: Date.now(), role: "user", content: text, files: files || [],
         goal: goal || null, session: session || null, type: "text",
+        origin: 'shadow',
       };
     setMessages(prev => [...prev, newMessage]);
+    // 後続の履歴取り込みで重複しないよう記録
+    historyState.current.loadedIds.add(newMessage.id);
     const reqId = requestIdCounter.current++;
     lastSentRequestId.current = reqId;
     const req = {
