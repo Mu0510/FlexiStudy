@@ -121,6 +121,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const pendingTrimPrefixRef = useRef<string | null>(null);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
   const [isNotifyBusy, setIsNotifyBusy] = useState<boolean>(false);
+  const [isModelRestarting, setIsModelRestarting] = useState<boolean>(false);
   const { ws, subscribe, sendMessage: sendWsMessage, isConnected } = useWebSocket();
   const requestIdCounter = useRef<number>(1);
   const lastSentRequestId = useRef<number | null>(null);
@@ -200,6 +201,15 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       // 通知生成のビジーフラグ（送信ガード用）
       if (msg?.method === 'notifyBusy') {
         setIsNotifyBusy(Boolean(msg?.params?.active));
+        return;
+      }
+
+      if (msg?.method === 'geminiRestarting') {
+        setIsModelRestarting(true);
+        return;
+      }
+      if (msg?.method === 'geminiReady') {
+        setIsModelRestarting(false);
         return;
       }
 
@@ -580,7 +590,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   }, [ws, subscribe, sendWsMessage, finalizeTurn, onMessageReceived]);
 
   const sendMessage = useCallback((messageData: SendMessageData): boolean => {
-    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse || isNotifyBusy) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || isGeneratingResponse || isNotifyBusy || isModelRestarting) {
       console.warn("WebSocket is not open or busy, cannot send message.");
       return false;
     }
@@ -702,7 +712,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       requestMeta: new Map<number, { mode: 'older' | 'newer' | 'initial', limit?: number }>(),
     };
     if (ws && ws.readyState === WebSocket.OPEN) {
-      sendWsMessage({ jsonrpc: '2.0', method: 'clearHistory', params: {} });
+      const id = requestIdCounter.current++;
+      sendWsMessage({ jsonrpc: '2.0', id, method: 'clearHistory', params: {} });
     }
   }, [ws, sendWsMessage]);
 
@@ -746,6 +757,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     activeMessage,
     isGeneratingResponse,
     isNotifyBusy,
+    isModelRestarting,
     isFetchingHistory: historyState.current.isFetchingHistory,
     historyFinished: historyState.current.finished,
     sendMessage,

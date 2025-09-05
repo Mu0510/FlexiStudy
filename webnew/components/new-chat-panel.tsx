@@ -97,6 +97,7 @@ interface NewChatPanelProps {
   setSelectedFiles: (files: File[]) => void;
   // --- Lock input while notification decision is running ---
   inputLocked?: boolean;
+  lockMessage?: string;
 }
 
 const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
@@ -163,6 +164,7 @@ export function NewChatPanel({
   selectedFiles,
   setSelectedFiles,
   inputLocked,
+  lockMessage,
 }: NewChatPanelProps) {
   const isFloating = showAs === 'floating';
   const isMobile = useIsMobile();
@@ -383,8 +385,10 @@ export function NewChatPanel({
       return;
     }
 
-    // /clear コマンドの処理
+    // /clear コマンドの処理（完全一致のみ）
     if (finalMessage === '/clear') {
+      // 即座に入力欄を空にして、連打を防止
+      setInput('');
       clearMessages();
       setSelectedFiles([]);
       if (chatInputRef.current) {
@@ -1039,7 +1043,7 @@ export function NewChatPanel({
               {(!online || inputLocked) && (
                 <div className="mb-2 px-3 py-2 text-xs text-yellow-800 bg-yellow-100 border border-yellow-300 rounded-md flex items-center gap-2">
                   <XCircle className="h-4 w-4" />
-                  <span>{!online ? 'オフラインです。接続後に送信してください。' : '通知を生成中です。完了するまで送信できません。'}</span>
+                  <span>{!online ? 'オフラインです。接続後に送信してください。' : (lockMessage || '処理中です。完了するまで送信できません。')}</span>
                 </div>
               )}
 
@@ -1074,7 +1078,7 @@ export function NewChatPanel({
                   handleKeyDown(e);
                 }}
                 onPaste={handlePaste}
-                placeholder={online ? (inputLocked ? "通知を生成中です…" : "システムと対話... (Alt+Enterで送信)") : "オフライン中は送信できません"}
+                placeholder={online ? (inputLocked ? (lockMessage || "処理中です…") : "システムと対話... (Alt+Enterで送信)") : "オフライン中は送信できません"}
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1 text-base"
                 rows={1}
                 disabled={isUploading || !online || Boolean(inputLocked)}

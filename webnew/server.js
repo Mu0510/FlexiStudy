@@ -306,6 +306,7 @@ async function initializeAndStartSession() {
       acpSessionId = sessionResult.sessionId;
       isSessionReady = true;
       console.log(`[ACP] New session established: ${acpSessionId}`);
+      try { if (wssGlobal) broadcast(wssGlobal, { jsonrpc: '2.0', method: 'geminiReady', params: { ts: Date.now(), sessionId: acpSessionId } }); } catch {}
       flushPromptQueue();
     } else {
       console.error('[ACP] Failed to create new session, result:', sessionResult);
@@ -313,6 +314,25 @@ async function initializeAndStartSession() {
   } catch (error) {
     console.error('[ACP] Error during initialization or session creation:', error);
   }
+}
+
+// Try to recreate a fresh ACP session without restarting the process
+async function recreateSessionQuiet() {
+  try {
+    if (!geminiProcess || !acpSessionId) return false;
+    const prev = acpSessionId;
+    const res = await acpSend('session/new', { cwd: PROJECT_ROOT, mcpServers: [] });
+    if (res?.sessionId) {
+      acpSessionId = res.sessionId;
+      isSessionReady = true;
+      console.log(`[ACP] Recreated session: ${acpSessionId} (prev ${prev})`);
+      try { if (wssGlobal) broadcast(wssGlobal, { jsonrpc: '2.0', method: 'geminiReady', params: { ts: Date.now(), sessionId: acpSessionId } }); } catch {}
+      return true;
+    }
+  } catch (e) {
+    console.warn('[ACP] recreateSession failed:', e?.message || e);
+  }
+  return false;
 }
 
 // 4. ACP通信関数 (handleCliMessage, handleSessionUpdate) の導入
@@ -759,18 +779,18 @@ function startGemini(wss) {
   if (isRestartingGemini) return;
   if (geminiProcess) {
     isRestartingGemini = true;
+    const oldPid = geminiProcess.pid;
     geminiProcess.once('close', () => {
       geminiProcess = null;
       isRestartingGemini = false;
       _startNewGeminiProcess(wss);
     });
+    // Prefer direct kill on the child; fall back to process group
     try {
-      process.kill(-geminiProcess.pid, 'SIGTERM');
+      geminiProcess.kill('SIGTERM');
     } catch (err) {
-      try {
-        geminiProcess.kill('SIGTERM');
-      } catch (e) {
-        console.error(`[Gemini Process] Failed to kill process ${geminiProcess.pid}: ${e.message}`);
+      try { process.kill(-oldPid, 'SIGTERM'); } catch (e) {
+        console.error(`[Gemini Process] Failed to SIGTERM pid ${oldPid}: ${e.message}`);
       }
     }
     setTimeout(() => {
@@ -780,6 +800,11 @@ function startGemini(wss) {
         } catch (err) {
           console.error(`[Gemini Process] Failed to SIGKILL process ${geminiProcess.pid}: ${err.message}`);
         }
+      }
+      // Fallback: if still no 'close' fired, hard spawn a new process
+      if (geminiProcess && !geminiProcess.killed) {
+        try { console.warn('[Gemini Process] close not received; forcing new process spawn'); } catch {}
+        try { _startNewGeminiProcess(wss); } catch {}
       }
     }, 3000);
   } else {
@@ -1119,13 +1144,25 @@ app.prepare().then(() => {
       }
 
       if (msg.method === 'clearHistory') {
+        console.log('[Server] Received clearHistory. Restarting Gemini process.');
         history.length = 0;
         broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'command' } });
+        try { broadcast(wss, { jsonrpc: '2.0', method: 'geminiRestarting', params: { ts: Date.now() } }); } catch {}
+        const prevSession = acpSessionId;
         startGemini(wss);
+        // Fallback: if restart doesn't produce a new session quickly, recreate session
+        setTimeout(async () => {
+          if (acpSessionId === prevSession) {
+            const ok = await recreateSessionQuiet();
+            if (!ok) {
+              try { console.warn('[ACP] Fallback recreateSession failed'); } catch {}
+            }
+          }
+        }, 2000);
         return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
       }
 
-      if (msg.method === 'fetchHistory') {
+  if (msg.method === 'fetchHistory') {
         // 未確定テキストを「同一ID」で確定してから返す（ここが修正点）
         if (currentAssistantMessage.id && currentAssistantMessage.text) {
           const id = currentAssistantMessage.id;
@@ -1165,9 +1202,9 @@ app.prepare().then(() => {
           id: msg.id,
           result: { messages: chunk }
         }));
-      }
+  }
 
-      if (msg.method === 'sendUserMessage') {
+  if (msg.method === 'sendUserMessage') {
         // Block user messages while hidden decision is running
         if (hiddenDecisionActive) {
           try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, error: { message: 'notify_busy' } })); } catch {}
@@ -1195,9 +1232,9 @@ app.prepare().then(() => {
         }
         
         return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
-      }
+  }
 
-      if (msg.method === 'cancelSendMessage') {
+  if (msg.method === 'cancelSendMessage') {
         try {
           await acpSend('session/interrupt', { sessionId: acpSessionId });
         } catch (e) {
@@ -1219,9 +1256,9 @@ app.prepare().then(() => {
         } catch {}
         try { ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null })); } catch {}
         return;
-      }
+  }
 
-      if (msg.method === 'confirmToolCall') {
+  if (msg.method === 'confirmToolCall') {
         try {
           const { toolCallId, result, mode } = msg.params || {};
           const waiter = permissionWaiters.get(toolCallId);

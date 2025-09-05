@@ -17,6 +17,7 @@ import { ExamAnalysis } from "@/components/exam-analysis"
 import { Settings } from "@/components/settings"
 
 import { NewChatPanel } from "@/components/new-chat-panel"
+import { toast } from "sonner"
 import { useDbLiveSync } from "@/hooks/useDbLiveSync"
 import { reconcileDashboard, reconcileLogData } from "@/lib/reconcile"
 import { MobileHeader } from "@/components/mobile-header"
@@ -65,7 +66,7 @@ export default function StudyApp() {
   const online = useOnlineStatus();
   const { subscribe } = useWebSocket();
 
-  const { messages, activeMessage, isGeneratingResponse, isNotifyBusy, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages, sendToolApproval } = useChat({
+  const { messages, activeMessage, isGeneratingResponse, isNotifyBusy, isModelRestarting, sendMessage, cancelSendMessage, requestHistory, isFetchingHistory, historyFinished, clearMessages, sendToolApproval } = useChat({
     onMessageReceived: () => {
       // messagesContainerRef は NewChatPanel 内にあるため、ここでは直接操作できない
       // NewChatPanel 内でスクロールロジックを維持する
@@ -304,6 +305,10 @@ export default function StudyApp() {
     const unsub = subscribe((msg: any) => {
       const { method, params } = msg || {};
       if (!method || !params) return;
+
+      // Model restart toasts
+      if (method === 'geminiRestarting') { try { toast.info('Geminiを再起動中…'); } catch {} return; }
+      if (method === 'geminiReady') { try { toast.success('Geminiの再起動が完了しました'); } catch {} return; }
 
       // Server-initiated notification: show via Service Worker
       if (method === 'notify') {
@@ -605,7 +610,9 @@ export default function StudyApp() {
             setInput={setChatInput}
                   selectedFiles={selectedFilesForChat}
                   setSelectedFiles={setSelectedFilesForChat}
-                  inputLocked={isNotifyBusy}
+                  inputLocked={isNotifyBusy || isModelRestarting}
+                  lockMessage={isModelRestarting ? 'Geminiを再起動中です…' : (isNotifyBusy ? '通知を生成中です…' : undefined)}
+            lockMessage={isModelRestarting ? 'Geminiを再起動中です…' : (isNotifyBusy ? '通知を生成中です…' : undefined)}
                   selectedGoal={selectedGoalForChat}
                   onClearSelectedGoal={handleClearSelectedGoal}
                   selectedSession={selectedSessionForChat}
@@ -721,7 +728,7 @@ export default function StudyApp() {
             setInput={setChatInput}
             selectedFiles={selectedFilesForChat}
             setSelectedFiles={setSelectedFilesForChat}
-            inputLocked={isNotifyBusy}
+            inputLocked={isNotifyBusy || isModelRestarting}
           />
         )}
       </div>
