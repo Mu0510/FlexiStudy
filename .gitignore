@@ -22,6 +22,7 @@
 study_log.db
 db_backups/
 db_redo_backups/
+db_long_term_backups/
 webnew/mnt/
 
 # Python cache
