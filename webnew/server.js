@@ -286,17 +286,21 @@ function ensureAssistantMessage(wss, ts) {
 function flushAssistantMessage(wss, stopReason) {
   // テキストがある場合のみ処理
   if (currentAssistantMessage.id && currentAssistantMessage.text) {
-    const assistantMessage = {
-      id: currentAssistantMessage.id,
-      ts: Date.now(),
-      role: 'assistant',
-      text: currentAssistantMessage.text.trim(),
-    };
-    // 1. 履歴に保存する
-    history.push(assistantMessage);
-
-    // 2. addMessage で全クライアントに確定したメッセージを通知
-    broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+    const trimmed = currentAssistantMessage.text.trim();
+    const last = history.length > 0 ? history[history.length - 1] : null;
+    const isExactDup = last && last.id === currentAssistantMessage.id && last.role === 'assistant' && last.text === trimmed;
+    if (!isExactDup) {
+      const assistantMessage = {
+        id: currentAssistantMessage.id,
+        ts: Date.now(),
+        role: 'assistant',
+        text: trimmed,
+      };
+      // 1. 履歴に保存する
+      history.push(assistantMessage);
+      // 2. addMessage で全クライアントに確定したメッセージを通知
+      broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+    }
   }
 
   // 3. messageCompleted でストリームの終了を通知する
@@ -311,14 +315,19 @@ function flushAssistantMessage(wss, stopReason) {
 // ツール開始等でターンは閉じずに、現時点の本文のみ確定（addMessage）する
 function finalizeAssistantPartial(wss) {
   if (currentAssistantMessage.id && currentAssistantMessage.text) {
-    const assistantMessage = {
-      id: currentAssistantMessage.id,
-      ts: Date.now(),
-      role: 'assistant',
-      text: currentAssistantMessage.text.trim(),
-    };
-    history.push(assistantMessage);
-    broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+    const trimmed = currentAssistantMessage.text.trim();
+    const last = history.length > 0 ? history[history.length - 1] : null;
+    const isExactDup = last && last.id === currentAssistantMessage.id && last.role === 'assistant' && last.text === trimmed;
+    if (!isExactDup) {
+      const assistantMessage = {
+        id: currentAssistantMessage.id,
+        ts: Date.now(),
+        role: 'assistant',
+        text: trimmed,
+      };
+      history.push(assistantMessage);
+      broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: assistantMessage } });
+    }
   }
   // 次のストリームは新しいIDで始まるようにリセット
   currentAssistantMessage = { id: null, text: '', thought: '' };
