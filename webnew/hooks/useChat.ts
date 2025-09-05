@@ -173,6 +173,17 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     if (!ws) return;
 
     const unsubscribe = subscribe((msg: any) => {
+      // サーバーが思考クリアを指示した場合は、思考中のアクティブメッセージを破棄
+      if (msg?.method === 'clearActiveThought') {
+        setActiveMessage(prev => (prev && prev.type === 'thought') ? null : prev);
+        return;
+      }
+
+      // ストリーム完了通知（ターン終端）。確定処理を実行
+      if (msg?.method === 'messageCompleted') {
+        finalizeTurn();
+        return;
+      }
       if (msg?.result && typeof msg.result === 'object' && (msg.result.stopReason === 'end_turn' || msg.result.stopReason === 'message_end')) {
         finalizeTurn();
         return;
