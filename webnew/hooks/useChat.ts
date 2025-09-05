@@ -26,6 +26,7 @@ type MessageOrigin = 'server' | 'shadow';
 interface Message {
   id: string;
   ts?: number;
+  updatedTs?: number;
   role: 'user' | 'assistant' | 'tool' | 'system';
   content: string;
   files?: FileInfo[];
@@ -319,6 +320,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             const updated = {
               id: message.id,
               ts: message.ts,
+              updatedTs: (message as any).updatedTs,
               role: message.role,
               content: message.text,
               files: message.files || [],
@@ -451,6 +453,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           const converted = (uniqueRaw as any[]).map((m: any) => ({
             id: m.id,
             ts: m.ts,
+            updatedTs: m.updatedTs,
             role: m.role,
             content: m.text || m.content,
             files: m.files || [],
@@ -478,10 +481,16 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         }
 
         if (meta?.mode === 'older' || meta?.mode === 'initial') {
-          historyState.current.oldestTs = Math.min(historyState.current.oldestTs ?? Infinity, ...uniqueRaw.map((m:any) => m.ts));
+          historyState.current.oldestTs = Math.min(
+            historyState.current.oldestTs ?? Infinity,
+            ...uniqueRaw.map((m:any) => Math.max(Number(m.updatedTs || 0), Number(m.ts || 0)))
+          );
           return [...toInsert, ...list];
         } else {
-          historyState.current.newestTs = Math.max(historyState.current.newestTs ?? 0, ...uniqueRaw.map((m:any) => m.ts));
+          historyState.current.newestTs = Math.max(
+            historyState.current.newestTs ?? 0,
+            ...uniqueRaw.map((m:any) => Math.max(Number(m.updatedTs || 0), Number(m.ts || 0)))
+          );
           return [...list, ...toInsert];
         }
         });
@@ -620,10 +629,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     }
   }, [ws, sendWsMessage]);
 
+  // 接続断時に generating フラグや activeMessage を強制クリアしない。
+  // ツール実行中やストリーミング中に一時的な切断が起きると、
+  // 停止ボタンが送信ボタンに戻ってしまうため。
   useEffect(() => {
     if (isConnected === false) {
-      setIsGeneratingResponse(false);
-      setActiveMessage(null);
+      // 進行中フラグは維持し、必要最低限のフラグのみ解除
       historyState.current.isFetchingHistory = false;
     }
   }, [isConnected]);
@@ -642,7 +653,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   useEffect(() => {
     const maxTsFromServer = messages
       .filter(m => m.origin === 'server')
-      .reduce((acc, m) => Math.max(acc, m.ts || 0), latestTsRef.current ?? 0);
+      .reduce((acc, m) => Math.max(acc, m.updatedTs || 0, m.ts || 0), latestTsRef.current ?? 0);
     if (maxTsFromServer > (latestTsRef.current ?? 0)) latestTsRef.current = maxTsFromServer;
   }, [messages]);
 

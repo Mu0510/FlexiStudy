@@ -78,6 +78,31 @@ function acpRespond(id, result) {
   }
 }
 
+// JSON-RPC エラーレスポンスを送る
+function acpRespondError(id, code, message, details) {
+  if (!geminiProcess || !geminiProcess.stdin || geminiProcess.stdin.destroyed) return;
+  const resp = { jsonrpc: '2.0', id, error: { code, message, data: details ? { details } : undefined } };
+  try {
+    geminiProcess.stdin.write(JSON.stringify(resp) + '\n');
+    console.log('[ACP < RESP]', JSON.stringify(resp));
+  } catch (e) {
+    console.error('[ACP] Failed to send error response:', e);
+  }
+}
+
+function safeResolveProjectPath(p) {
+  try {
+    const abs = path.resolve(p);
+    const root = path.resolve(PROJECT_ROOT);
+    if (!abs.startsWith(root)) {
+      return null;
+    }
+    return abs;
+  } catch {
+    return null;
+  }
+}
+
 function mapToolStatus(status) {
   if (!status) return undefined;
   const s = String(status).toLowerCase();
@@ -270,6 +295,42 @@ function handleCliMessage(jsonString, wss) {
           sessionId: acpSessionId,
           outcome: { outcome: 'selected', optionId }
         });
+        break;
+      }
+      case 'fs/read_text_file': {
+        const { path: reqPath, line, limit } = msg.params || {};
+        const abs = safeResolveProjectPath(reqPath);
+        if (!abs) {
+          return acpRespondError(msg.id, -32602, 'Invalid path', 'Path outside project root');
+        }
+        try {
+          const raw = fs.readFileSync(abs, 'utf8');
+          let content = raw;
+          if (typeof line === 'number' || typeof limit === 'number') {
+            const lines = raw.split(/\r?\n/);
+            const start = Math.max(0, (typeof line === 'number' ? line - 1 : 0));
+            const count = typeof limit === 'number' && limit != null ? Math.max(0, limit) : lines.length - start;
+            content = lines.slice(start, start + count).join('\n');
+          }
+          acpRespond(msg.id, { content });
+        } catch (e) {
+          acpRespondError(msg.id, -32000, 'File read error', e?.message || String(e));
+        }
+        break;
+      }
+      case 'fs/write_text_file': {
+        const { path: reqPath, content } = msg.params || {};
+        const abs = safeResolveProjectPath(reqPath);
+        if (!abs) {
+          return acpRespondError(msg.id, -32602, 'Invalid path', 'Path outside project root');
+        }
+        try {
+          fs.mkdirSync(path.dirname(abs), { recursive: true });
+          fs.writeFileSync(abs, String(content ?? ''), 'utf8');
+          acpRespond(msg.id, null);
+        } catch (e) {
+          acpRespondError(msg.id, -32000, 'File write error', e?.message || String(e));
+        }
         break;
       }
     }
@@ -554,7 +615,8 @@ app.prepare().then(() => {
         let chunk = history;
 
         if (typeof after === 'number') {
-          chunk = chunk.filter(rec => (rec.ts ?? 0) > after).slice(0, limit);
+          const eff = (rec) => Math.max(Number(rec?.ts ?? 0), Number(rec?.updatedTs ?? 0));
+          chunk = chunk.filter(rec => eff(rec) > after).slice(0, limit);
         } else if (typeof before === 'number') {
           const older = chunk.filter(rec => (rec.ts ?? 0) < before);
           chunk = older.slice(Math.max(0, older.length - limit));
