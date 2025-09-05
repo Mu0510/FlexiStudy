@@ -150,6 +150,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           list[idx] = { ...old, content: am.content, ts: am.ts ?? old.ts, role: 'assistant', origin: old.origin ?? 'shadow' };
           return list;
         }
+        const last = prev[prev.length - 1];
+        const sameContentAlready = !!last && last.role === 'assistant' && typeof last.content === 'string' && last.content.trim() === am.content.trim();
+        if (sameContentAlready) return prev;
         return [...prev, {
           id: am.id,
           ts: am.ts ?? Date.now(),
@@ -173,6 +176,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     onMessageReceived?.();
     // このターンのスナップショットは忘れる（同一IDの重複トリム不要に）
     if (am?.id) snapshotContentRef.current.delete(am.id);
+    // 直前確定のプレフィクスもクリア
+    pendingTrimPrefixRef.current = null;
   }, [onMessageReceived]);
 
   useEffect(() => {
@@ -181,7 +186,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     const unsubscribe = subscribe((msg: any) => {
       // サーバーが思考クリアを指示した場合は、思考中のアクティブメッセージを破棄
       if (msg?.method === 'clearActiveThought') {
+        // アクティブな思考表示を消す + タイムライン上の思考バブルも除去
         setActiveMessage(prev => (prev && prev.type === 'thought') ? null : prev);
+        setMessages(prev => prev.filter(m => !m.thoughtMode));
         return;
       }
 
@@ -228,23 +235,38 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         });
 
         // タイムライン内に仮のアシスタントメッセージを配置・更新（受信順を維持）
-        const shadowId = incomingMessageId || (activeMessageRef.current?.id);
-        if (shadowId) {
+        const textId = incomingMessageId || (activeMessageRef.current?.id);
+        const thoughtId = textId ? `${textId}#thought` : undefined;
+        if (textId) {
           flushSync(() => {
             setMessages(prev => {
               const list = [...prev];
-              const idx = list.findIndex(m => m.id === shadowId);
+              const idxText = list.findIndex(m => m.id === textId);
+              const idxThought = thoughtId ? list.findIndex(m => m.id === thoughtId) : -1;
               const nowTs = (chunk?.ts) || Date.now();
-              let textPart = '';
+              if (chunk?.thought !== undefined && chunk?.text === undefined && thoughtId) {
+                const thoughtContent = String(chunk.thought || '').trim();
+                const thoughtEntry: any = {
+                  id: thoughtId,
+                  ts: nowTs,
+                  role: 'assistant',
+                  content: thoughtContent,
+                  origin: 'shadow',
+                  type: 'text',
+                  thoughtMode: true,
+                };
+                if (idxThought !== -1) list[idxThought] = { ...list[idxThought], ...thoughtEntry };
+                else if (thoughtContent) list.push(thoughtEntry);
+              }
+
               if (chunk?.text !== undefined) {
                 const incoming = String(chunk.text || '').replace(/^\n+/, '');
-                const base = list[idx]?.content || '';
-                if (base) {
-                  // 既に本文が存在する場合は素直に追記
-                  textPart = base + incoming;
+                const baseText = idxText !== -1 ? (list[idxText]?.content || '') : '';
+                let textPart = '';
+                if (baseText) {
+                  textPart = baseText + incoming;
                 } else {
-                  // 新規作成（ツール後の再開など）。スナップショットと重複する先頭をトリム
-                  const snap = snapshotContentRef.current.get(shadowId)?.trim();
+                  // 新規テキスト開始。直前確定やスナップショットと重複する先頭をトリム
                   const incTrim = incoming.trimStart();
                   const pendingPrefix = pendingTrimPrefixRef.current?.trim() || '';
                   const tryTrim = (prefix: string | undefined) => {
@@ -255,37 +277,26 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                     if (p.startsWith(incTrim)) return '';
                     return null;
                   };
-                  let trimmed: string | null = null;
-                  // 優先: pendingPrefix（サーバー確定直後の続き重複）
-                  trimmed = tryTrim(pendingPrefix);
-                  if (trimmed === null) {
-                    // 次点: ローカルスナップショット
-                    trimmed = tryTrim(snap);
-                  }
+                  let trimmed: string | null = tryTrim(pendingPrefix);
                   if (trimmed !== null) {
                     textPart = trimmed;
                     pendingTrimPrefixRef.current = null;
-                    if (snap) snapshotContentRef.current.delete(shadowId);
                   } else {
                     textPart = incoming;
                   }
                 }
-              }
-              const content = (chunk?.text !== undefined) ? textPart : String(chunk?.thought || '').trim();
-              const entry: any = {
-                id: shadowId,
-                ts: nowTs,
-                role: 'assistant',
-                content,
-                origin: 'shadow',
-                type: 'text',
-                thoughtMode: chunk?.thought !== undefined && !(chunk?.text !== undefined),
-              };
-              if (idx !== -1) {
-                list[idx] = { ...list[idx], ...entry };
-              } else {
-                // 空文字は追加しない（完全重複の最初のチャンクを抑止）
-                if (entry.content && String(entry.content).length > 0) list.push(entry);
+
+                const textEntry: any = {
+                  id: textId,
+                  ts: nowTs,
+                  role: 'assistant',
+                  content: textPart,
+                  origin: 'shadow',
+                  type: 'text',
+                  thoughtMode: false,
+                };
+                if (idxText !== -1) list[idxText] = { ...list[idxText], ...textEntry };
+                else if (textPart) list.push(textEntry);
               }
               return list;
             });
@@ -349,18 +360,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
             const newMessages = [...prev];
             const am = activeMessageRef.current;
             if (am) {
-              // 進行中の仮エントリ（am.id）を一旦取り除く
+              // 進行中の仮エントリ（am.id とその thought）を一旦取り除く
               const streamIdx = newMessages.findIndex(m => m.id === am.id);
               if (streamIdx !== -1) newMessages.splice(streamIdx, 1);
-              if (am.type === 'assistant') {
-                // assistant 本文が進行中ならスナップショットを残す
-                const partId = `${am.id}#pre#${toolId}`;
-                if (!newMessages.some(m => m.id === partId)) {
-                  newMessages.push({ id: partId, ts: am.ts, role: 'assistant', content: am.content, origin: 'shadow' as const });
-                  // スナップショット内容を記録し、後続の再開時重複を除去する
-                  snapshotContentRef.current.set(am.id, am.content || '');
-                }
-              }
+              // 思考バブルも除去
+              const thoughtIdx = newMessages.findIndex(m => m.id === `${am.id}#thought`);
+              if (thoughtIdx !== -1) newMessages.splice(thoughtIdx, 1);
             }
             newMessages.push({
               id: toolId, ts: msg.ts || Date.now(), role: 'tool', type: 'tool', toolCallId: toolId,
