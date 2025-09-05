@@ -204,6 +204,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       }
 
       if (msg.method === 'streamAssistantMessageChunk') {
+        try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('chat:pre-mutate', { detail: { kind: 'text', action: 'chunk', messageId: msg.params?.messageId } })); } catch {}
         const { chunk } = msg.params;
         const incomingMessageId = msg.params.messageId;
 
@@ -312,6 +313,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       }
 
       if (msg.method === 'addMessage') {
+        try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('chat:pre-mutate', { detail: { kind: 'text', action: 'add', messageId: msg.params?.message?.id } })); } catch {}
         const { message } = msg.params;
 
         flushSync(() => {
