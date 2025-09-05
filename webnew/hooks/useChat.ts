@@ -115,6 +115,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const activeMessageRef = useRef<ActiveMessage | null>(null);
   // ツール開始時に残したスナップショット（同一 messageId の直前本文）を保持
   const snapshotContentRef = useRef<Map<string, string>>(new Map());
+  // 直前に確定した assistant 本文のプレフィクスを、次のストリーム先頭で一度だけトリム
+  const pendingTrimPrefixRef = useRef<string | null>(null);
   const [isGeneratingResponse, setIsGeneratingResponse] = useState<boolean>(false);
   const { ws, subscribe, sendMessage: sendWsMessage, isConnected } = useWebSocket();
   const requestIdCounter = useRef<number>(1);
@@ -244,17 +246,26 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
                   // 新規作成（ツール後の再開など）。スナップショットと重複する先頭をトリム
                   const snap = snapshotContentRef.current.get(shadowId)?.trim();
                   const incTrim = incoming.trimStart();
-                  if (snap) {
-                    if (incTrim.startsWith(snap)) {
-                      textPart = incTrim.slice(snap.length);
-                    } else if (snap.startsWith(incTrim)) {
-                      // 完全に重複（先頭断片）ならこのチャンクは無視
-                      textPart = '';
-                    } else {
-                      textPart = incoming;
-                    }
-                    // 一度処理したらスナップショットは解除（以降は通常追記）
-                    snapshotContentRef.current.delete(shadowId);
+                  const pendingPrefix = pendingTrimPrefixRef.current?.trim() || '';
+                  const tryTrim = (prefix: string | undefined) => {
+                    if (!prefix) return null as string | null;
+                    const p = prefix.trim();
+                    if (!p) return null;
+                    if (incTrim.startsWith(p)) return incTrim.slice(p.length);
+                    if (p.startsWith(incTrim)) return '';
+                    return null;
+                  };
+                  let trimmed: string | null = null;
+                  // 優先: pendingPrefix（サーバー確定直後の続き重複）
+                  trimmed = tryTrim(pendingPrefix);
+                  if (trimmed === null) {
+                    // 次点: ローカルスナップショット
+                    trimmed = tryTrim(snap);
+                  }
+                  if (trimmed !== null) {
+                    textPart = trimmed;
+                    pendingTrimPrefixRef.current = null;
+                    if (snap) snapshotContentRef.current.delete(shadowId);
                   } else {
                     textPart = incoming;
                   }
@@ -318,6 +329,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         });
 
         if (message.role === 'assistant') {
+          if (typeof (message as any).text === 'string' && (message as any).text.trim()) {
+            try { pendingTrimPrefixRef.current = (message as any).text.trim(); } catch {}
+          }
           setActiveMessage(null);
           setIsGeneratingResponse(false);
         }
