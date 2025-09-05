@@ -597,15 +597,23 @@ export function NewChatPanel({
 
   }, [isFetchingHistory, historyFinished, requestHistory]);
 
-  // Effect to scroll to bottom when messages change
+  // Effect to scroll to bottom when messages (including tool cards) change
   useLayoutEffect(() => {
     const container = messagesContainerRef.current;
-    if (container && shouldScrollToBottomRef.current) {
-        requestAnimationFrame(() => {
-            container.scrollTop = container.scrollHeight;
-        });
+    if (!container) return;
+    // Re-evaluate bottom proximity on every change
+    const { scrollHeight, scrollTop, clientHeight } = container;
+    const NEAR_BOTTOM_TOLERANCE = 24; // px
+    const nearBottom = scrollHeight - scrollTop <= clientHeight + NEAR_BOTTOM_TOLERANCE;
+    if (nearBottom) {
+      shouldScrollToBottomRef.current = true;
     }
-  }, [messages, activeMessage]); // Dependency on messages and activeMessage
+    if (shouldScrollToBottomRef.current) {
+      requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+      });
+    }
+  }, [messages, activeMessage]);
 
   // Effect to scroll to bottom on initial open
   useEffect(() => {
