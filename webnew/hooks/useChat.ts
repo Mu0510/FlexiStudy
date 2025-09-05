@@ -122,6 +122,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const { ws, subscribe, sendMessage: sendWsMessage, isConnected } = useWebSocket();
   const requestIdCounter = useRef<number>(1);
   const lastSentRequestId = useRef<number | null>(null);
+  const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     activeMessageRef.current = activeMessage;
@@ -195,6 +196,11 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
       // ストリーム完了通知（ターン終端）。確定処理を実行
       if (msg?.method === 'messageCompleted') {
+        // After a turn completes, reconcile with server to heal any missed chunks
+        if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current);
+        deltaTimerRef.current = setTimeout(() => {
+          try { requestDelta(); } catch {}
+        }, 150);
         finalizeTurn();
         return;
       }
@@ -434,6 +440,13 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
           list[idx] = m;
           return list;
         });
+        // If tool finished, reconcile to ensure we didn't miss any updates
+        if (normalized === 'finished') {
+          if (deltaTimerRef.current) clearTimeout(deltaTimerRef.current);
+          deltaTimerRef.current = setTimeout(() => {
+            try { requestDelta(); } catch {}
+          }, 150);
+        }
         onMessageReceived?.();
         return;
       }
