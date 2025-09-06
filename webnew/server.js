@@ -354,7 +354,8 @@ function handleCliMessage(jsonString, wss) {
         pending.reject(msg.error);
       } else {
         pending.resolve(msg.result);
-        if (pending.method === 'session/prompt') {
+        // Avoid premature flush for hidden decisions; rely on end_of_turn
+        if (pending.method === 'session/prompt' && !suppressNextAssistantBroadcast) {
           flushAssistantMessage(wss, msg.result?.stopReason);
         }
       }
@@ -829,7 +830,7 @@ async function runHiddenDecision({ intent, context, userId }) {
   let systemFile = '';
   try { systemFile = fs.readFileSync(path.join(CONFIG_DIR, 'prompt.system.txt'), 'utf8'); } catch {}
   const nowIso = new Date().toISOString();
-  const baseSystem = systemFile && systemFile.trim().length > 0 ? systemFile : [
+  let baseSystem = systemFile && systemFile.trim().length > 0 ? systemFile : [
     'あなたは学習支援アプリの通知プランナー兼意思決定エージェントです。',
     '目的: 現在の状況と設定に基づいて、1件の通知を「送る/送らない」を判断し、必要なら文面を組み立てます。',
     '厳守事項:',
@@ -840,14 +841,24 @@ async function runHiddenDecision({ intent, context, userId }) {
     '出力スキーマ:',
     '{"decision":"send|skip","reason":"string","intent_id":"string|null","notification":{"title":"...","body":"...","action_url":"/path","tag":"...","category":"..."}|null,"evidence":{"now":"ISO","intent":"string","context":{}}}'
   ].join('\n');
+  const forceMode = Boolean(context && (context.force || context.force_send));
+  if (forceMode) {
+    baseSystem += '\n\n[強制モード指示]\n' +
+      '今はテスト目的です。context.force=true の場合は、ポリシーや頻度ガードに関わらず、必ず decision を "send" とし、intent_id と notification を生成してください。' +
+      ' title/body は適切に短く（title<=40, body<=120）、ユーザーに有益な内容を日本語で具体的に書きます。' +
+      ' action_url はインテントの cta_url または "/" を用い、tag/category は意図に沿う値を設定します。' +
+      ' 出力は純粋なJSONのみです。';
+  }
 
-  // Load last notifications for guard/evidence
+  // Load last notifications for guard/evidence (exclude test-sends)
   const notifLogPath = path.join(MNT_DIR, 'notifications.json');
   let lastNotifications = [];
   try {
     const raw = fs.existsSync(notifLogPath) ? fs.readFileSync(notifLogPath, 'utf8') : '[]';
     const arr = JSON.parse(raw || '[]');
-    lastNotifications = (Array.isArray(arr) ? arr : []).filter(n => n && n.userId === userId).slice(-20);
+    lastNotifications = (Array.isArray(arr) ? arr : [])
+      .filter(n => n && n.userId === userId && !n.test)
+      .slice(-20);
   } catch {}
 
   const user = { now: nowIso, intent: intent || 'auto', policy, intents, triggers, lastNotifications, context: context || {} };
@@ -952,14 +963,14 @@ async function runHiddenDecision({ intent, context, userId }) {
 }
 
 
-function persistNotificationLog({ userId, payload }) {
+function persistNotificationLog({ userId, payload, test }) {
   try {
     fs.mkdirSync(MNT_DIR, { recursive: true });
     const p = path.join(MNT_DIR, 'notifications.json');
     const raw = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '[]';
     const arr = Array.isArray(JSON.parse(raw || '[]')) ? JSON.parse(raw || '[]') : [];
     const tag = payload?.notification?.tag || 'general';
-    arr.push({ userId, tag, sentAt: Date.now(), payload });
+    arr.push({ userId, tag, sentAt: Date.now(), payload, test: Boolean(test) });
     fs.writeFileSync(p, JSON.stringify(arr, null, 2), 'utf8');
   } catch (e) { console.warn('[Notify] Failed to persist notification log:', e?.message || e); }
 }
@@ -1100,12 +1111,70 @@ app.prepare().then(() => {
         req.on('data', (c) => { body += c; if (body.length > 512 * 1024) req.destroy(); });
         req.on('end', async () => {
           try {
-            const { userId = 'local', notification } = JSON.parse(body || '{}');
+            const { userId = 'local', notification, test } = JSON.parse(body || '{}');
             if (!notification || typeof notification !== 'object') throw new Error('invalid notification');
-            persistNotificationLog({ userId, payload: { decision: 'send', notification } });
+            persistNotificationLog({ userId, payload: { decision: 'send', notification }, test });
             try { broadcast(wss, { jsonrpc: '2.0', method: 'notify', params: { notification } }); } catch {}
             await sendPushToUser(userId, notification);
             res.statusCode = 200; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({ ok: true }));
+          } catch (e) {
+            res.statusCode = 400; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({ ok: false, error: String(e?.message || e) }));
+          }
+        });
+        return;
+      }
+
+      // Admin: get today's count and cap for a user
+      if (req.method === 'GET' && pathname === '/api/notify/admin/today-count') {
+        try {
+          const userId = (query && (query.userId || query.user_id)) || 'local';
+          const p = path.join(MNT_DIR, 'notifications.json');
+          const raw = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '[]';
+          const arr = Array.isArray(JSON.parse(raw || '[]')) ? JSON.parse(raw || '[]') : [];
+          const today = new Date().toDateString();
+          let count = 0;
+          for (const n of arr) {
+            if (!n || n.userId !== userId || n.test) continue;
+            const ts = Number(n.sentAt || 0);
+            if (!ts) continue;
+            const d = new Date(ts);
+            if (d.toDateString() === today) count++;
+          }
+          // load cap from policy
+          let cap = null;
+          try {
+            const policy = JSON.parse(fs.readFileSync(path.join(CONFIG_DIR, 'policy.json'), 'utf8')) || {};
+            cap = Number(policy.caps_per_day || 0) || 0;
+          } catch {}
+          res.statusCode = 200; res.setHeader('Content-Type','application/json');
+          return res.end(JSON.stringify({ ok: true, userId, count, cap }));
+        } catch (e) {
+          res.statusCode = 500; res.setHeader('Content-Type','application/json');
+          return res.end(JSON.stringify({ ok: false, error: String(e?.message || e) }));
+        }
+      }
+
+      // Admin: reset today's notification count for a user (mark test=true)
+      if (req.method === 'POST' && pathname === '/api/notify/admin/reset-today-count') {
+        let body = '';
+        req.on('data', (c) => { body += c; if (body.length > 512 * 1024) req.destroy(); });
+        req.on('end', () => {
+          try {
+            const { userId = 'local' } = JSON.parse(body || '{}');
+            const p = path.join(MNT_DIR, 'notifications.json');
+            const raw = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '[]';
+            const arr = Array.isArray(JSON.parse(raw || '[]')) ? JSON.parse(raw || '[]') : [];
+            const today = new Date().toDateString();
+            let changed = false;
+            for (const n of arr) {
+              if (!n || n.userId !== userId) continue;
+              const ts = Number(n.sentAt || 0);
+              if (!ts) continue;
+              const d = new Date(ts);
+              if (d.toDateString() === today && !n.test) { n.test = true; changed = true; }
+            }
+            if (changed) fs.writeFileSync(p, JSON.stringify(arr, null, 2), 'utf8');
+            res.statusCode = 200; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({ ok: true, changed }));
           } catch (e) {
             res.statusCode = 400; res.setHeader('Content-Type','application/json'); res.end(JSON.stringify({ ok: false, error: String(e?.message || e) }));
           }

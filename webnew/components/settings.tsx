@@ -29,6 +29,8 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
   const [testIntent, setTestIntent] = useState<string>('study_reminder')
+  const [todayCount, setTodayCount] = useState<number>(0)
+  const [todayCap, setTodayCap] = useState<number>(0)
   const [isTesting, setIsTesting] = useState(false)
   const [testResult, setTestResult] = useState<null | { decision: string; reason?: string; notification?: { title?: string; body?: string; action_url?: string; tag?: string; category?: string }; sent?: boolean }>(null)
   const [weeklyPeriod, setWeeklyPeriod] = useState('this_week');
@@ -94,6 +96,19 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  // Fetch today's count/cap
+  const refreshTodayCount = async () => {
+    try {
+      const r = await fetch('/api/notify/admin/today-count?userId=local', { cache: 'no-store' });
+      const j = await r.json();
+      if (j?.ok) {
+        setTodayCount(Number(j.count || 0));
+        setTodayCap(Number(j.cap || 0));
+      }
+    } catch {}
+  };
+  useEffect(() => { refreshTodayCount(); }, []);
 
   // Push notifications subscribe/unsubscribe on toggle
   const pushEffectReady = useRef(false);
@@ -415,6 +430,30 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                 <Switch id="notifications" checked={notifications} onCheckedChange={setNotifications} />
               </div>
 
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm text-slate-700 dark:text-slate-300">今日の送信数</div>
+                  <div className="text-xs text-slate-500 dark:text-slate-400">{todayCap ? `${todayCount} / ${todayCap}` : `${todayCount}`}</div>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const r = await fetch('/api/notify/admin/reset-today-count', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local' }) });
+                      const j = await r.json();
+                      if (j?.ok) {
+                        toast.success('今日の通知カウントをリセットしました');
+                        refreshTodayCount();
+                      } else {
+                        toast.error('リセットに失敗しました');
+                      }
+                    } catch {
+                      toast.error('リセットに失敗しました');
+                    }
+                  }}
+                >リセット</Button>
+              </div>
+
               {SHOW_INTENT_SWITCHES && (
                 <>
                   <div className="flex items-center justify-between">
@@ -469,9 +508,10 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                         const j = await r.json();
                         const p = j?.payload || null;
                         if (p?.decision === 'send' && p?.notification) {
-                          await fetch('/api/notify/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', notification: p.notification }) });
+                          await fetch('/api/notify/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', notification: p.notification, test: true }) });
                           setTestResult({ decision: 'send', notification: p.notification, sent: true });
                           toast.success('テスト通知を送信しました');
+                          refreshTodayCount();
                         } else {
                           setTestResult({ decision: String(p?.decision || 'skip'), reason: p?.reason || 'no_reason' });
                           toast.info(`送信スキップ: ${p?.reason || 'no_reason'}`);
@@ -522,9 +562,10 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                               const j = await r.json();
                               const p = j?.payload || null;
                               if (p?.decision === 'send' && p?.notification) {
-                                await fetch('/api/notify/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', notification: p.notification }) });
+                                await fetch('/api/notify/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: 'local', notification: p.notification, test: true }) });
                                 setTestResult({ decision: 'send', notification: p.notification, sent: true });
                                 toast.success('テスト通知（強制）を送信しました');
+                                refreshTodayCount();
                               } else {
                                 toast.error('強制生成に失敗しました');
                               }

@@ -320,12 +320,12 @@ export default function StudyApp() {
             if (perm !== 'granted') return;
             if ('serviceWorker' in navigator) {
               const reg = await navigator.serviceWorker.ready;
-              await reg.showNotification(n.title || 'FlexiStudy', {
+              await reg.showNotification(n.title || '通知', {
                 body: n.body || '', icon: '/FlexiStudy_icon.svg', badge: '/FlexiStudy_icon.svg',
                 tag: n.tag || 'general', data: { url: n.action_url || '/' }, requireInteraction: false,
               });
             } else {
-              new Notification(n.title || 'FlexiStudy', { body: n.body || '' });
+              new Notification(n.title || '通知', { body: n.body || '' });
             }
           } catch {}
         })();

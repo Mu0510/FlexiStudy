@@ -1,7 +1,7 @@
 {
   "default_locale": "ja-JP",
   "quiet_hours": "23-06",
-  "caps_per_day": 3,
+  "caps_per_day": 5,
   "dedupe_window_minutes": 90,
   "allow_ai_skip": true
 }

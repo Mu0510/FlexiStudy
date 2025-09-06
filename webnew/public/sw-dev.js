@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('push', (event) => {
   let data = {};
   try { data = event?.data ? event.data.json() : {}; } catch {}
-  const title = data.title || 'FlexiStudy';
+  const title = data.title || '通知';
   const options = {
     body: data.body || '',
     icon: '/FlexiStudy_icon.svg',

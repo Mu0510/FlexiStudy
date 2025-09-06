@@ -31,7 +31,7 @@ export async function showLocalNotification(payload: NotifyDecision | null) {
     try {
       if ('serviceWorker' in navigator) {
         const reg = await navigator.serviceWorker.ready;
-        await reg.showNotification(title || 'FlexiStudy', {
+        await reg.showNotification(title || '通知', {
           body: body || '', icon: '/FlexiStudy_icon.svg', badge: '/FlexiStudy_icon.svg',
           tag: tag || 'general', data: { url: action_url || '/' }, requireInteraction: false
         });
@@ -39,7 +39,7 @@ export async function showLocalNotification(payload: NotifyDecision | null) {
       }
     } catch {}
     // Fallback to direct Notification
-    new Notification(title || 'FlexiStudy', { body: body || '' });
+    new Notification(title || '通知', { body: body || '' });
     return true;
   } catch {
     return false;
