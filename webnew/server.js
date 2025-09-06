@@ -29,6 +29,130 @@ const PROJECT_ROOT = path.join(__dirname, '..');
 const CONFIG_DIR = path.join(__dirname, 'notify', 'config');
 const MNT_DIR = path.join(__dirname, 'mnt');
 
+// --- Live config + schedulers state ---
+let TRIGGERS = null; // latest parsed triggers.json
+let aiPollTimer = null; // setInterval handle for AI polling
+let aiPollIntents = ['study_reminder'];
+let aiPollIntervalMs = 60 * 60 * 1000;
+let cronTimer = null; // setInterval handle for cron ticking
+let cronCompiled = []; // compiled cron expressions
+const cronLastFired = new Map();
+let notifyGraceMs = 3 * 60 * 1000; // default: 3 minutes after last visible turn
+
+function readJsonSafe(p, fallback) {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; }
+}
+
+function compileCronExpr(expr) {
+  function parsePart(part, min, max) {
+    const set = new Set();
+    const addRange = (a,b,step=1) => { for (let v=a; v<=b; v+=step) set.add(v); };
+    const tokens = String(part || '*').split(',');
+    for (const t of tokens) {
+      const s = t.trim();
+      if (s === '*') { addRange(min, max, 1); continue; }
+      const stepM = s.match(/^\*\/(\d+)$/); if (stepM) { const st = Math.max(1, Math.min(max, Number(stepM[1]))); addRange(min, max, st); continue; }
+      const rangeM = s.match(/^(\d+)-(\d+)(?:\/(\d+))?$/); if (rangeM) { const a = Math.max(min, Math.min(max, Number(rangeM[1]))); const b = Math.max(min, Math.min(max, Number(rangeM[2]))); const st = Math.max(1, Number(rangeM[3]||1)); addRange(Math.min(a,b), Math.max(a,b), st); continue; }
+      const n = Number(s); if (Number.isFinite(n)) { const v = Math.max(min, Math.min(max, n)); set.add(v); continue; }
+    }
+    return set;
+  }
+  try {
+    const parts = String(expr || '* * * * *').trim().split(/\s+/);
+    if (parts.length !== 5) return null;
+    const [m, h, dom, mon, dow] = parts;
+    return {
+      minutes: parsePart(m, 0, 59),
+      hours: parsePart(h, 0, 23),
+      dom: String(dom||'*'),
+      mon: String(mon||'*'),
+      dow: String(dow||'*'),
+      raw: expr,
+    };
+  } catch { return null; }
+}
+
+function cronDomOk(domExpr, day) { if (!domExpr || domExpr === '*') return true; const set = compileCronExpr(`* * ${domExpr} * *`).dom; return set.has(day); }
+function cronMonOk(monExpr, mon) { if (!monExpr || monExpr === '*') return true; const set = compileCronExpr(`* * * ${monExpr} *`).mon; return set === monExpr ? true : set.has(mon); }
+function cronDowOk(dowExpr, dow) { if (!dowExpr || dowExpr === '*') return true; const set = compileCronExpr(`* * * * ${dowExpr}`).dow; return set === dowExpr ? true : set.has(dow); }
+
+function loadAndApplyTriggers(wss, opts={}) {
+  try {
+    const triggersPath = path.join(CONFIG_DIR, 'triggers.json');
+    const nextTriggers = readJsonSafe(triggersPath, {});
+    TRIGGERS = nextTriggers;
+    // Grace window after last visible assistant turn
+    const graceMin = Number(nextTriggers?.ai_poll?.grace_after_last_turn_minutes || nextTriggers?.grace_after_last_turn_minutes || 0) || 3;
+    notifyGraceMs = Math.max(0, graceMin) * 60 * 1000;
+    // --- AI poll scheduler ---
+    const pollMins = Number(nextTriggers?.ai_poll?.interval_minutes || 0) || 60;
+    // Intent types are deprecated; always evaluate one unified 'auto' decision
+    aiPollIntents = [];
+    const intervalMs = pollMins * 60 * 1000;
+    if (aiPollTimer) { clearInterval(aiPollTimer); aiPollTimer = null; }
+    aiPollIntervalMs = intervalMs;
+    aiPollTimer = setInterval(async () => {
+      try {
+        // Skip while a visible turn is active
+        if (currentAssistantMessage?.id && !suppressNextAssistantBroadcast) return;
+        // Enforce grace window after last visible assistant end-of-turn
+        if (lastVisibleTurnEndTs && (Date.now() - lastVisibleTurnEndTs) < notifyGraceMs) return;
+        const userId = 'local';
+        const payload = await runHiddenDecision({ intent: 'auto', context: { userId }, userId });
+        if (payload?.decision === 'send' && payload?.notification) {
+          persistNotificationLog({ userId, payload });
+          try { broadcast(wss, { jsonrpc: '2.0', method: 'notify', params: { notification: payload.notification } }); } catch {}
+          await sendPushToUser(userId, payload.notification);
+        }
+      } catch (e) { console.warn('[Scheduler] notify tick failed:', e?.message || e); }
+    }, intervalMs);
+    console.log(`[Scheduler] AI poll every ${pollMins} min (mode: auto)`);
+
+    // --- Cron scheduler ---
+    if (cronTimer) { clearInterval(cronTimer); cronTimer = null; }
+    let exprs = nextTriggers?.cron;
+    if (!exprs) exprs = [];
+    if (typeof exprs === 'string') exprs = [exprs];
+    if (!Array.isArray(exprs)) exprs = [];
+    cronCompiled = exprs.map(compileCronExpr).filter(Boolean);
+    cronLastFired.clear();
+    if (cronCompiled.length > 0) {
+      cronTimer = setInterval(async () => {
+        const now = new Date();
+        const key = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()} ${now.getHours()}:${now.getMinutes()}`;
+        for (const c of cronCompiled) {
+          try {
+            if (currentAssistantMessage?.id && !suppressNextAssistantBroadcast) break;
+            if (lastVisibleTurnEndTs && (Date.now() - lastVisibleTurnEndTs) < notifyGraceMs) break;
+            if (!c.minutes.has(now.getMinutes())) continue;
+            if (!c.hours.has(now.getHours())) continue;
+            // Day filters
+            const domOk = (c.dom === '*' ? true : compileCronExpr(`* * ${c.dom} * *`).dom.has(now.getDate()));
+            const monOk = (c.mon === '*' ? true : compileCronExpr(`* * * ${c.mon} *`).mon.has(now.getMonth()+1));
+            const dowOk = (c.dow === '*' ? true : compileCronExpr(`* * * * ${c.dow}`).dow.has(now.getDay()));
+            if (!(domOk && monOk && dowOk)) continue;
+            const last = cronLastFired.get(c.raw);
+            if (last === key) continue;
+            cronLastFired.set(c.raw, key);
+            const userId = 'local';
+            const payload = await runHiddenDecision({ intent: 'auto', context: { userId }, userId });
+            if (payload?.decision === 'send' && payload?.notification) {
+              persistNotificationLog({ userId, payload });
+              try { broadcast(wss, { jsonrpc: '2.0', method: 'notify', params: { notification: payload.notification } }); } catch {}
+              await sendPushToUser(userId, payload.notification);
+            }
+          } catch (e) { console.warn('[Cron] error:', e?.message || e); }
+        }
+      }, 15 * 1000);
+      console.log(`[Scheduler] Cron enabled for: ${exprs.join(' | ')}`);
+    } else {
+      console.log('[Scheduler] Cron disabled');
+    }
+  } catch (e) {
+    console.warn('[Scheduler] load/apply triggers failed:', e?.message || e);
+  }
+}
+
 // 2. プロセス起動処理の更新
 function getGeminiSpawnSpec() {
   return {
@@ -58,6 +182,8 @@ let hiddenDecisionActive = false;
 let wssGlobal = null;
 // Map toolCallId -> { requestId, options, cmdKey }
 const permissionWaiters = new Map();
+// Track last visible assistant end-of-turn to delay background notify
+let lastVisibleTurnEndTs = 0;
 
 // ---- Permission helpers: robust command key derivation ----
 function splitCommandLine(cmd) {
@@ -354,9 +480,14 @@ function handleCliMessage(jsonString, wss) {
         pending.reject(msg.error);
       } else {
         pending.resolve(msg.result);
-        // Avoid premature flush for hidden decisions; rely on end_of_turn
-        if (pending.method === 'session/prompt' && !suppressNextAssistantBroadcast) {
+        // Some agents send the end state only via RPC result (no session/update end_of_turn).
+        // Always flush on session/prompt result. For hidden prompts, broadcasts are suppressed.
+        if (pending.method === 'session/prompt') {
+          ensureAssistantMessage(wss, Date.now());
           flushAssistantMessage(wss, msg.result?.stopReason);
+          if (!suppressNextAssistantBroadcast) {
+            try { lastVisibleTurnEndTs = Date.now(); } catch {}
+          }
         }
       }
     }
@@ -625,7 +756,7 @@ function flushAssistantMessage(wss, stopReason) {
   }
 
   // 3. messageCompleted でストリームの終了を通知する
-  if (currentAssistantMessage.id && !suppressNextAssistantBroadcast) {
+  if (currentAssistantMessage.id && !(suppressNextAssistantBroadcast || hiddenDecisionActive)) {
     broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { messageId: currentAssistantMessage.id, stopReason: stopReason || 'end_turn' } });
   }
   
@@ -635,7 +766,7 @@ function flushAssistantMessage(wss, stopReason) {
 
 // ツール開始等でターンは閉じずに、現時点の本文のみ確定（addMessage）する
 function finalizeAssistantPartial(wss) {
-  if (suppressNextAssistantBroadcast) {
+  if (suppressNextAssistantBroadcast || hiddenDecisionActive) {
     // Do not publish partials for hidden prompts
     currentAssistantMessage = { id: null, text: '', thought: '' };
     return;
@@ -666,7 +797,7 @@ function handleSessionUpdate(upd, wss) {
       ensureAssistantMessage(wss, nowTs);
       const thoughtChunk = upd.content?.type === 'text' ? upd.content.text : '';
       currentAssistantMessage.thought += thoughtChunk;
-      if (!suppressNextAssistantBroadcast) {
+      if (!(suppressNextAssistantBroadcast || hiddenDecisionActive)) {
         broadcast(wss, {
           jsonrpc: '2.0',
           method: 'streamAssistantMessageChunk',
@@ -682,7 +813,7 @@ function handleSessionUpdate(upd, wss) {
       ensureAssistantMessage(wss, nowTs);
       const textChunk = upd.content?.type === 'text' ? upd.content.text : '';
       currentAssistantMessage.text += textChunk;
-      if (!suppressNextAssistantBroadcast) {
+      if (!(suppressNextAssistantBroadcast || hiddenDecisionActive)) {
         broadcast(wss, {
           jsonrpc: '2.0',
           method: 'streamAssistantMessageChunk',
@@ -692,7 +823,13 @@ function handleSessionUpdate(upd, wss) {
       break;
 
     case 'end_of_turn':
+      // Ensure there is an assistant message id even if no text chunks were streamed
+      ensureAssistantMessage(wss, nowTs);
       flushAssistantMessage(wss, upd.stopReason);
+      // If this was a visible assistant turn, record its end time for notify grace
+      if (!suppressNextAssistantBroadcast) {
+        lastVisibleTurnEndTs = nowTs;
+      }
       break;
 
     case 'tool_call': {
@@ -821,10 +958,27 @@ const httpsOptions = {
 
 // --- Notify helpers (shared) ---
 async function runHiddenDecision({ intent, context, userId }) {
+  // Respect force mode (testing) before applying early guards
+  const forceCtx = Boolean(context && (context.force || context.force_send));
+  // Early guard: skip notify while a study session is actively running (excluding BREAK)
+  if (!forceCtx) {
+    try {
+      const payload = JSON.stringify({ action: 'session.active', params: {} });
+      const cp = require('child_process').spawnSync('python3', ['manage_log.py', '--api-mode', 'execute', payload], { cwd: PROJECT_ROOT, encoding: 'utf8' });
+      if (cp && cp.status === 0) {
+        try {
+          const info = JSON.parse(cp.stdout || '{}');
+          if (info && info.active === true) {
+            return { decision: 'skip', reason: 'active_session', notification: null };
+          }
+        } catch {}
+      }
+    } catch {}
+  }
   // Load configs
   const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
   const policy = readJson(path.join(CONFIG_DIR, 'policy.json'), {});
-  const intents = readJson(path.join(CONFIG_DIR, 'intents.json'), {});
+  // Intents/types are deprecated; keep triggers and policy
   const triggers = readJson(path.join(CONFIG_DIR, 'triggers.json'), {});
   // Load system prompt (optional)
   let systemFile = '';
@@ -861,7 +1015,7 @@ async function runHiddenDecision({ intent, context, userId }) {
       .slice(-20);
   } catch {}
 
-  const user = { now: nowIso, intent: intent || 'auto', policy, intents, triggers, lastNotifications, context: context || {} };
+  const user = { now: nowIso, policy, triggers, lastNotifications, context: context || {} };
 
   // Enqueue hidden prompt and await the assistant's final text
   const promptText = `${baseSystem}\n\n[入力]\n${JSON.stringify(user)}`;
@@ -880,8 +1034,16 @@ async function runHiddenDecision({ intent, context, userId }) {
         setTimeout(() => reject(new Error('ACP session not ready')), 1500);
       }
     } catch (e) { reject(e); }
-    // Safety timeout
-    setTimeout(() => { try { resolve({ text: '' }); } catch {} }, 8000);
+    // Safety timeout: still prefer end_of_turn, but resolve after 45s if it never arrives
+    setTimeout(async () => {
+      try {
+        // Send an interrupt (same意図 as front-end cancel) and flush as canceled
+        try { await acpSend('session/interrupt', { sessionId: acpSessionId }); } catch {}
+        try { if (wssGlobal) flushAssistantMessage(wssGlobal, 'canceled'); } catch {}
+      } finally {
+        try { resolve({ text: '' }); } catch {}
+      }
+    }, 45000);
   }).finally(() => {
     hiddenDecisionActive = false;
     try { if (wssGlobal) broadcast(wssGlobal, { jsonrpc: '2.0', method: 'notifyBusy', params: { active: false } }); } catch {}
@@ -891,18 +1053,26 @@ async function runHiddenDecision({ intent, context, userId }) {
     try {
       if (!raw) return null;
       let s = String(raw).trim();
-      // strip code fences if present
-      s = s.replace(/^\s*```json\s*/i, '').replace(/^\s*```\s*/i, '');
-      s = s.replace(/\s*```\s*$/, '');
+
+      // 1) Explicit code fence block first (```json ... ``` or ``` ... ```)
+      const fence = s.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+      if (fence && fence[1]) {
+        const inner = fence[1].trim();
+        try { return JSON.parse(inner); } catch {}
+      }
+
+      // 2) No fence: try direct JSON
       try { return JSON.parse(s); } catch {}
-      // try largest brace substring
+
+      // 3) Try from first '{' to last '}' (common for minor prefix/suffix noise)
       const start = s.indexOf('{');
       const end = s.lastIndexOf('}');
       if (start !== -1 && end !== -1 && end > start) {
         const sub = s.slice(start, end + 1);
         try { return JSON.parse(sub); } catch {}
       }
-      // generic fallback with regex
+
+      // 4) Generic regex fallback (least strict)
       const m = s.match(/{[\s\S]*}/);
       if (m) { try { return JSON.parse(m[0]); } catch {} }
       return null;
@@ -910,6 +1080,11 @@ async function runHiddenDecision({ intent, context, userId }) {
   }
   let data = parseDecisionText(result && result.text);
   let payload = data && typeof data === 'object' ? data : { decision: 'skip', reason: 'invalid_json' };
+  if (payload.reason === 'invalid_json') {
+    try {
+      console.warn('[Notify] invalid_json: raw assistant text length=', String(result && result.text ? result.text.length : 0));
+    } catch {}
+  }
 
   const force = Boolean((user && user.context && user.context.force) || (user && user.force_send));
 
@@ -924,10 +1099,8 @@ async function runHiddenDecision({ intent, context, userId }) {
     const q1 = toHour(h1), q2 = toHour(h2);
     if (q1 !== null && q2 !== null) { if (q1 <= q2) isQuiet = (hourNow >= q1 && hourNow < q2); else isQuiet = (hourNow >= q1 || hourNow < q2); }
 
-    const intentsMap = intents || {};
-    const chosen = payload?.intent_id && intentsMap[payload.intent_id] ? intentsMap[payload.intent_id] : null;
-    const tag = payload?.notification?.tag || (chosen?.tag) || 'general';
-    const cta = payload?.notification?.action_url || (chosen?.cta_url) || '/';
+    const tag = payload?.notification?.tag || 'general';
+    const cta = payload?.notification?.action_url || '/';
     if (payload?.notification) { payload.notification.tag = tag; payload.notification.action_url = cta; }
 
     const dedupeMin = Number(policy?.dedupe_window_minutes || 0);
@@ -941,22 +1114,21 @@ async function runHiddenDecision({ intent, context, userId }) {
       if (ts) { const d = new Date(ts); if (d.toDateString() === todayStr) countToday++; }
     }
     if (payload.decision === 'send') {
-      if (chosen?.guardrails?.avoid_quiet_hours && isQuiet) payload = { decision: 'skip', reason: 'quiet_hours' };
+      if (isQuiet) payload = { decision: 'skip', reason: 'quiet_hours' };
       else if (caps && countToday >= caps) payload = { decision: 'skip', reason: 'daily_cap' };
       else if (sameTagRecent) payload = { decision: 'skip', reason: 'dedupe_window' };
     }
   } catch {}
   if (force) {
     try {
-      const intentsMap = intents || {};
-      const chosenKey = payload?.intent_id || (intent || 'study_reminder');
-      const chosen = intentsMap[chosenKey] || {};
-      const tag = payload?.notification?.tag || chosen?.tag || 'test';
-      const cta = payload?.notification?.action_url || chosen?.cta_url || '/';
-      const cat = payload?.notification?.category || chosen?.category || 'engagement';
+      const tag = payload?.notification?.tag || 'test';
+      const cta = payload?.notification?.action_url || '/';
+      const cat = payload?.notification?.category || 'engagement';
       const notif = payload?.notification || { title: 'テスト通知', body: 'これはテスト用に強制生成された通知です。', action_url: cta, tag, category: cat };
-      return { decision: 'send', reason: (payload?.reason || 'force_send'), intent_id: chosenKey, notification: notif };
-    } catch { return { decision: 'send', reason: 'force_send', intent_id: intent || 'study_reminder', notification: { title: 'テスト通知', body: 'これはテスト用に強制生成された通知です。', action_url: '/', tag: 'test', category: 'engagement' } }; }
+      return { decision: 'send', reason: (payload?.reason || 'force_send'), notification: notif };
+    } catch {
+      return { decision: 'send', reason: 'force_send', notification: { title: 'テスト通知', body: 'これはテスト用に強制生成された通知です。', action_url: '/', tag: 'test', category: 'engagement' } };
+    }
   }
 
   return payload;
@@ -1496,108 +1668,30 @@ app.prepare().then(() => {
     console.log(`> HTTP redirect server running on http://${hostname}:80, redirecting to https`);
   });
 
-  // --- Simple scheduler: poll intents and send at most one per tick ---
+  // Initialize and watch notification triggers for hot-reload
+  loadAndApplyTriggers(wss);
   try {
-    const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
-    const triggers = readJson(path.join(CONFIG_DIR, 'triggers.json'), {});
-    const pollMins = Number(triggers?.ai_poll?.interval_minutes || 0) || 60;
-    const intents = Array.isArray(triggers?.ai_poll?.intents) ? triggers.ai_poll.intents : ['study_reminder'];
-    const userId = 'local';
-    setInterval(async () => {
-      try {
-        // Skip if a visible assistant turn is active
-        if (currentAssistantMessage?.id && !suppressNextAssistantBroadcast) return;
-        for (const intent of intents) {
-          const payload = await runHiddenDecision({ intent, context: { userId }, userId });
-          if (payload?.decision === 'send' && payload?.notification) {
-            persistNotificationLog({ userId, payload });
-            try { broadcast(wss, { jsonrpc: '2.0', method: 'notify', params: { notification: payload.notification } }); } catch {}
-            await sendPushToUser(userId, payload.notification);
-            break; // at most one per tick
-          }
-        }
-      } catch (e) {
-        console.warn('[Scheduler] notify tick failed:', e?.message || e);
+    const triggersPath = path.join(CONFIG_DIR, 'triggers.json');
+    const dir = CONFIG_DIR;
+    let debounceTimer = null;
+    const kick = (why) => {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        console.log(`[Scheduler] Reloading triggers due to: ${why}`);
+        loadAndApplyTriggers(wss);
+      }, 200);
+    };
+    // Watch directory for changes and replacements
+    fs.watch(dir, { persistent: true }, (eventType, filename) => {
+      if (!filename) return;
+      if (String(filename) === 'triggers.json') {
+        kick(eventType || 'change');
       }
-    }, pollMins * 60 * 1000);
-    console.log(`[Scheduler] AI poll every ${pollMins} min, intents: ${intents.join(', ')}`);
+    });
+    // Also watch the file directly for editors that do in-place writes
+    try { fs.watch(triggersPath, { persistent: true }, () => kick('change')); } catch {}
+    console.log('[Scheduler] Watching triggers.json for changes');
   } catch (e) {
-    console.warn('[Scheduler] init failed:', e?.message || e);
-  }
-
-  // --- Cron scheduler (minimal * or lists or steps) ---
-  try {
-    const readJson = (p, fallback) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; } };
-    const triggers = readJson(path.join(CONFIG_DIR, 'triggers.json'), {});
-    let exprs = triggers?.cron;
-    if (!exprs) exprs = [];
-    if (typeof exprs === 'string') exprs = [exprs];
-    if (!Array.isArray(exprs)) exprs = [];
-    const userId = 'local';
-
-    function parsePart(part, min, max) {
-      const set = new Set();
-      const addRange = (a,b,step=1) => { for (let v=a; v<=b; v+=step) set.add(v); };
-      const tokens = String(part || '*').split(',');
-      for (const t of tokens) {
-        const s = t.trim();
-        if (s === '*') { addRange(min, max, 1); continue; }
-        const stepM = s.match(/^\*\/(\d+)$/); if (stepM) { const st = Math.max(1, Math.min(max, Number(stepM[1]))); addRange(min, max, st); continue; }
-        const rangeM = s.match(/^(\d+)-(\d+)(?:\/(\d+))?$/); if (rangeM) { const a = Math.max(min, Math.min(max, Number(rangeM[1]))); const b = Math.max(min, Math.min(max, Number(rangeM[2]))); const st = Math.max(1, Number(rangeM[3]||1)); addRange(Math.min(a,b), Math.max(a,b), st); continue; }
-        const n = Number(s); if (Number.isFinite(n)) { const v = Math.max(min, Math.min(max, n)); set.add(v); continue; }
-      }
-      return set;
-    }
-
-    function compileCron(expr) {
-      const parts = String(expr || '* * * * *').trim().split(/\s+/);
-      if (parts.length !== 5) return null;
-      const [m, h, dom, mon, dow] = parts;
-      return {
-        minutes: parsePart(m, 0, 59),
-        hours: parsePart(h, 0, 23),
-        dom: String(dom||'*'),
-        mon: String(mon||'*'),
-        dow: String(dow||'*'),
-        raw: expr,
-      };
-    }
-
-    const compiled = exprs.map(compileCron).filter(Boolean);
-    const lastFired = new Map();
-
-    function domOk(domExpr, day) { if (!domExpr || domExpr === '*') return true; const set = parsePart(domExpr, 1, 31); return set.has(day); }
-    function monOk(monExpr, mon) { if (!monExpr || monExpr === '*') return true; const set = parsePart(monExpr, 1, 12); return set.has(mon); }
-    function dowOk(dowExpr, dow) { if (!dowExpr || dowExpr === '*') return true; const set = parsePart(dowExpr, 0, 6); return set.has(dow); }
-
-    if (compiled.length > 0) {
-      setInterval(async () => {
-        const now = new Date();
-        const key = `${now.getFullYear()}-${now.getMonth()+1}-${now.getDate()} ${now.getHours()}:${now.getMinutes()}`;
-        for (const c of compiled) {
-          try {
-            // Skip if a visible assistant turn is active
-            if (currentAssistantMessage?.id && !suppressNextAssistantBroadcast) break;
-            if (!c.minutes.has(now.getMinutes())) continue;
-            if (!c.hours.has(now.getHours())) continue;
-            if (!domOk(c.dom, now.getDate())) continue;
-            if (!monOk(c.mon, now.getMonth()+1)) continue;
-            if (!dowOk(c.dow, now.getDay())) continue;
-            const last = lastFired.get(c.raw);
-            if (last === key) continue; // already fired this minute
-            lastFired.set(c.raw, key);
-            const payload = await runHiddenDecision({ intent: 'auto', context: { userId }, userId });
-            if (payload?.decision === 'send' && payload?.notification) {
-              persistNotificationLog({ userId, payload });
-              try { broadcast(wss, { jsonrpc: '2.0', method: 'notify', params: { notification: payload.notification } }); } catch {}
-              await sendPushToUser(userId, payload.notification);
-            }
-          } catch (e) { console.warn('[Cron] error:', e?.message || e); }
-        }
-      }, 15 * 1000);
-      console.log(`[Scheduler] Cron enabled for: ${exprs.join(' | ')}`);
-    }
-  } catch (e) {
-    console.warn('[Cron] init failed:', e?.message || e);
+    console.warn('[Scheduler] Failed to watch triggers.json:', e?.message || e);
   }
 });

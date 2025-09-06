@@ -521,3 +521,35 @@ study_log_20250905_174918_666233.db: Daily auto backup before first study sessio
 study_log_20250905_174918_668034.db: Before start session.
 study_log_20250905_175140_340936.db: For Redo
 study_log_20250905_174918_668034.db: Undo operation
+study_log_20250906_224822_795054.db: Before daily summary update.
+study_log_20250906_231454_930214.db: Daily auto backup before first study session.
+study_log_20250906_231454_932579.db: Before start session.
+study_log_20250906_231551_573231.db: For Redo
+study_log_20250906_231454_932579.db: Undo operation
+study_log_20250906_231804_776825.db: For Undo (Redo operation)
+study_log_20250906_231551_573231.db: Redo operation
+study_log_20250906_231858_541604.db: For Redo
+study_log_20250906_231804_776825.db: Undo operation
+study_log_20250907_000241_640117.db: Daily auto backup before first study session.
+study_log_20250907_000241_641997.db: Before start session.
+study_log_20250907_000317_062473.db: Before break session.
+study_log_20250907_000327_954250.db: Before resume session.
+study_log_20250907_000337_047039.db: Before ending session.
+study_log_20250907_000420_880214.db: Before start session.
+study_log_20250907_000504_176135.db: For Redo
+study_log_20250907_000420_880214.db: Undo operation
+study_log_20250907_000507_051230.db: For Redo
+study_log_20250907_000337_047039.db: Undo operation
+study_log_20250907_000509_618078.db: For Redo
+study_log_20250907_000327_954250.db: Undo operation
+study_log_20250907_000512_342284.db: For Redo
+study_log_20250907_000317_062473.db: Undo operation
+study_log_20250907_000514_929298.db: For Redo
+study_log_20250907_000241_641997.db: Undo operation
+study_log_20250907_000531_469140.db: For Undo (Redo operation)
+study_log_20250907_000504_176135.db: Redo operation
+study_log_20250907_000621_281539.db: For Redo
+study_log_20250907_000531_469140.db: Undo operation
+study_log_20250907_000704_387801.db: Before daily summary update.
+study_log_20250907_001606_000306.db: Before adding a goal to a specific date.
+study_log_20250907_001616_410816.db: Before deleting goal by global ID.

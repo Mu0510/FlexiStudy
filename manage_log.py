@@ -101,6 +101,8 @@ Options:
   - session.merge: 2つの学習セッションを結合
     - params: {"session1_id": int, "session2_id": int}
     - (注) 結合する2つのセッションのサマリーが一致している必要があります。
+  - session.active: 現在アクティブな学習セッションがあるかを返す（BREAKは除外）
+    - params: {}
 
 [summary]
   - summary.session_update: セッションの概要を追加・更新
@@ -1902,6 +1904,20 @@ def action_summary_session_update(params):
         raise ValueError("textは必須です。")
     return add_or_update_session_summary(text, session_id)
 
+def action_session_active(params):
+    """現在アクティブな学習セッションが存在するか（BREAKを除く）を返す"""
+    with get_connection() as conn:
+        cur = conn.cursor()
+        # end_time が NULL の最新行を確認
+        cur.execute("SELECT event_type FROM study_logs WHERE end_time IS NULL ORDER BY id DESC LIMIT 1")
+        row = cur.fetchone()
+        if not row:
+            return { "status": "success", "active": False, "event_type": None }
+        evt = row[0]
+        # BREAK は「休憩中」であり、学習継続中ではない扱い
+        is_active = (evt is not None and str(evt).upper() != 'BREAK')
+        return { "status": "success", "active": bool(is_active), "event_type": evt }
+
 def action_goal_daily_update(params):
     """日次目標を更新する"""
     goal_json = params.get("goal_json")
@@ -1982,6 +1998,7 @@ ACTION_HANDLERS = {
     "log.update_entry": action_log_update_entry,
     "log.update_end_time": action_log_update_end_time,
     "session.merge": action_session_merge,
+    "session.active": action_session_active,
     "summary.daily_update": action_summary_daily_update,
     "summary.session_update": action_summary_session_update,
     "goal.daily_update": action_goal_daily_update,

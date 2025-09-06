@@ -5,8 +5,7 @@
     "exam_approaching": { "days_before": [14, 7, 1] }
   },
   "ai_poll": {
-    "interval_minutes": 60,
-    "intents": ["study_reminder", "exam_check", "chat_followup"]
+    "interval_minutes": 30,
+    "grace_after_last_turn_minutes": 3
   }
 }
-

@@ -1078,10 +1078,10 @@ export function NewChatPanel({
                   handleKeyDown(e);
                 }}
                 onPaste={handlePaste}
-                placeholder={online ? (inputLocked ? (lockMessage || "処理中です…") : "システムと対話... (Alt+Enterで送信)") : "オフライン中は送信できません"}
+                placeholder={online ? (inputLocked ? (lockMessage || "処理中（送信のみ不可）…") : "システムと対話... (Alt+Enterで送信)") : "オフライン中は送信できません"}
                 className="w-full min-h-0 resize-none border-none bg-transparent outline-none focus-visible:ring-0 focus-visible:ring-offset-0 placeholder:text-gray-400 dark:placeholder:text-gray-500 placeholder:font-light px-2 py-1 text-base"
                 rows={1}
-                disabled={isUploading || !online || Boolean(inputLocked)}
+                disabled={isUploading || !online}
               />
               {slashOpen && filteredSlash.length > 0 && (
                 <div className="absolute -top-2 translate-y-[-100%] left-2 z-50 w-64 rounded-md border bg-popover text-popover-foreground shadow-md">
@@ -1102,7 +1102,7 @@ export function NewChatPanel({
               )}
               <div className="flex items-center justify-between mt-2">
                 <div className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
-                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading || !online || Boolean(inputLocked)}>
+                    <Button variant="ghost" size="icon" className="w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" onClick={triggerFileSelect} disabled={isUploading || !online}>
                         <Plus className="w-5 h-5" />
                     </Button>
                     <DropdownMenu>
@@ -1180,7 +1180,7 @@ export function NewChatPanel({
                       "w-8 h-8 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 dark:text-gray-400",
                       isRecording && "bg-red-500/20 text-red-500 hover:bg-red-500/30 dark:bg-red-500/20 dark:text-red-400 dark:hover:bg-red-500/30"
                     )}
-                    disabled={isGeneratingResponse || isUploading || !online || Boolean(inputLocked)}
+                    disabled={isGeneratingResponse || isUploading || !online}
                     onClick={handleMicClick}
                   >
                     <Mic className="w-5 h-5" />

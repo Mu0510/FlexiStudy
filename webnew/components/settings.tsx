@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { getSubjectStyle } from "@/lib/utils";
 import { SettingsIcon, User, Bell, Palette, Shield, Download, Upload, Trash2, Save, Loader2, CheckCircle, XCircle } from "lucide-react"
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from "@/components/ui/select";
+ 
 
 interface SettingsProps {
   uniqueSubjects: string[];
@@ -28,7 +28,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [notifications, setNotifications] = useState(true)
   const [studyReminders, setStudyReminders] = useState(true)
   const [weeklyReports, setWeeklyReports] = useState(true)
-  const [testIntent, setTestIntent] = useState<string>('study_reminder')
+  
   const [todayCount, setTodayCount] = useState<number>(0)
   const [todayCap, setTodayCap] = useState<number>(0)
   const [isTesting, setIsTesting] = useState(false)
@@ -479,19 +479,8 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
               )}
 
               <div className="mt-4 p-3 rounded-md border border-dashed border-slate-300 dark:border-slate-600">
-                <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">通知テスト</div>
+                <div className="mb-2 text-sm font-medium text-slate-700 dark:text-slate-300">通知テスト（目的自動判定）</div>
                 <div className="flex items-center gap-2">
-                  <Select value={testIntent} onValueChange={setTestIntent} disabled={isTesting}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="インテントを選択" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="study_reminder">study_reminder</SelectItem>
-                      <SelectItem value="exam_check">exam_check</SelectItem>
-                      <SelectItem value="chat_followup">chat_followup</SelectItem>
-                      <SelectItem value="auto">auto</SelectItem>
-                    </SelectContent>
-                  </Select>
                   <Button
                     variant="default"
                     disabled={isTesting}
@@ -499,7 +488,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                       setIsTesting(true);
                       setTestResult(null);
                       try {
-                        const r = await fetch('/api/notify/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intent: testIntent === 'auto' ? undefined : testIntent, context: { userId: 'local' } }) });
+                        const r = await fetch('/api/notify/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context: { userId: 'local' } }) });
                         if (r.status === 409) {
                           setTestResult({ decision: 'skip', reason: 'busy (chat/notify in progress)' });
                           toast.info('現在は生成中のためテストを実行できません');
@@ -558,7 +547,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                           onClick={async () => {
                             setIsTesting(true)
                             try {
-                              const r = await fetch('/api/notify/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ intent: testIntent === 'auto' ? undefined : testIntent, context: { userId: 'local', force: true } }) });
+                              const r = await fetch('/api/notify/decide', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ context: { userId: 'local', force: true } }) });
                               const j = await r.json();
                               const p = j?.payload || null;
                               if (p?.decision === 'send' && p?.notification) {

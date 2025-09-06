@@ -126,6 +126,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const requestIdCounter = useRef<number>(1);
   const lastSentRequestId = useRef<number | null>(null);
   const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track the assistant message id for the current visible turn
+  const currentAssistantIdRef = useRef<string | null>(null);
   const pendingUserByReqId = useRef<Map<number, string>>(new Map());
 
   useEffect(() => {
@@ -230,7 +232,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         deltaTimerRef.current = setTimeout(() => {
           try { requestDelta(); } catch {}
         }, 150);
-        finalizeTurn();
+        // Only finalize if this completion corresponds to the current assistant stream
+        const mid = (msg as any)?.params?.messageId as string | undefined;
+        if (mid && currentAssistantIdRef.current && mid === currentAssistantIdRef.current) {
+          finalizeTurn();
+          currentAssistantIdRef.current = null;
+        }
         return;
       }
       if (msg?.result && typeof msg.result === 'object' && (msg.result.stopReason === 'end_turn' || msg.result.stopReason === 'message_end')) {
@@ -274,6 +281,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         // タイムライン内に仮のアシスタントメッセージを配置・更新（受信順を維持）
         const textId = incomingMessageId || (activeMessageRef.current?.id);
         const thoughtId = textId ? `${textId}#thought` : undefined;
+        // Track current assistant stream id as soon as we know it
+        if (textId) currentAssistantIdRef.current = textId;
         if (textId) {
           flushSync(() => {
             setMessages(prev => {
@@ -350,6 +359,12 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       if (msg.method === 'addMessage') {
         try { if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('chat:pre-mutate', { detail: { kind: 'text', action: 'add', messageId: msg.params?.message?.id } })); } catch {}
         const { message } = msg.params;
+
+        // If this is the assistant's final message being added (no stream chunks case),
+        // capture its id so that the upcoming messageCompleted can finalize the correct turn.
+        if (isGeneratingResponse && message?.role === 'assistant' && typeof message?.id === 'string') {
+          currentAssistantIdRef.current = message.id;
+        }
 
         flushSync(() => {
           setMessages(prev => {
@@ -595,6 +610,8 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
       return false;
     }
     setIsGeneratingResponse(true);
+    // New user turn starts: clear previous assistant id tracking
+    currentAssistantIdRef.current = null;
     const { text, files, goal, session, features } = messageData;
     const newMessage: Message = {
         id: `${Date.now()}-${Math.random().toString(36).substring(2)}`,
