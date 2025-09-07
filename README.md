@@ -25,7 +25,8 @@
 
 環境構築が完了したら、bashもしくはPowershellにおいて以下のコマンドでメインのWebアプリケーションを起動できます。
 
-cd webnew && pmpm dev
+cd webnew
+pmpm dev
 
 
 アプリケーションは `https://localhost:3000` でアクセス可能になります。

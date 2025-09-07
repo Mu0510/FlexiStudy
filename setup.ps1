@@ -147,7 +147,8 @@ Write-Success "Gemini CLI の設定が完了しました。"
 
 Write-Step "🎉 すべてのセットアップが完了しました！"
 Write-Host "次のコマンドでアプリケーションを起動できます:" -ForegroundColor Green
-Write-Host "cd webnew && pnpm dev" -ForegroundColor Yellow
+Write-Host "cd webnew" -ForegroundColor Yellow
+Write-Host "pnpm dev" -ForegroundColor Yellow
 Write-Host "サーバーは https://localhost:3000 で利用可能になります。" -ForegroundColor Green
 
 Read-Host "処理を終了するには Enter キーを押してください"
