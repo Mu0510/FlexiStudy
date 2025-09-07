@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import Link from "next/link"
 import { useTheme } from "next-themes"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -50,12 +51,17 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   const [allowAlways, setAllowAlways] = useState<string[]>([]);
   const [denyAlways, setDenyAlways] = useState<string[]>([]);
   const SHOW_TEMPLATES = false; // 将来的に使うテンプレート群は非表示
+  // Chat model selection
+  const [chatModel, setChatModel] = useState<'gemini-2.5-flash'|'gemini-2.5-pro'>('gemini-2.5-flash');
+  const [initialChatModel, setInitialChatModel] = useState<'gemini-2.5-flash'|'gemini-2.5-pro'>('gemini-2.5-flash');
+  const [showModelOverlay, setShowModelOverlay] = useState(false);
+  const [isApplyingModel, setIsApplyingModel] = useState(false);
 
   useEffect(() => {
     // Load server-side settings first; fallback to localStorage
     const load = async () => {
       try {
-        const r = await fetch('/api/settings?keys=weeklyPeriod,weekStart,tools.yolo');
+        const r = await fetch('/api/settings?keys=weeklyPeriod,weekStart,tools.yolo,chat.model');
         const data = await r.json();
         const s = data?.settings || {};
         const p = (s['weeklyPeriod'] as string) || localStorage.getItem('weeklyPeriod') || 'this_week';
@@ -65,6 +71,12 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
           setYoloMode(v);
           try { localStorage.setItem('tools.yolo', String(v)); } catch {}
         }
+        // chat model
+        const cm = (s['chat.model'] as any) || (localStorage.getItem('chat.model') as any) || 'gemini-2.5-flash';
+        const safeModel = (cm === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash') as 'gemini-2.5-flash'|'gemini-2.5-pro';
+        setChatModel(safeModel);
+        setInitialChatModel(safeModel);
+        try { localStorage.setItem('chat.model', safeModel); } catch {}
         setWeeklyPeriod(p);
         setWeekStart(w);
         try { localStorage.setItem('weeklyPeriod', p); localStorage.setItem('weekStart', w); } catch {}
@@ -74,6 +86,10 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
         setWeeklyPeriod(savedPeriod);
         const savedStart = (localStorage.getItem('weekStart') as 'sunday' | 'monday') || 'sunday';
         setWeekStart(savedStart);
+        const cm = (localStorage.getItem('chat.model') as any) || 'gemini-2.5-flash';
+        const safeModel = (cm === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash') as 'gemini-2.5-flash'|'gemini-2.5-pro';
+        setChatModel(safeModel);
+        setInitialChatModel(safeModel);
         setSettingsLoaded(true);
       }
     };
@@ -208,6 +224,37 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
     }
   };
 
+  const handleApplyChatModel = async () => {
+    try {
+      setIsApplyingModel(true);
+      // 1) Save model to settings
+      try {
+        await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'chat.model', value: chatModel }) });
+        try { localStorage.setItem('chat.model', chatModel); } catch {}
+      } catch (e) {
+        toast.error('モデル設定の保存に失敗しました');
+        setIsApplyingModel(false);
+        return;
+      }
+      // 2) Ask server to restart chat backend and clear history
+      try {
+        const r = await fetch('/api/chat/restart', { method: 'POST' });
+        if (!r.ok) throw new Error('restart failed');
+      } catch (e) {
+        toast.error('チャットの再起動に失敗しました');
+        setIsApplyingModel(false);
+        return;
+      }
+      try { window.dispatchEvent(new CustomEvent('chat:clear-history')); } catch {}
+      setInitialChatModel(chatModel);
+      setShowModelOverlay(false);
+      setIsApplyingModel(false);
+      toast.success('モデルを切り替え、新しい会話を開始しました');
+    } catch {
+      setIsApplyingModel(false);
+    }
+  };
+
   const loadToolRules = async () => {
     try {
       const res = await fetch('/api/settings?keys=tools.allowAlways,tools.denyAlways');
@@ -243,6 +290,41 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Left Column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Chat settings */}
+          <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center space-x-2 text-slate-800 dark:text-slate-200">
+                <SettingsIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                <span>チャット設定</span>
+              </CardTitle>
+              
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-base font-medium text-slate-800 dark:text-slate-200">使用するモデル</Label>
+                <RadioGroup
+                  value={chatModel}
+                  onValueChange={(v) => {
+                    const next = (v === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash') as 'gemini-2.5-flash'|'gemini-2.5-pro';
+                    if (next === chatModel) return;
+                    setChatModel(next);
+                    setShowModelOverlay(true);
+                  }}
+                  className="mt-2 space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="gemini-2.5-flash" id="model_flash" />
+                    <Label htmlFor="model_flash" className="text-slate-700 dark:text-slate-300">gemini-2.5-flash（高速・軽量）</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="gemini-2.5-pro" id="model_pro" />
+                    <Label htmlFor="model_pro" className="text-slate-700 dark:text-slate-300">gemini-2.5-pro（高品質）</Label>
+                  </div>
+                </RadioGroup>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-2">保存すると現在の会話履歴は消去され、モデル再起動後に新しい会話が始まります。</p>
+              </div>
+            </CardContent>
+          </Card>
           {/* Tools / Approvals */}
           <Card className="border-0 shadow-lg bg-white dark:bg-slate-800 dark:border-slate-700">
             <CardHeader>
@@ -272,7 +354,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                     {allowAlways.length === 0 && <span className="text-sm text-slate-500">（なし）</span>}
                     {allowAlways.map((k) => (
                       <span key={`allow-${k}`} className="inline-flex items-center gap-1 bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 px-2 py-1 rounded">
-                        {k}
+                        {k.replace(/:/, ': ')}
                         <button onClick={() => removeRule('allow', k)} className="ml-1 text-green-700 dark:text-green-300 hover:opacity-80">×</button>
                       </span>
                     ))}
@@ -282,7 +364,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
                     {denyAlways.length === 0 && <span className="text-sm text-slate-500">（なし）</span>}
                     {denyAlways.map((k) => (
                       <span key={`deny-${k}`} className="inline-flex items-center gap-1 bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300 px-2 py-1 rounded">
-                        {k}
+                        {k.replace(/:/, ': ')}
                         <button onClick={() => removeRule('deny', k)} className="ml-1 text-red-700 dark:text-red-300 hover:opacity-80">×</button>
                       </span>
                     ))}
@@ -701,6 +783,29 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
           </Card>
         </div>
       </div>
+
+      {showModelOverlay && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center">
+          <div className="w-full max-w-xl mx-4 rounded-xl bg-white dark:bg-slate-800 shadow-2xl border border-slate-200 dark:border-slate-700 p-6">
+            <div className="text-lg font-semibold text-slate-900 dark:text-slate-100">会話履歴をリセットしてモデルを切り替えますか？</div>
+            <div className="mt-2 text-sm text-slate-700 dark:text-slate-300">
+              これまでの会話内容は失われ、新しい会話が始まります。この操作は取り消せません。<br />
+              なお、学習記録のデータやメモリー、GEMINI.md 等ファイルに保存されているコンテキストや設定は保持されます。
+            </div>
+            <div className="mt-6 flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => { setChatModel(initialChatModel); setShowModelOverlay(false); }}
+                disabled={isApplyingModel}
+              >キャンセル</Button>
+              <Button className="bg-red-600 hover:bg-red-700 text-white" onClick={handleApplyChatModel} disabled={isApplyingModel}>
+                {isApplyingModel ? <span className="inline-flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> 適用中…</span> : 'リセットして切り替え'}
+              </Button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }

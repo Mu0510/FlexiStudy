@@ -53,6 +53,7 @@ interface Message {
   icon?: string;
   label?: string;
   command?: string;
+  cmdKey?: string;
 }
 
 interface ActiveMessage {
@@ -177,6 +178,24 @@ export function NewChatPanel({
   const [interimTranscript, setInterimTranscript] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { toast } = useToast();
+  const formatCmdKey = useCallback((key?: string, command?: string): string | null => {
+    try {
+      const k0 = key ? String(key) : '';
+      const cmd = command ? String(command) : '';
+      const hasManage = /(^|[\\/])manage_log\.py(\s|$)/.test(cmd);
+      if (hasManage) {
+        if (k0 === 'python3' || k0 === 'python' || k0 === 'shell:python3') {
+          return (k0.includes('python3') ? 'python3' : 'python') + ': manage_log.py';
+        }
+        if (k0 === 'python3:manage_log' || k0 === 'python:manage_log') return k0.replace(':manage_log', ': manage_log.py');
+      }
+      if (!k0) return null;
+      if (k0.includes(':')) return k0.replace(':', ': ');
+      return k0;
+    } catch {
+      return key ?? null;
+    }
+  }, []);
 
   // --- Templates (server-synced; falls back to local on first run) ---
   const [templates, setTemplates] = useState<ChatTemplate[]>([]);
@@ -816,6 +835,15 @@ export function NewChatPanel({
                       </span>
                       <CardTitle className="tool-card__title text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
                         {msg.label || "Tool Call"}
+                        {msg.status === 'pending' && msg.cmdKey && (
+                          <span className="ml-2 text-xs font-normal text-gray-600 dark:text-gray-400">
+                            {(() => {
+                              const k = String(msg.cmdKey);
+                              if (k.endsWith(':manage_log')) return k.replace(':manage_log', ': manage_log.py');
+                              return k.replace(/:/, ': ');
+                            })()}
+                          </span>
+                        )}
                       </CardTitle>
                     </div>
                     <div className="tool-card__line-break"></div>
@@ -839,12 +867,24 @@ export function NewChatPanel({
                     </div>
                     {msg.status === 'pending' && (
                       <div className="p-2">
-                        <div className="flex flex-col gap-2">
-                          <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white w-full" onClick={() => sendToolApproval?.(msg.id, 'allow_once')}>一度だけ許可</Button>
-                          <div className="grid grid-cols-3 gap-2">
-                            <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'allow_always')}>常に許可</Button>
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="text-xs text-gray-700 dark:text-gray-300 font-mono truncate">
+                            {formatCmdKey(msg.cmdKey, msg.command) || ''}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Button size="sm" className="bg-[#213358] hover:bg-[#1a2a46] text-white" onClick={() => sendToolApproval?.(msg.id, 'allow_once')}>許可</Button>
                             <Button size="sm" variant="outline" onClick={() => sendToolApproval?.(msg.id, 'deny')}>拒否</Button>
-                            <Button size="sm" variant="ghost" onClick={() => sendToolApproval?.(msg.id, 'deny_always')}>常に拒否</Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button size="sm" variant="ghost" className="px-2">
+                                  <SlidersHorizontal className="w-4 h-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => sendToolApproval?.(msg.id, 'allow_always')}>常に許可</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => sendToolApproval?.(msg.id, 'deny_always')}>常に拒否</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                           </div>
                         </div>
                       </div>

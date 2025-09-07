@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react"
 import type { DateRange } from 'react-day-picker'
 import { useIsMobile } from "@/hooks/use-mobile"
 import { useToast } from "@/hooks/use-toast"
@@ -107,6 +107,80 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
   const isMobile = useIsMobile();
   const isToday = new Date(selectedDate).toDateString() === new Date().toDateString();
   const { subscribe } = useWebSocket();
+
+  // Compute-once width-based scaling without extra wrapper (to avoid flicker)
+  const FitSubjectBadge = ({ text }: { text: string }) => {
+    const badgeRef = useRef<HTMLSpanElement | null>(null);
+    const canvasRef = useRef<HTMLCanvasElement | null>(null);
+    if (!canvasRef.current && typeof document !== 'undefined') canvasRef.current = document.createElement('canvas');
+
+    useLayoutEffect(() => {
+      const el = badgeRef.current; const canvas = canvasRef.current;
+      if (!el || !canvas) return;
+      // Hide until scaled to final size to prevent visible jump
+      el.style.visibility = 'hidden';
+      const parent = el.parentElement as HTMLElement | null;
+      const colWidth = parent ? parent.clientWidth : 56; // grid col width
+      // Tuning knobs
+      const MAX_OVERHANG = 6; // px per side max visual borrow into gap
+      const OVERHANG_PER_CHAR = 2.5; // px per extra char (>=3rd)
+      // Dynamic max scale by length: <=2:1.0, 3:0.90, 4:0.85, 5:0.80, ... (−0.05/char, floored)
+
+      // Inner padding shrinks slightly with length (min 6px/side)
+      const len = Array.from(text || '').length;
+      const innerBase = 10; // px per side for 2–3 chars
+      const reduceInner = Math.max(0, (len - 3)) * 1.0; // shrink 1px per extra char
+      const innerPad = Math.max(6, Math.round(innerBase - reduceInner));
+      el.style.paddingLeft = `${innerPad}px`;
+      el.style.paddingRight = `${innerPad}px`;
+      // Absolutely center the badge in its fixed-width column and allow
+      // symmetric overhang across the grid gap on both sides.
+      const maxOverhang = 16; // px (roughly gap-x-4)
+      if (parent && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      el.style.position = 'absolute';
+      el.style.left = '50%';
+      const available = colWidth - innerPad * 2;
+      const cs = window.getComputedStyle(el);
+      const font = `${cs.fontWeight || '400'} ${cs.fontSize || '16px'} ${cs.fontFamily || 'sans-serif'}`;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { el.style.visibility = ''; return; }
+      ctx.font = font;
+      const w = ctx.measureText(text).width;
+      const effective = available + MAX_OVERHANG * 2;
+      let scale = w > 0 ? Math.min(1, effective / w) : 1;
+      // Cap by length-based rule
+      const allowedMaxScale = (len <= 2) ? 1.0 : Math.max(0.7, 1 - ((len - 2) * 0.05 + 0.05));
+      scale = Math.min(scale, allowedMaxScale);
+      el.style.transformOrigin = 'center center';
+      el.style.whiteSpace = 'nowrap';
+      el.style.transform = `translateX(-50%) scale(${scale})`;
+      el.style.zIndex = '1';
+      // Show after setting final transform
+      el.style.visibility = '';
+    }, [text]);
+
+    return (
+      <Badge
+        ref={badgeRef as any}
+        variant="outline"
+        className="text-base h-fit"
+        style={getSubjectStyle(text, subjectColors)}
+      >
+        {text}
+      </Badge>
+    );
+  };
+
+  
+
+  // Heuristic scaling for subject badges to avoid overflow in narrow cells
+  const getSubjectScale = (name?: string) => {
+    const n = (name || '').trim().length;
+    if (n <= 2) return 1;
+    if (n === 3) return 0.9;
+    if (n === 4) return 0.8;
+    return 0.7; // 5+ chars
+  };
 
   // --- Search states ---
   const [searchInput, setSearchInput] = useState("");
@@ -602,15 +676,7 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
               onClick={() => toggleSession(session.session_id)}
             >
               <div className="grid grid-cols-[3.5rem_1fr] gap-x-4">
-                <div className="row-span-2 flex items-center justify-center">
-                  <Badge
-                    variant="outline"
-                    className="text-base h-fit truncate"
-                    style={getSubjectStyle(session.subject, subjectColors)}
-                  >
-                    {session.subject}
-                  </Badge>
-                </div>
+                <div className="row-span-2 flex items-center justify-center"><FitSubjectBadge text={session.subject} /></div>
 
                 <div className="min-w-0">
                   <div className="flex items-center justify-between w-full">
@@ -1689,7 +1755,17 @@ export function StudyRecords({ logData, onDateChange, selectedDate, isLoading, e
                       <div className="flex flex-wrap gap-2 justify-center">
                         {logData.daily_summary.subjects.length > 0 ? (
                           logData.daily_summary.subjects.map((subject, index) => (
-                            <Badge key={index} variant="outline" className="text-base h-fit truncate" style={getSubjectStyle(subject, subjectColors)}>{subject}</Badge>
+                            <Badge
+                              key={index}
+                              variant="outline"
+                              className="text-base h-fit"
+                              style={{
+                                ...getSubjectStyle(subject, subjectColors),
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {subject}
+                            </Badge>
                           ))
                         ) : (
                           <p className="text-sm text-slate-500 dark:text-slate-400">記録がありません</p>

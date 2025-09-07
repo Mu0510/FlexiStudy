@@ -270,7 +270,14 @@ export default function StudyApp() {
       }
     };
     window.addEventListener('chat:open-with-prompt', onOpenWithPrompt as any);
-    return () => window.removeEventListener('chat:open-with-prompt', onOpenWithPrompt as any);
+    const onClearHistory = () => {
+      try { clearMessages(); } catch {}
+    };
+    window.addEventListener('chat:clear-history', onClearHistory as any);
+    return () => {
+      window.removeEventListener('chat:open-with-prompt', onOpenWithPrompt as any);
+      window.removeEventListener('chat:clear-history', onClearHistory as any);
+    };
   }, []);
 
   // ---- Granular DB events: apply minimal patches ----

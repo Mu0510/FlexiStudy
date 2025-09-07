@@ -155,9 +155,23 @@ function loadAndApplyTriggers(wss, opts={}) {
 
 // 2. プロセス起動処理の更新
 function getGeminiSpawnSpec() {
+  // Read model from settings if present; fallback to env/default
+  let model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+  try {
+    const settingsPath = path.join(__dirname, 'mnt', 'settings.json');
+    if (fs.existsSync(settingsPath)) {
+      const raw = fs.readFileSync(settingsPath, 'utf8');
+      const json = JSON.parse(raw || '{}');
+      const cm = json?.chat?.model;
+      if (cm === 'gemini-2.5-pro' || cm === 'gemini-2.5-flash') {
+        model = cm;
+      }
+    }
+  } catch {}
+  const flags = ['-m', model, '-y', '--experimental-acp'];
   return {
     cmd: 'sudo',
-    args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.3.2', ...GEMINI_FLAGS],
+    args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.3.2', ...flags],
   };
 }
 
@@ -223,7 +237,29 @@ function deriveCommandKeyFromTokens(tokens) {
   if (head === 'npm' && tokens[i+1] === 'run' && tokens[i+2]) return `npm:run:${tokens[i+2]}`;
   if (head === 'npx' && tokens[i+1]) return `npx:${tokens[i+1]}`;
   if ((head === 'pnpm' || head === 'yarn') && tokens[i+1]) return `${head}:${tokens[i+1]}`;
-  if (head === 'python' || head === 'python3' || head === 'node') return `${head}`;
+  if (head === 'python' || head === 'python3' || head === 'node') {
+    // Specialize python invocations running manage_log.py
+    if (head === 'python' || head === 'python3') {
+      const basename = (p) => {
+        try { return String(p).split(/\\\\|\//).pop(); } catch { return String(p); }
+      };
+      let j = i + 1;
+      // Walk flags to find first non-flag arg (script path)
+      while (j < tokens.length) {
+        const t = tokens[j];
+        if (!t) break;
+        if (/^-/.test(t)) {
+          // module or command mode → treat as generic python
+          if (t === '-m' || t === '-c' || t === '--' ) break;
+          j++; continue;
+        }
+        const b = basename(t);
+        if (b === 'manage_log.py') return `${head}:manage_log`;
+        break;
+      }
+    }
+    return `${head}`;
+  }
   return `shell:${head}`;
 }
 
@@ -232,6 +268,14 @@ function deriveCommandKey(tc) {
     const title = String(tc?.title || '');
     const kind = String(tc?.kind || '');
     const locPath = (tc?.locations && tc.locations[0] && tc.locations[0].path) ? String(tc.locations[0].path) : '';
+    const hay = `${title} ${locPath}`.toLowerCase();
+    // Fast-path: detect python/manage_log from raw strings even when tokenization fails
+    if (/python3\s+[^\n]*manage_log\.py/.test(hay) || /manage_log\.py[^\n]*python3/.test(hay)) {
+      return 'python3:manage_log';
+    }
+    if (/\bpython\s+[^\n]*manage_log\.py/.test(hay)) {
+      return 'python:manage_log';
+    }
     // Prefer explicit command string from locations when present
     let titleCmd = null;
     const mt = title.match(/^(?:Shell|Terminal)[:\s]+(.+)$/i);
@@ -367,7 +411,7 @@ function findLastToolHistoryIndex(toolCallId) {
   return -1;
 }
 
-function pushNormalizedToolHistory({ toolCallId, icon, label, command, status, content }) {
+function pushNormalizedToolHistory({ toolCallId, icon, label, command, status, content, cmdKey }) {
   const nowTs = Date.now();
   const msg = {
     id: toolCallId,
@@ -378,6 +422,7 @@ function pushNormalizedToolHistory({ toolCallId, icon, label, command, status, c
     icon: icon || 'tool',
     label: label || 'Tool',
     command: command || '',
+    cmdKey: cmdKey || undefined,
     status: status || 'running',
     content: content || '',
   };
@@ -508,7 +553,7 @@ function handleCliMessage(jsonString, wss) {
           const rawLabel = tc.title || String(tc.kind || 'tool');
           const locPath = (tc.locations && tc.locations[0] && tc.locations[0].path) ? String(tc.locations[0].path) : '';
           const raw = (locPath || rawLabel || '').toLowerCase();
-          const isPython = (cmdKey === 'python' || cmdKey === 'shell:python3' || cmdKey === 'python3');
+          const isPython = (cmdKey === 'python' || cmdKey === 'python3' || cmdKey === 'python:manage_log' || cmdKey === 'python3:manage_log' || cmdKey === 'shell:python3');
           const allowed = isPython && raw.includes('manage_log.py');
           const opts = msg.params?.options || [];
           const allowOnce = opts.find(o => o.kind === 'allow_once') || opts.find(o => o.optionId === 'proceed_once') || opts[0];
@@ -542,6 +587,7 @@ function handleCliMessage(jsonString, wss) {
               command,
               status: 'pending',
               content: '',
+              cmdKey: deriveCommandKey(tc),
             });
           }
           // 思考クリア（許可要求の段階で見た目上ツール開始扱いにしたい）
@@ -561,6 +607,26 @@ function handleCliMessage(jsonString, wss) {
             }
           };
           broadcast(wss, pushMsg);
+
+          // Provide a best-effort preview before approval if available in the request
+          try {
+            const pv = (msg.params && (msg.params.preview || msg.params.proposed || msg.params.content)) || (tc && (tc.preview || tc.proposed || tc.content));
+            const arr = Array.isArray(pv) ? pv : (pv ? [pv] : []);
+            let previewContent = null;
+            if (arr.length > 0) {
+              const c = arr[0];
+              if (c?.type === 'diff') {
+                previewContent = { type: 'diff', oldText: c.oldText || '', newText: c.newText || '' };
+              } else if (c?.type === 'content' && c?.content?.type === 'text') {
+                previewContent = { type: 'markdown', markdown: c.content.text };
+              }
+            }
+            if (previewContent) {
+              const idx = findLastToolHistoryIndex(tc.toolCallId);
+              if (idx !== -1) { history[idx].content = (previewContent.type === 'diff') ? JSON.stringify(previewContent) : previewContent.markdown; history[idx].updatedTs = Date.now(); }
+              broadcast(wss, { jsonrpc: '2.0', method: 'updateToolCall', params: { toolCallId: tc.toolCallId, status: 'pending', content: previewContent } });
+            }
+          } catch {}
         }
 
         // 設定とポリシーを確認
@@ -852,6 +918,7 @@ function handleSessionUpdate(upd, wss) {
         command,
         status: 'running',
         content: '',
+        cmdKey: deriveCommandKey({ title: rawLabel, kind: upd.kind, locations: upd.locations || [] }),
       });
 
       // 思考(assistant_thought)を即クリアさせる
@@ -866,6 +933,7 @@ function handleSessionUpdate(upd, wss) {
           icon,
           label: rawLabel,
           locations: upd.locations || [],
+          cmdKey: deriveCommandKey({ title: rawLabel, kind: upd.kind, locations: upd.locations || [] }),
         }
       };
       broadcast(wss, toolMsg);
@@ -1197,6 +1265,25 @@ app.prepare().then(() => {
     try {
       const { pathname, query } = parse(req.url, true);
       // Minimal built-in API endpoints (bypass Next routing) -----------------
+      if (req.method === 'POST' && pathname === '/api/chat/restart') {
+        try {
+          history.length = 0;
+          broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'model-change' } });
+          try { broadcast(wss, { jsonrpc: '2.0', method: 'geminiRestarting', params: { ts: Date.now() } }); } catch {}
+          const prevSession = acpSessionId;
+          startGemini(wss);
+          setTimeout(async () => {
+            if (acpSessionId === prevSession) {
+              await recreateSessionQuiet();
+            }
+          }, 2000);
+          res.statusCode = 200; res.setHeader('Content-Type','application/json');
+          return res.end(JSON.stringify({ ok: true }));
+        } catch (e) {
+          res.statusCode = 500; res.setHeader('Content-Type','application/json');
+          return res.end(JSON.stringify({ ok: false, error: String(e?.message || e) }));
+        }
+      }
       if (req.method === 'POST' && pathname === '/api/notify/decide') {
         let body = '';
         req.on('data', (chunk) => { body += chunk; if (body.length > 512 * 1024) req.destroy(); });

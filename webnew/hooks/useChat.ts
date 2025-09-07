@@ -551,6 +551,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
               icon: rm.icon,
               label: rm.label,
               command: rm.command,
+              cmdKey: (rm as any).cmdKey,
               origin: 'server' as const,
             };
             return msg;
