@@ -112,12 +112,13 @@ else
 fi
 
 step "5. Gemini CLI の認証を行います..."
-echo -e "${C_YELLOW}ブラウザが開き、Googleアカウントでのログインを求められます。${C_RESET}"
+echo -e "${C_YELLOW}しばらく待つと、GeminiCLIが起動します。${C_RESET}"
+echo -e "{C_YELLOW}Login with Googleを選択してEnterを押すと、ブラウザが開き、Googleアカウントでのログインを求められます。${C_RESET}"
 echo "ログインと設定が完了したら、ターミナルに戻り「/quit」と入力してEnterキーを押してください。"
 npx @google/gemini-cli@0.3.2
 success "Gemini CLI の設定が完了しました。"
 
 
 step "🎉 すべてのセットアップが完了しました！"
-echo -e "次のコマンドでアプリケーションを起動できます: ${C_YELLOW}node webnew/server.js${C_RESET}"
+echo -e "次のコマンドでアプリケーションを起動できます: ${C_YELLOW}cd webnew && pnpm dev${C_RESET}"
 echo -e "サーバーは ${C_GREEN}https://localhost:3000${C_RESET} で利用可能になります。"

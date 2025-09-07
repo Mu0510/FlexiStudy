@@ -138,7 +138,8 @@ if (Test-Path -Path "webnew") {
 }
 
 Write-Step "6. Gemini CLI の認証を行います..."
-Write-Host "ブラウザが開き、Googleアカウントでのログインを求められます。" -ForegroundColor Yellow
+Write-Host "しばらく待つと、GeminiCLIが起動します。" -ForegroundColor Yellow
+Write-Host "Login with Googleを選択してEnterを押すと、ブラウザが開き、Googleアカウントでのログインを求められます。" -ForegroundColor Yellow
 Write-Host "ログインと設定が完了したら、ターミナルに戻り「/quit」と入力してEnterキーを押してください。"
 npx @google/gemini-cli@0.3.2
 Write-Success "Gemini CLI の設定が完了しました。"
@@ -146,7 +147,7 @@ Write-Success "Gemini CLI の設定が完了しました。"
 
 Write-Step "🎉 すべてのセットアップが完了しました！"
 Write-Host "次のコマンドでアプリケーションを起動できます:" -ForegroundColor Green
-Write-Host "node webnew/server.js" -ForegroundColor Yellow
+Write-Host "cd webnew && pnpm dev" -ForegroundColor Yellow
 Write-Host "サーバーは https://localhost:3000 で利用可能になります。" -ForegroundColor Green
 
 Read-Host "処理を終了するには Enter キーを押してください"
