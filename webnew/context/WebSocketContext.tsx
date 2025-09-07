@@ -103,7 +103,7 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
     isConnecting.current = true;
     console.log('Attempting to connect WebSocket from provider...');
 
-    const socket = new WebSocket(`wss://${window.location.hostname}:443/ws`);
+    const socket = new WebSocket(`wss://${window.location.hostname}:3000/ws`);
     wsRef.current = socket;
 
     socket.onopen = () => {
