@@ -594,3 +594,6 @@ study_log_20250907_113252_147480.db: Before updating log entry.
 study_log_20250907_115718_257575.db: Before updating log entry.
 study_log_20250907_120036_995638.db: Before updating log entry.
 study_log_20250907_120053_220036.db: Before updating log entry.
+study_log_20250907_121452_511376.db: Before deleting log entry.
+study_log_20250907_121516_934896.db: Before deleting log entry.
+study_log_20250907_121555_540936.db: Before daily summary update.

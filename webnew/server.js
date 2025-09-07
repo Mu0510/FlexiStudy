@@ -17,7 +17,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '0.0.0.0';
-const port = 443;
+const port = 3000;
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -170,8 +170,8 @@ function getGeminiSpawnSpec() {
   } catch {}
   const flags = ['-m', model, '-y', '--experimental-acp'];
   return {
-    cmd: 'sudo',
-    args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.3.2', ...flags],
+    cmd: 'npx',
+    args: ['@google/gemini-cli@0.3.2', ...flags],
   };
 }
 
@@ -1106,7 +1106,7 @@ async function runHiddenDecision({ intent, context, userId }) {
     setTimeout(async () => {
       try {
         // Send an interrupt (same意図 as front-end cancel) and flush as canceled
-        try { await acpSend('session/interrupt', { sessionId: acpSessionId }); } catch {}
+        try { await acpSend('session/cancel', { sessionId: acpSessionId }); } catch {}
         try { if (wssGlobal) flushAssistantMessage(wssGlobal, 'canceled'); } catch {}
       } finally {
         try { resolve({ text: '' }); } catch {}
@@ -1451,8 +1451,8 @@ app.prepare().then(() => {
 
   const httpServer = createHttpServer((req, res) => {
     const host = req.headers.host;
-    const hostWithoutPort = host.replace(':3000', '');
-    const httpsUrl = `https://${hostWithoutPort}${req.url}`;
+    const hostWithoutPort = host.replace(':80', '');
+    const httpsUrl = `https://${hostWithoutPort}:${port}${req.url}`;
     res.writeHead(301, { Location: httpsUrl });
     res.end();
   });
@@ -1581,10 +1581,12 @@ app.prepare().then(() => {
 
   if (msg.method === 'cancelSendMessage') {
         try {
-          await acpSend('session/interrupt', { sessionId: acpSessionId });
+          await acpSend('session/cancel', { sessionId: acpSessionId });
         } catch (e) {
-          console.log('[ACP] session/interrupt not available or failed:', e?.message || e);
+          console.log('[ACP] session/cancel not available or failed:', e?.message || e);
         }
+        // Ensure any in-flight thought bubble on clients is cleared immediately
+        try { broadcast(wss, { jsonrpc: '2.0', method: 'clearActiveThought' }); } catch {}
         flushAssistantMessage(wss, 'canceled');
         // Mark last pending/running tool as error
         try {
@@ -1751,8 +1753,8 @@ app.prepare().then(() => {
     }
   });
 
-  httpServer.listen(80, hostname, () => {
-    console.log(`> HTTP redirect server running on http://${hostname}:80, redirecting to https`);
+  httpServer.listen(8000, hostname, () => {
+    console.log(`> HTTP redirect server running on http://${hostname}:8000, redirecting to https`);
   });
 
   // Initialize and watch notification triggers for hot-reload

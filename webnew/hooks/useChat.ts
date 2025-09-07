@@ -717,6 +717,15 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     if (!ws || !lastSentRequestId.current) return;
     const req = { jsonrpc: '2.0', id: lastSentRequestId.current, method: 'cancelSendMessage', params: {} };
     sendWsMessage(req);
+    // Immediately clear any in-flight thought so it won't be promoted
+    flushSync(() => {
+      const am = activeMessageRef.current;
+      if (am) {
+        setMessages(prev => prev.filter(m => !m.thoughtMode));
+        setActiveMessage(null);
+      }
+      pendingTrimPrefixRef.current = null;
+    });
     setIsGeneratingResponse(false);
   }, [ws, sendWsMessage]);
 
