@@ -101,7 +101,7 @@ interface NewChatPanelProps {
   lockMessage?: string;
 }
 
-const PROJECT_ROOT_PATH = '/home/geminicli/GeminiCLI/';
+const PROJECT_ROOT_PATH = '../../';
 
 
 function getRelativePath(absolutePath?: string) {

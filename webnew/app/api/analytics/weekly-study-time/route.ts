@@ -1,6 +1,5 @@
-import { NextResponse } from "next/server";
-import { exec } from "child_process";
-import { promisify } from "util";
+import { spawnSync } from 'child_process';
+import path from 'path';
 
 const execAsync = promisify(exec);
 
@@ -16,7 +15,8 @@ export async function GET(req: Request) {
     } else {
       payload = { action: 'data.weekly_study_time', params: {} };
     }
-    const command = `python3 /home/geminicli/GeminiCLI/manage_log.py --api-mode execute '${JSON.stringify(payload)}'`;
+    const scriptPath = path.join(process.cwd(), 'manage_log.py');
+const command = `python3 ${scriptPath} --api-mode execute '${JSON.stringify(payload)}'`;
     const { stdout, stderr } = await execAsync(command);
 
     if (stderr) {
