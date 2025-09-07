@@ -1,4 +1,6 @@
-import { spawnSync } from 'child_process';
+import { NextResponse } from 'next/server';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import path from 'path';
 
 const execAsync = promisify(exec);
@@ -15,8 +17,9 @@ export async function GET(req: Request) {
     } else {
       payload = { action: 'data.weekly_study_time', params: {} };
     }
-    const scriptPath = path.join(process.cwd(), 'manage_log.py');
-const command = `python3 ${scriptPath} --api-mode execute '${JSON.stringify(payload)}'`;
+    // Next.js の CWD は webnew/ である可能性が高いため、1つ上の manage_log.py を参照
+    const scriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
+    const command = `python3 ${scriptPath} --api-mode execute '${JSON.stringify(payload)}'`;
     const { stdout, stderr } = await execAsync(command);
 
     if (stderr) {

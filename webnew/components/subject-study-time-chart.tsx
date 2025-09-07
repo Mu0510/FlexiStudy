@@ -15,7 +15,14 @@ export function SubjectStudyTimeChart() {
     fetch("/api/analytics/study-time-by-subject")
       .then((res) => res.json())
       .then((data) => {
-        setChartData(data)
+        const arr = Array.isArray(data)
+          ? data
+          : (Array.isArray((data as any)?.data) ? (data as any).data : [])
+        // 型安全: minutes を数値に正規化
+        const normalized = arr
+          .map((d: any) => ({ subject: String(d.subject ?? ''), minutes: Number(d.minutes ?? 0) || 0 }))
+          .filter((d: any) => d.subject)
+        setChartData(normalized)
         setIsLoading(false)
       })
       .catch((error) => {
@@ -32,7 +39,7 @@ export function SubjectStudyTimeChart() {
     return <div>No data available</div>
   }
   
-  const maxMinutes = Math.max(...chartData.map((d) => d.minutes))
+  const maxMinutes = Math.max(...chartData.map((d) => d.minutes), 0)
 
   return (
     <div className="space-y-4">

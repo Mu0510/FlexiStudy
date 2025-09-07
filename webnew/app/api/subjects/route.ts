@@ -4,7 +4,7 @@ import path from 'path';
 
 export async function GET() {
   const promise = new Promise((resolve, reject) => {
-    const scriptPath = path.join(process.cwd(), '..', 'manage_log.py');
+    const scriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
     const commandPayload = { action: 'data.unique_subjects', params: {} };
     const args = ['--api-mode', 'execute', JSON.stringify(commandPayload)];
     

@@ -8,7 +8,7 @@ export async function GET(req: Request) {
     const weeklyParam = url.searchParams.get('weekly_period');
     const weekly_period = weeklyParam ? Number(weeklyParam) : null;
     const week_start = url.searchParams.get('week_start');
-    const pythonScript = path.join(process.cwd(), '../manage_log.py');
+    const pythonScript = path.resolve(process.cwd(), '..', 'manage_log.py');
     const commandPayload: any = { action: 'data.dashboard', params: {} };
     // manage_logの実装では "days" パラメータのみ対応
     if (weekly_period) commandPayload.params.days = weekly_period;

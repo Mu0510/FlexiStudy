@@ -156,7 +156,9 @@ def create_tables():
                 start_time TEXT NOT NULL,
                 end_time TEXT,
                 duration_minutes INTEGER,
-                summary TEXT
+                summary TEXT,
+                memo TEXT,
+                impression TEXT
             )
         """)
         # 日ごとの概要テーブル
@@ -185,7 +187,7 @@ def create_tables():
         conn.commit()
 
 def add_summary_column_if_not_exists():
-    """study_logsテーブルにsummaryカラムが存在しない場合に追加する"""
+    """後方互換: 旧DBにsummaryカラムが無い場合に追加する"""
     try:
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -197,6 +199,26 @@ def add_summary_column_if_not_exists():
                 logger.info("データベースに 'summary' カラムを追加しました。")
     except Exception as e:
         logger.error("カラムの追加中にエラーが発生しました: {}".format(e))
+
+def ensure_study_logs_optional_columns():
+    """既存DBに不足しているオプショナル列（memo, impression）を追加する"""
+    try:
+        with get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(study_logs)")
+            columns = {row[1] for row in cursor.fetchall()}
+            added = []
+            if 'memo' not in columns:
+                cursor.execute("ALTER TABLE study_logs ADD COLUMN memo TEXT")
+                added.append('memo')
+            if 'impression' not in columns:
+                cursor.execute("ALTER TABLE study_logs ADD COLUMN impression TEXT")
+                added.append('impression')
+            if added:
+                conn.commit()
+                logger.info("study_logs に欠損カラムを追加しました: {}".format(", ".join(added)))
+    except Exception as e:
+        logger.error("オプショナル列追加中にエラーが発生しました: {}".format(e))
 
 # --- バックアップ関連 ---
 def backup_database(description="Regular backup", backup_type="short_term"):
@@ -1702,6 +1724,7 @@ def main():
     
     create_tables()
     add_summary_column_if_not_exists()
+    ensure_study_logs_optional_columns()
 
     if len(sys.argv) < 2 or sys.argv[1] in ('--help', '-h'):
         print_help()

@@ -16,8 +16,10 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = '0.0.0.0';
-const port = 3000;
+const hostname = process.env.HOST || '0.0.0.0';
+// Allow overriding ports via env to avoid EADDRINUSE conflicts
+const port = Number(process.env.PORT) || 3000;
+const redirectPort = Number(process.env.REDIRECT_PORT) || 8000;
 
 const app = next({ dev, hostname, port });
 const handle = app.getRequestHandler();
@@ -1450,9 +1452,10 @@ app.prepare().then(() => {
   });
 
   const httpServer = createHttpServer((req, res) => {
-    const host = req.headers.host;
-    const hostWithoutPort = host.replace(':80', '');
-    const httpsUrl = `https://${hostWithoutPort}:${port}${req.url}`;
+    const hostHeader = String(req.headers.host || '');
+    // Extract hostname only (strip any :port)
+    const hostOnly = hostHeader.split(':')[0] || 'localhost';
+    const httpsUrl = `https://${hostOnly}:${port}${req.url}`;
     res.writeHead(301, { Location: httpsUrl });
     res.end();
   });
@@ -1753,8 +1756,8 @@ app.prepare().then(() => {
     }
   });
 
-  httpServer.listen(8000, hostname, () => {
-    console.log(`> HTTP redirect server running on http://${hostname}:8000, redirecting to https`);
+  httpServer.listen(redirectPort, hostname, () => {
+    console.log(`> HTTP redirect server running on http://${hostname}:${redirectPort}, redirecting to https`);
   });
 
   // Initialize and watch notification triggers for hot-reload

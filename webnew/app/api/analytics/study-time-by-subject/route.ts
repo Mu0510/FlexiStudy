@@ -7,7 +7,8 @@ const execAsync = promisify(exec);
 
 export async function GET() {
   try {
-    const scriptPath = path.join(process.cwd(), 'manage_log.py');
+    // manage_log.py はプロジェクトルート直下。Nextのcwdは webnew/ の可能性が高いため1つ上を参照
+    const scriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
     const command = `python3 ${scriptPath} --api-mode execute '{"action": "data.study_time_by_subject", "params": {}}'`;
     const { stdout, stderr } = await execAsync(command);
 

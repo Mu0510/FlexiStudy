@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   }
 
   return new Promise((resolve) => {
-    const pythonScriptPath = path.join(process.cwd(), '..', 'manage_log.py');
+    const pythonScriptPath = path.resolve(process.cwd(), '..', 'manage_log.py');
     const commandPayload = {
       action: "log.get",
       params: { date: date }
