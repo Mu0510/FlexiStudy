@@ -99,10 +99,10 @@ case "$OS_NAME" in
     ;;
   Darwin)
     install_macos_dependencies
-    ;;
+    ;; 
   *)
     die "Unsupported operating system: $OS_NAME"
-    ;;
+    ;; 
 esac
 
 for cmd in node npm python3 sqlite3 openssl mkcert; do
@@ -115,6 +115,17 @@ log "Node.js version: $(node --version)"
 log "npm version: $(npm --version)"
 log "Python version: $(python3 --version)"
 
+log "Ensuring pnpm is installed..."
+if ! command -v pnpm >/dev/null 2>&1; then
+  log "pnpm not found, installing globally via npm..."
+  if [[ -n "$SUDO" ]]; then
+    $SUDO npm install -g pnpm || die "Failed to install pnpm globally."
+  else
+    npm install -g pnpm || die "Failed to install pnpm globally."
+  fi
+fi
+log "pnpm version: $(pnpm --version)"
+
 log "Ensuring mkcert trust store is configured..."
 mkcert -install
 
@@ -124,11 +135,16 @@ mkdir -p "$CERT_DIR"
 log "Creating fresh development certificates with mkcert..."
 mkcert -cert-file "$CERT_DIR/cert.pem" -key-file "$CERT_DIR/key.pem" localhost 127.0.0.1 ::1
 
-log "Installing Node.js dependencies at repository root..."
-npm install --prefix "$REPO_ROOT"
+log "Removing existing lockfiles..."
+rm -f "$REPO_ROOT/package-lock.json"
+rm -f "$REPO_ROOT/webnew/package-lock.json"
+rm -f "$REPO_ROOT/pnpm-lock.yaml"
 
-log "Installing Node.js dependencies for web frontend..."
-npm install --prefix "$REPO_ROOT/webnew"
+log "Installing Node.js dependencies at repository root with pnpm..."
+pnpm install --dir "$REPO_ROOT"
+
+log "Installing Node.js dependencies for web frontend with pnpm..."
+pnpm install --dir "$REPO_ROOT/webnew"
 
 log "Initializing Python SQLite databases..."
 python3 "$REPO_ROOT/manage_log.py" --help >/dev/null
@@ -165,4 +181,4 @@ if ! npx @google/gemini-cli@0.5.5; then
   die "Failed to run Gemini CLI."
 fi
 
-log "Setup complete. You can now start the development server with 'cd webnew && npm run dev'."
+log "Setup complete. You can now start the development server with 'cd webnew && pnpm run dev'."
