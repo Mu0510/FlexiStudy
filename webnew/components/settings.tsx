@@ -467,7 +467,7 @@ export function Settings({ uniqueSubjects, subjectColors, onColorChange, onSaveC
   }, [reminders]);
 
   const latestLogEntry = useMemo(() => (logEntries.length ? logEntries[0] : null), [logEntries]);
-  const panelClass = "rounded-lg border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900/60";
+  const panelClass = "rounded-lg border border-slate-200 bg-white/90 p-6 shadow-sm dark:border-slate-700 dark:bg-slate-900/60 space-y-6";
   const panelHeaderClass = "flex flex-col gap-2 md:flex-row md:items-center md:justify-between";
 
   const parseTimestamp = useCallback((value?: string | null) => {

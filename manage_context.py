@@ -819,7 +819,9 @@ def action_notify_log_today_stats(params: Dict[str, Any]) -> Dict[str, Any]:
             SELECT COUNT(*)
               FROM notify_log_entries
              WHERE user_id = ?
+               AND decision = 'send'
                AND test = 0
+               AND manual_send = 0
                AND (
                     created_at BETWEEN ? AND ?
                  OR created_at BETWEEN ? AND ?

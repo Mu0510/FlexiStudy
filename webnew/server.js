@@ -9,6 +9,7 @@ const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const readline = require('readline'); // 1. 依存モジュールの追加
+const BackgroundGemini = require('./background-gemini');
 
 if (process.env.NODE_ENV !== 'production') {
   const env = require('dotenv');
@@ -110,6 +111,14 @@ const MNT_DIR = path.join(__dirname, 'mnt');
 const SETTINGS_PATH = path.join(MNT_DIR, 'settings.json');
 
 let targetUserIdCache = { user: null, ids: null };
+
+const backgroundGemini = new BackgroundGemini({ projectRoot: PROJECT_ROOT, model: GEMINI_MODEL });
+let backgroundDisposed = false;
+function disposeBackgroundGemini() {
+  if (backgroundDisposed) return;
+  backgroundDisposed = true;
+  try { backgroundGemini.dispose(); } catch {}
+}
 
 function resolveTargetUserIds(username) {
   if (!username) return null;
@@ -229,7 +238,11 @@ let notifyCooldownUntil = 0;
 let notifyCooldownTimer = null;
 let pendingNotifyRun = null;
 let lastHiddenDecisionEndTs = 0;
-const pendingContextPrompts = [];
+
+const contextEventProcessingQueue = [];
+let contextEventProcessingActive = false;
+const MAX_CONTEXT_EVENT_RETRIES = 3;
+const CONTEXT_EVENT_RETRY_DELAY_MS = 2000;
 
 const AI_POLL_FALLBACK_INTERVAL_MS = 30 * 60 * 1000;
 const REMINDER_POLL_INTERVAL_MS = 60 * 1000;
@@ -695,56 +708,276 @@ function runContextManager(payload) {
   });
 }
 
-function sendHiddenPromptText(text) {
-  try {
-    suppressNextAssistantBroadcast = true;
-    if (isSessionReady && acpSessionId) {
-      acpSend('session/prompt', { sessionId: acpSessionId, prompt: [{ type: 'text', text }] })
-        .catch((e) => console.warn('[Context] failed to send hidden prompt:', e?.message || e));
-    } else {
-      pendingPrompts.push({ text, messageId: `context-${Date.now()}` });
-    }
-  } catch (e) {
-    console.warn('[Context] hidden prompt dispatch failed:', e?.message || e);
-  }
+function enqueueContextEventPrompt(text, { reason = 'context_event', timeoutMs = 45000, eventType = null, detail = null } = {}) {
+  if (!text) return;
+  contextEventProcessingQueue.push({ text, reason, timeoutMs, eventType, detail, retryCount: 0 });
+  maybeProcessContextEventQueue();
 }
 
-function queueHiddenPromptWithBusy(text, { reason = 'context_event', timeoutMs = 20000 } = {}) {
-  beginHiddenDecision(reason);
-
-  let released = false;
-  const release = () => {
-    if (released) return;
-    released = true;
-    endHiddenDecision();
-  };
-
-  assistantTurnWaiters.push(() => release());
-  try {
-    sendHiddenPromptText(text);
-  } catch (e) {
-    console.warn('[Context] failed to queue hidden prompt with busy:', e?.message || e);
-    release();
-    return;
-  }
-
-  const safeTimeout = Math.max(3000, Number(timeoutMs) || 20000);
-  setTimeout(() => release(), safeTimeout);
-}
-
-function enqueueContextPrompt(text, options) {
-  pendingContextPrompts.push({ text, options });
-  maybeRunDeferredContextPrompt();
-}
-
-function maybeRunDeferredContextPrompt() {
-  if (!pendingContextPrompts.length) return;
+function maybeProcessContextEventQueue() {
+  if (!contextEventProcessingQueue.length) return;
+  if (contextEventProcessingActive) return;
   if (hiddenDecisionActive) return;
   if (isAssistantStreaming()) return;
   if (isAIPromptActive) return;
 
-  const next = pendingContextPrompts.shift();
-  queueHiddenPromptWithBusy(next.text, next.options || {});
+  const next = contextEventProcessingQueue.shift();
+  if (!next) return;
+  contextEventProcessingActive = true;
+  runContextEventJob(next)
+    .catch((err) => {
+      console.warn('[Context] background context job failed:', err?.message || err);
+    })
+    .finally(() => {
+      contextEventProcessingActive = false;
+      if (contextEventProcessingQueue.length) {
+        maybeProcessContextEventQueue();
+      }
+    });
+}
+
+function scheduleContextEventRetry(job, errorMessage = null) {
+  if (!job || job.retryCount === null || job.retryCount === undefined) return false;
+  if (job.retryCount >= MAX_CONTEXT_EVENT_RETRIES) return false;
+  const nextAttempt = job.retryCount + 1;
+  const delayMs = Math.min(CONTEXT_EVENT_RETRY_DELAY_MS * nextAttempt, 15000);
+  const cloned = { ...job, retryCount: nextAttempt };
+  setTimeout(() => {
+    contextEventProcessingQueue.unshift(cloned);
+    maybeProcessContextEventQueue();
+  }, delayMs);
+  const base = `[Context] background context job retry scheduled (${nextAttempt}/${MAX_CONTEXT_EVENT_RETRIES})`;
+  if (errorMessage) {
+    console.warn(`${base}: ${errorMessage}`);
+  } else {
+    console.warn(base);
+  }
+  return true;
+}
+
+const CONTEXT_EVENT_ALLOWED_ACTIONS = new Set([
+  'context.state_set',
+  'context.pending_update',
+  'context.pending_create',
+  'ai.reminder_create',
+  'ai.reminder_update',
+  'context.events_append',
+]);
+
+const CONTEXT_EVENT_ACTION_ALIASES = new Map([
+  ['contextstateset', 'context.state_set'],
+  ['context.state.set', 'context.state_set'],
+  ['contextactivate', 'context.state_set'],
+  ['activatecontext', 'context.state_set'],
+  ['contextpendingupdate', 'context.pending_update'],
+  ['context.pending.update', 'context.pending_update'],
+  ['contextpendingresolve', 'context.pending_update'],
+  ['context.pending.resolve', 'context.pending_update'],
+  ['contextpendingconfirm', 'context.pending_update'],
+  ['context.pending.confirm', 'context.pending_update'],
+  ['contextpendingcancel', 'context.pending_update'],
+  ['context.pending.cancel', 'context.pending_update'],
+  ['contextpendingcreate', 'context.pending_create'],
+  ['context.pending.create', 'context.pending_create'],
+  ['airemindercreate', 'ai.reminder_create'],
+  ['ai.reminder.create', 'ai.reminder_create'],
+  ['remindercreate', 'ai.reminder_create'],
+  ['aireminderupdate', 'ai.reminder_update'],
+  ['ai.reminder.update', 'ai.reminder_update'],
+  ['airemindercancel', 'ai.reminder_update'],
+  ['ai.reminder.cancel', 'ai.reminder_update'],
+  ['remindercancel', 'ai.reminder_update'],
+  ['contexteventsappend', 'context.events_append'],
+  ['context.events.append', 'context.events_append'],
+]);
+
+function parseContextEventResponseText(raw) {
+  if (!raw) return null;
+  const text = String(raw).trim();
+  if (!text) return null;
+
+  const tryParse = (input) => {
+    try {
+      return JSON.parse(input);
+    } catch {
+      return null;
+    }
+  };
+
+  const fence = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (fence && fence[1]) {
+    const parsed = tryParse(fence[1].trim());
+    if (parsed !== null) return parsed;
+  }
+
+  const direct = tryParse(text);
+  if (direct !== null) return direct;
+
+  const objStart = text.indexOf('{');
+  const objEnd = text.lastIndexOf('}');
+  if (objStart !== -1 && objEnd !== -1 && objEnd > objStart) {
+    const parsed = tryParse(text.slice(objStart, objEnd + 1));
+    if (parsed !== null) return parsed;
+  }
+
+  const arrStart = text.indexOf('[');
+  const arrEnd = text.lastIndexOf(']');
+  if (arrStart !== -1 && arrEnd !== -1 && arrEnd > arrStart) {
+    const parsed = tryParse(text.slice(arrStart, arrEnd + 1));
+    if (parsed !== null) return parsed;
+  }
+
+  return null;
+}
+
+function normalizeContextEventAction(rawAction) {
+  if (!rawAction) return null;
+  const lower = String(rawAction).trim().toLowerCase();
+  if (!lower) return null;
+  const aliasKey = lower.replace(/[^a-z0-9]+/g, '');
+  const alias = CONTEXT_EVENT_ACTION_ALIASES.get(aliasKey);
+  const candidate = alias || lower.replace(/\s+/g, '').replace(/:+/g, '.').replace(/-+/g, '_').replace(/__+/g, '_').replace(/\.\.+/g, '.');
+  if (!CONTEXT_EVENT_ALLOWED_ACTIONS.has(candidate)) return null;
+  return candidate;
+}
+
+function extractContextEventActionParams(entry) {
+  if (!entry || typeof entry !== 'object') return {};
+  const preferKeys = ['params', 'arguments', 'args', 'payload', 'data'];
+  for (const key of preferKeys) {
+    const value = entry[key];
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      return { ...value };
+    }
+  }
+  const omit = new Set(['action', 'type', 'name', 'command', 'operation', 'op', 'call', 'do', 'intent', 'notes', 'note', 'comment', 'description', 'summary', ...preferKeys]);
+  const params = {};
+  for (const [key, value] of Object.entries(entry)) {
+    if (omit.has(key)) continue;
+    if (value === undefined) continue;
+    params[key] = value;
+  }
+  return params;
+}
+
+function normalizeContextEventActionEntry(entry) {
+  if (!entry) return null;
+  if (typeof entry === 'string') {
+    const action = normalizeContextEventAction(entry);
+    if (!action) return null;
+    return { action, params: {} };
+  }
+  if (typeof entry !== 'object') return null;
+  let rawAction = entry.action || entry.type || entry.command || entry.operation || entry.op || entry.name || entry.call || entry.do;
+  if (rawAction && typeof rawAction === 'object') {
+    rawAction = rawAction.action || rawAction.type || rawAction.name;
+  }
+  const action = normalizeContextEventAction(rawAction);
+  if (!action) return null;
+  const params = extractContextEventActionParams(entry);
+  if (action === 'context.pending_update' && !params.id && entry.id) params.id = entry.id;
+  return { action, params };
+}
+
+function collectContextEventActions(payload) {
+  if (!payload) return [];
+  if (Array.isArray(payload)) return payload;
+  if (typeof payload !== 'object') return [];
+  const actions = [];
+  const keys = ['actions', 'commands', 'operations', 'steps', 'tasks', 'queue'];
+  for (const key of keys) {
+    if (Array.isArray(payload[key])) actions.push(...payload[key]);
+  }
+  if (!actions.length && (payload.action || payload.command || payload.operation)) actions.push(payload);
+  return actions;
+}
+
+function applyContextEventControlFromPayload(payload) {
+  if (!payload || typeof payload !== 'object') return;
+  const envelope = {};
+  if (payload.control && typeof payload.control === 'object') envelope.control = payload.control;
+  if (payload.controls && typeof payload.controls === 'object') envelope.controls = payload.controls;
+  if (payload.next_poll && typeof payload.next_poll === 'object') envelope.next_poll = payload.next_poll;
+  if (!Object.keys(envelope).length) return;
+  const derived = deriveNextPollDelay(envelope);
+  if (Number.isFinite(derived) && derived > 0) {
+    scheduleAiPoll(derived);
+  }
+}
+
+async function handleContextEventPromptResult(rawText) {
+  if (!rawText) return null;
+  const payload = parseContextEventResponseText(rawText);
+  if (payload === null) {
+    console.warn('[Context] background prompt produced no structured response; skipping.');
+    return null;
+  }
+  const actions = collectContextEventActions(payload);
+  for (const entry of actions) {
+    const normalized = normalizeContextEventActionEntry(entry);
+    if (!normalized) continue;
+    const { action, params } = normalized;
+    if (!CONTEXT_EVENT_ALLOWED_ACTIONS.has(action)) {
+      console.warn(`[Context] background action not permitted: ${action}`);
+      continue;
+    }
+    const safeParams = (params && typeof params === 'object' && !Array.isArray(params)) ? { ...params } : {};
+    try {
+      await runContextManager({ action, params: safeParams });
+    } catch (err) {
+      const message = err?.message || err;
+      console.warn(`[Context] background action failed (${action}):`, message);
+    }
+  }
+  if (!Array.isArray(payload)) {
+    applyContextEventControlFromPayload(payload);
+  }
+  return payload;
+}
+
+async function runContextEventJob(job) {
+  if (!job || !job.text) return;
+  if (backgroundDisposed) {
+    console.warn('[Context] background worker not available; skipping context event prompt.');
+    return;
+  }
+
+  const eventType = job.eventType || null;
+  const reason = job.reason || eventType || 'context_event';
+  const timeoutMs = Math.max(5000, Number(job.timeoutMs) || 45000);
+
+  const suppressBusy = (
+    reason === 'context_pending' ||
+    reason === 'context_active' ||
+    reason === 'reminder_due' ||
+    eventType === 'reminder_due'
+  );
+  beginHiddenDecision(reason, { suppressBusy });
+  try {
+    const promptResult = await backgroundGemini.promptText(job.text, { timeoutMs });
+    if (promptResult && typeof promptResult.text === 'string') {
+      try {
+        await handleContextEventPromptResult(promptResult.text);
+      } catch (err) {
+        console.warn('[Context] failed to handle background context response:', err?.message || err);
+      }
+    }
+  } catch (err) {
+    const message = err?.message || err;
+    const retryScheduled = scheduleContextEventRetry(job, message);
+    if (!retryScheduled) {
+      console.warn('[Context] background prompt failed:', message);
+    }
+  } finally {
+    try { maybeRunDeferredNotify(); } catch {}
+    try { maybeProcessReminderQueue(); } catch {}
+    try {
+      refreshContextStateCache(true);
+    } catch (e) {
+      console.warn('[Context] failed to refresh context state after event:', e?.message || e);
+    }
+    endHiddenDecision();
+  }
 }
 
 function logContextEvent(eventType, { modeId = null, payload = null, source = null } = {}) {
@@ -774,20 +1007,21 @@ function dispatchContextEvent(eventType, detail) {
   logContextEvent(eventType, { modeId, payload, source: detail?.source || 'system' });
   if (!isContextContractEnabled()) return;
   const promptLines = [
-    '[System] コンテキスト切り替えイベントです。ユーザーには表示しません。',
+    '[System] コンテキスト切り替えイベントです。あなたはNext.jsサーバー内で動作するバックグラウンドサブプロセスであり、ユーザーからは一切見えません。もし何かユーザーに伝える必要が生じた場合は、通知を作成して送信するのが唯一の経路です。ユーザーはあなたに直接話しかけることはできませんが、システムから提供されるGeminiのメインプロセスとユーザーとの会話を参照できます。',
     '---',
     JSON.stringify(payload, null, 2),
     '---',
     '必要に応じて内部状態や今後の判断に反映してください。',
   ];
   const promptText = promptLines.join('\n');
-  if (eventType === 'context_pending') {
-    enqueueContextPrompt(promptText, { reason: 'context_pending', timeoutMs: 45000 });
-  } else if (eventType === 'context_active') {
-    enqueueContextPrompt(promptText, { reason: 'context_active', timeoutMs: 45000 });
-  } else {
-    enqueueContextPrompt(promptText, { reason: 'context_event', timeoutMs: 45000 });
-  }
+  const reason = eventType === 'context_pending'
+    ? 'context_pending'
+    : eventType === 'context_active'
+      ? 'context_active'
+      : eventType === 'reminder_due'
+        ? 'reminder_due'
+        : 'context_event';
+  enqueueContextEventPrompt(promptText, { reason, timeoutMs: 45000, eventType, detail });
 }
 
 async function checkDueReminders() {
@@ -897,39 +1131,25 @@ async function runReminderAutomation(reminder) {
   };
 
   const promptText = [
-    '[System] 設定されたリマインダーが届きました。',
+    '[System] 設定されたリマインダーが届きました。あなたはNext.jsサーバー内で動作するバックグラウンドサブプロセスであり、ユーザーからは見えません。もし何かユーザーに伝える必要が生じた場合は、通知を作成して送信するのが唯一の経路です。ユーザーはあなたに直接話しかけることはできませんが、システムから提供されるGeminiのメインプロセスとユーザーとの会話を参照できます。',
     '---',
     JSON.stringify(promptPayload, null, 2),
     '---',
   ].join('\n');
 
   const timeoutMs = 40000;
-  await new Promise((resolve, reject) => {
-    beginHiddenDecision('reminder');
-    suppressNextAssistantBroadcast = true;
-    assistantTurnWaiters.push(resolve);
-    try {
-      if (isSessionReady && acpSessionId) {
-        acpSend('session/prompt', { sessionId: acpSessionId, prompt: [{ type: 'text', text: promptText }] })
-          .catch((err) => reject(err));
-      } else {
-        pendingPrompts.push({ text: promptText, messageId: `reminder-${Date.now()}` });
-        setTimeout(() => reject(new Error('ACP session not ready')), 1500);
-      }
-    } catch (e) {
-      reject(e);
-    }
-    setTimeout(async () => {
-      try { await acpSend('session/cancel', { sessionId: acpSessionId }); } catch {}
-      try { if (wssGlobal) flushAssistantMessage(wssGlobal, 'canceled'); } catch {}
-      resolve({ text: '' });
-    }, timeoutMs);
-  }).finally(async () => {
-    endHiddenDecision();
+  try {
+    await backgroundGemini.promptText(promptText, { timeoutMs });
+  } catch (err) {
+    console.warn('[Reminder] background prompt failed:', err?.message || err);
+  } finally {
+    maybeRunDeferredNotify();
+    maybeProcessReminderQueue();
+    maybeProcessContextEventQueue();
     try {
       if (reminderId) await finalizeReminderAfterProcessing(reminderId);
     } catch {}
-  });
+  }
 }
 
 async function finalizeReminderAfterProcessing(reminderId) {
@@ -1138,7 +1358,7 @@ const assistantTurnWaiters = [];
 // Whether a hidden notification decision turn is running (blocks user sends)
 let hiddenDecisionActive = false;
 let hiddenDecisionDepth = 0;
-const hiddenBusyReasonStack = [];
+const hiddenDecisionStack = [];
 // Global reference to WebSocket server for out-of-scope broadcasts
 let wssGlobal = null;
 // Track HTTP/S server + listeners so that wrapper can manage lifecycle
@@ -1222,37 +1442,51 @@ const permissionWaiters = new Map();
 // Track last visible assistant end-of-turn to delay background notify
 let lastVisibleTurnEndTs = 0;
 
-function beginHiddenDecision(reason = null) {
+function beginHiddenDecision(reason = null, { suppressBusy = false } = {}) {
   hiddenDecisionDepth++;
-  hiddenBusyReasonStack.push(reason);
+  hiddenDecisionStack.push({ reason, suppressBusy: Boolean(suppressBusy) });
   hiddenDecisionActive = true;
-  setNotifyBusy(true, reason);
+  if (!suppressBusy) {
+    setNotifyBusy(true, reason);
+  }
 }
 
 function endHiddenDecision() {
   if (hiddenDecisionDepth <= 0) {
     hiddenDecisionDepth = 0;
-    hiddenBusyReasonStack.length = 0;
+    hiddenDecisionStack.length = 0;
     hiddenDecisionActive = false;
     setNotifyBusy(false);
     maybeRunDeferredNotify();
     maybeProcessReminderQueue();
-    maybeRunDeferredContextPrompt();
+    maybeProcessContextEventQueue();
     return;
   }
 
   hiddenDecisionDepth--;
-  hiddenBusyReasonStack.pop();
+  hiddenDecisionStack.pop();
 
   if (hiddenDecisionDepth === 0) {
     hiddenDecisionActive = false;
     setNotifyBusy(false);
     maybeRunDeferredNotify();
     maybeProcessReminderQueue();
-    maybeRunDeferredContextPrompt();
+    maybeProcessContextEventQueue();
   } else {
-    const nextReason = hiddenBusyReasonStack[hiddenBusyReasonStack.length - 1] ?? null;
-    setNotifyBusy(true, nextReason);
+    let nextReason = null;
+    let hasVisibleEntry = false;
+    for (let i = hiddenDecisionStack.length - 1; i >= 0; i--) {
+      const entry = hiddenDecisionStack[i];
+      if (!entry || entry.suppressBusy) continue;
+      hasVisibleEntry = true;
+      nextReason = entry.reason ?? null;
+      break;
+    }
+    if (hasVisibleEntry) {
+      setNotifyBusy(true, nextReason);
+    } else {
+      setNotifyBusy(false);
+    }
   }
 }
 
@@ -1652,7 +1886,7 @@ function handleCliMessage(jsonString, wss) {
             maybeRunDeferredNotify();
           }
           maybeProcessReminderQueue();
-          maybeRunDeferredContextPrompt();
+          maybeProcessContextEventQueue();
         }
       }
     }
@@ -2118,7 +2352,7 @@ function handleSessionUpdate(upd, wss) {
       }
       maybeRunDeferredNotify();
       maybeProcessReminderQueue();
-      maybeRunDeferredContextPrompt();
+      maybeProcessContextEventQueue();
       break;
 
     case 'tool_call': {
@@ -2529,34 +2763,19 @@ async function runHiddenDecision({ intent, context, userId }) {
 
   // Enqueue hidden prompt and await the assistant's final text
   const promptText = `${baseSystem}\n\n[入力]\n${JSON.stringify(user)}`;
-  const result = await new Promise((resolve, reject) => {
-    beginHiddenDecision('notify_decision');
-    suppressNextAssistantBroadcast = true;
-    assistantTurnWaiters.push(resolve);
-    try {
-      if (isSessionReady && acpSessionId) {
-        acpSend('session/prompt', { sessionId: acpSessionId, prompt: [{ type: 'text', text: promptText }] })
-          .catch(e => reject(e));
-      } else {
-        pendingPrompts.push({ text: promptText, messageId: `hidden-${Date.now()}` });
-        // Fallback: wait a short time then reject if no session
-        setTimeout(() => reject(new Error('ACP session not ready')), 1500);
-      }
-    } catch (e) { reject(e); }
-    // Safety timeout: still prefer end_of_turn, but resolve after 45s if it never arrives
-    setTimeout(async () => {
-      try {
-        // Send an interrupt (same意図 as front-end cancel) and flush as canceled
-        try { await acpSend('session/cancel', { sessionId: acpSessionId }); } catch {}
-        try { if (wssGlobal) flushAssistantMessage(wssGlobal, 'canceled'); } catch {}
-        maybeRunDeferredNotify();
-      } finally {
-        try { resolve({ text: '' }); } catch {}
-      }
-    }, 45000);
-  }).finally(() => {
-    endHiddenDecision();
-  });
+  let promptResult;
+  try {
+    promptResult = await backgroundGemini.promptText(promptText, { timeoutMs: 45000 });
+  } catch (err) {
+    console.warn('[Notify] background prompt failed:', err?.message || err);
+    maybeRunDeferredNotify();
+    maybeProcessReminderQueue();
+    maybeProcessContextEventQueue();
+    return { decision: 'skip', reason: 'background_error', notification: null };
+  }
+  maybeRunDeferredNotify();
+  maybeProcessReminderQueue();
+  maybeProcessContextEventQueue();
 
   function parseDecisionText(raw) {
     try {
@@ -2587,11 +2806,13 @@ async function runHiddenDecision({ intent, context, userId }) {
       return null;
     } catch { return null; }
   }
-  let data = parseDecisionText(result && result.text);
+  const rawResultText = promptResult && typeof promptResult.text === 'string' ? promptResult.text : '';
+  let data = parseDecisionText(rawResultText);
   let payload = data && typeof data === 'object' ? data : { decision: 'skip', reason: 'invalid_json' };
   if (payload.reason === 'invalid_json') {
     try {
-      console.warn('[Notify] invalid_json: raw assistant text length=', String(result && result.text ? result.text.length : 0));
+      const rawLen = rawResultText ? rawResultText.length : 0;
+      console.warn('[Notify] invalid_json: raw assistant text length=', String(rawLen));
     } catch {}
   }
 
@@ -3708,3 +3929,11 @@ try {
     globalThis.__flexiServerControl = serverControl;
   }
 } catch {}
+
+process.on('exit', () => disposeBackgroundGemini());
+['SIGINT', 'SIGTERM'].forEach((sig) => {
+  process.on(sig, () => {
+    disposeBackgroundGemini();
+    setTimeout(() => process.exit(0), 10);
+  });
+});
