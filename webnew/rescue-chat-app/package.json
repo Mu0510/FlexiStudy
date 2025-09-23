@@ -1,0 +1,27 @@
+{
+  "name": "gemini-rescue-chat",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Minimal Gemini chat surface that reuses the main server-wrapper",
+  "scripts": {
+    "dev": "next dev --port ${PORT:-3001}",
+    "dev:wrapper": "cd .. && npm run dev:rescue",
+    "build": "next build",
+    "start": "next start --port ${PORT:-3001}",
+    "start:wrapper": "cd .. && npm run start:rescue",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "diff": "^5.2.0",
+    "marked": "^16.1.1",
+    "next": "15.2.4",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

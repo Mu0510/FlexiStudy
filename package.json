@@ -1,0 +1,8 @@
+{
+  "scripts": {
+    "server:restart": "npm --prefix webnew run server:restart"
+  },
+  "dependencies": {
+    "@byterover/cipher": "^0.3.0"
+  }
+}

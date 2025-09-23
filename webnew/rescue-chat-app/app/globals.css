@@ -1,0 +1,9 @@
+@import "../../app/globals.css";
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  min-height: 100vh;
+}
