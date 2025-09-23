@@ -1,23 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ ${BASH_VERSINFO:-0} -lt 4 ]]; then
-  echo "This script requires Bash 4 or newer." >&2
-  exit 1
-fi
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$SCRIPT_DIR"
-PROJECT_NAME="$(basename "$REPO_ROOT")"
+OS_NAME="$(uname -s)"
 
 log() {
   printf '\n[setup] %s\n' "$1"
+}
+
+warn() {
+  printf '\n[setup:WARN] %s\n' "$1" >&2
 }
 
 die() {
   printf '\n[setup:ERROR] %s\n' "$1" >&2
   exit 1
 }
+
+if [[ -z ${BASH_VERSION:-} ]]; then
+  die "This script must be run with Bash."
+fi
+
+bash_major=${BASH_VERSINFO[0]:-0}
+if (( bash_major < 4 )); then
+  if [[ "$OS_NAME" == "Darwin" && bash_major -ge 3 ]]; then
+    warn "Detected Bash $BASH_VERSION. Consider installing a newer Bash (e.g. 'brew install bash') if you encounter issues."
+  else
+    die "This script requires Bash 4 or newer."
+  fi
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$SCRIPT_DIR"
+PROJECT_NAME="$(basename "$REPO_ROOT")"
 
 need_sudo=${SUDO:-}
 if [[ -z ${need_sudo} ]]; then
@@ -29,9 +43,6 @@ if [[ -z ${need_sudo} ]]; then
     die "This script needs to install system packages but 'sudo' was not found. Please install sudo or rerun as root."
   fi
 fi
-
-OS_NAME="$(uname -s)"
-install_node=0
 
 ensure_curl() {
   if command -v curl >/dev/null 2>&1; then
@@ -63,6 +74,7 @@ install_linux_dependencies() {
   log "Installing base packages..."
   $SUDO apt-get install -y python3 python3-venv python3-pip sqlite3 openssl libnss3-tools mkcert ca-certificates
 
+  local install_node=0
   if ! command -v node >/dev/null 2>&1; then
     install_node=1
   else
@@ -88,9 +100,93 @@ install_macos_dependencies() {
   log "Updating Homebrew..."
   brew update
 
-  log "Installing dependencies via Homebrew..."
-  brew install node@20 mkcert nss sqlite python@3.11 openssl || true
-  brew link --overwrite node@20 || true
+  ensure_node_with_brew
+  ensure_python_with_brew
+
+  for formula in mkcert nss sqlite openssl; do
+    brew_install_or_upgrade "$formula"
+  done
+}
+
+prepend_path_if_missing() {
+  local dir="$1"
+  if [[ -d "$dir" ]] && [[ ":$PATH:" != *":$dir:"* ]]; then
+    PATH="$dir:$PATH"
+    export PATH
+  fi
+}
+
+brew_install_or_upgrade() {
+  local formula="$1"
+  if brew ls --versions "$formula" >/dev/null 2>&1; then
+    log "Upgrading $formula via Homebrew if needed..."
+    brew upgrade "$formula" || true
+  else
+    log "Installing $formula via Homebrew..."
+    brew install "$formula"
+  fi
+}
+
+python3_meets_requirement() {
+  if ! command -v python3 >/dev/null 2>&1; then
+    return 1
+  fi
+  if python3 -c "import sys; exit(0 if sys.version_info >= (3, 11) else 1)" >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+ensure_python_with_brew() {
+  local formula="python@3.11"
+  if python3_meets_requirement; then
+    log "Detected Python $(python3 --version)."
+  else
+    log "Installing Python 3.11 via Homebrew..."
+    brew_install_or_upgrade "$formula"
+    brew link --overwrite --force "$formula" || true
+  fi
+
+  if brew ls --versions "$formula" >/dev/null 2>&1; then
+    local python_prefix
+    python_prefix="$(brew --prefix "$formula" 2>/dev/null || true)"
+    if [[ -n "$python_prefix" ]]; then
+      prepend_path_if_missing "$python_prefix/bin"
+      hash -r 2>/dev/null || true
+    fi
+  fi
+}
+
+ensure_node_with_brew() {
+  local desired_major=20
+  local install_node=0
+
+  if ! command -v node >/dev/null 2>&1; then
+    install_node=1
+  else
+    local node_major
+    node_major=$(node --version | sed 's/v//' | cut -d. -f1)
+    if [[ -z ${node_major:-} || ${node_major} -lt desired_major ]]; then
+      install_node=1
+    fi
+  fi
+
+  if [[ $install_node -eq 1 ]]; then
+    log "Installing Node.js ${desired_major}.x via Homebrew..."
+    brew_install_or_upgrade "node@${desired_major}"
+  else
+    log "Detected Node.js $(node --version)."
+  fi
+
+  if brew ls --versions "node@${desired_major}" >/dev/null 2>&1; then
+    local node_prefix
+    node_prefix="$(brew --prefix "node@${desired_major}" 2>/dev/null || true)"
+    if [[ -n "$node_prefix" ]]; then
+      prepend_path_if_missing "$node_prefix/bin"
+      hash -r 2>/dev/null || true
+    fi
+    brew link --overwrite --force "node@${desired_major}" || true
+  fi
 }
 
 case "$OS_NAME" in
