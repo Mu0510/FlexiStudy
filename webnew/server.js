@@ -246,6 +246,7 @@ const CONTEXT_EVENT_RETRY_DELAY_MS = 2000;
 
 const AI_POLL_FALLBACK_INTERVAL_MS = 30 * 60 * 1000;
 const REMINDER_POLL_INTERVAL_MS = 60 * 1000;
+const DAILY_SUMMARY_DEFAULT_TIME = '23:00';
 
 let contextStateCache = {
   activeModeId: 'default',
@@ -259,6 +260,10 @@ let reminderTimerHandle = null;
 const reminderProcessingQueue = [];
 const reminderProcessingSet = new Set();
 let reminderProcessingActive = false;
+
+let dailySummaryTimerHandle = null;
+let dailySummaryConfigRaw = undefined;
+let dailySummaryNormalizedConfig = null;
 
 function buildContextModeSnapshot(force = false) {
   const state = refreshContextStateCache(force) || {};
@@ -511,6 +516,12 @@ function formatDbTimestamp(date = new Date()) {
   return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
+function formatLocalDate(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  const pad = (num) => String(num).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function readJsonSafe(p, fallback) {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return fallback; }
 }
@@ -607,6 +618,276 @@ function scheduleAiPollAfterQuiet(baseIntervalMs, startHour, endHour) {
   }, delay);
   const minutes = delay / 60000;
   console.log(`[Scheduler] AI poll resume scheduled in ${minutes.toFixed(minutes < 1 ? 2 : 1)} min`);
+}
+
+function cancelDailySummaryTimer() {
+  if (dailySummaryTimerHandle) {
+    clearTimeout(dailySummaryTimerHandle);
+    dailySummaryTimerHandle = null;
+  }
+}
+
+function parseDailySummaryTime(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const hmMatch = trimmed.match(/^(\d{1,2})(?::?(\d{2}))?$/);
+    if (hmMatch) {
+      const hour = Number(hmMatch[1]);
+      const minute = hmMatch[2] !== undefined ? Number(hmMatch[2]) : 0;
+      if (Number.isInteger(hour) && hour >= 0 && hour < 24 && Number.isInteger(minute) && minute >= 0 && minute < 60) {
+        return { hour, minute };
+      }
+    }
+    if (/^\d{3,4}$/.test(trimmed)) {
+      const padded = trimmed.padStart(4, '0');
+      const hour = Number(padded.slice(0, -2));
+      const minute = Number(padded.slice(-2));
+      if (Number.isInteger(hour) && hour >= 0 && hour < 24 && Number.isInteger(minute) && minute >= 0 && minute < 60) {
+        return { hour, minute };
+      }
+    }
+    return null;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const hour = Math.floor(value);
+    const minute = Math.round((value - hour) * 60);
+    if (hour >= 0 && hour < 24 && minute >= 0 && minute < 60) {
+      return { hour, minute };
+    }
+    return null;
+  }
+  if (typeof value === 'object') {
+    const hour = Number(value.hour ?? value.h ?? value.hours);
+    const minuteRaw = value.minute ?? value.min ?? value.minutes ?? value.m ?? 0;
+    const minute = Number(minuteRaw);
+    if (Number.isInteger(hour) && hour >= 0 && hour < 24 && Number.isInteger(minute) && minute >= 0 && minute < 60) {
+      return { hour, minute };
+    }
+  }
+  return null;
+}
+
+function normalizeDailySummaryConfig(config) {
+  let source = config;
+  if (source === undefined || source === null) source = {};
+  if (Array.isArray(source)) {
+    source = source.length ? source[0] : {};
+  }
+  if (typeof source === 'string' || typeof source === 'number') {
+    source = { time: source };
+  }
+  if (!source || typeof source !== 'object') return null;
+  if (source.enabled === false) return null;
+
+  let candidate = source.time ?? source.at ?? source.when ?? null;
+  if (!candidate && Array.isArray(source.times) && source.times.length) {
+    candidate = source.times[0];
+  }
+  if (!candidate && (source.hour !== undefined || source.hours !== undefined)) {
+    candidate = {
+      hour: source.hour ?? source.hours,
+      minute: source.minute ?? source.min ?? source.minutes ?? source.m ?? 0,
+    };
+  }
+  const parsed = parseDailySummaryTime(candidate) || parseDailySummaryTime(DAILY_SUMMARY_DEFAULT_TIME);
+  if (!parsed) return null;
+  const pad = (num) => String(num).padStart(2, '0');
+  return {
+    hour: parsed.hour,
+    minute: parsed.minute,
+    label: `${pad(parsed.hour)}:${pad(parsed.minute)}`,
+  };
+}
+
+function computeNextDailySummaryRunDate(hour, minute, base = new Date()) {
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return null;
+  const now = base instanceof Date ? base : new Date(base);
+  const target = new Date(now.getTime());
+  target.setSeconds(0, 0);
+  target.setHours(hour, minute, 0, 0);
+  if (target.getTime() <= now.getTime()) {
+    target.setDate(target.getDate() + 1);
+  }
+  return target;
+}
+
+function scheduleDailySummaryAutomation(config) {
+  if (config !== undefined) {
+    dailySummaryConfigRaw = config;
+  } else if (dailySummaryConfigRaw === undefined) {
+    dailySummaryConfigRaw = null;
+  }
+  cancelDailySummaryTimer();
+  const normalized = normalizeDailySummaryConfig(dailySummaryConfigRaw);
+  if (!normalized) {
+    if (dailySummaryNormalizedConfig) {
+      console.log('[Scheduler] Daily summary automation disabled');
+    }
+    dailySummaryNormalizedConfig = null;
+    return;
+  }
+  dailySummaryNormalizedConfig = normalized;
+  const nextRun = computeNextDailySummaryRunDate(normalized.hour, normalized.minute);
+  if (!nextRun) {
+    console.warn('[Scheduler] Unable to compute next daily summary run time; disabling automation.');
+    dailySummaryNormalizedConfig = null;
+    return;
+  }
+  const delayMs = Math.max(0, nextRun.getTime() - Date.now());
+  dailySummaryTimerHandle = setTimeout(() => {
+    dailySummaryTimerHandle = null;
+    runDailySummaryAutomation({ reason: 'scheduled' })
+      .catch((e) => console.warn('[DailySummary] automation error:', e?.message || e))
+      .finally(() => {
+        scheduleDailySummaryAutomation();
+      });
+  }, delayMs);
+  if (dailySummaryTimerHandle && typeof dailySummaryTimerHandle.unref === 'function') {
+    dailySummaryTimerHandle.unref();
+  }
+  console.log(`[Scheduler] Daily summary check scheduled for ${formatLocalIso(nextRun)} (${normalized.label})`);
+}
+
+async function runDailySummaryAutomation({ reason = 'manual', targetDate = null } = {}) {
+  const now = new Date();
+  const runIso = now.toISOString();
+  const runLocalIso = formatLocalIso(now);
+  let timezone = null;
+  try {
+    timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    timezone = null;
+  }
+  const dateStr = targetDate || formatLocalDate(now);
+
+  const callManageLog = (action, params = {}) => {
+    try {
+      const payload = JSON.stringify({ action, params });
+      const cp = spawnSyncAsTargetUser('python3', ['manage_log.py', '--api-mode', 'execute', payload], {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf8',
+        maxBuffer: 5 * 1024 * 1024,
+      });
+      if (cp.error) throw cp.error;
+      if (cp.status !== 0) {
+        const errText = (cp.stderr || cp.stdout || '').trim();
+        throw new Error(errText || `exit ${cp.status}`);
+      }
+      const stdout = (cp.stdout || '').trim();
+      if (!stdout) return {};
+      return JSON.parse(stdout);
+    } catch (err) {
+      console.warn(`[DailySummary] manage_log action ${action} failed:`, err?.message || err);
+      return null;
+    }
+  };
+
+  const logData = callManageLog('log.get', { date: dateStr });
+  if (!logData) {
+    console.warn(`[DailySummary] Failed to load study log for ${dateStr}; skipping.`);
+    return;
+  }
+  const allEntries = Array.isArray(logData.all_entries) ? logData.all_entries : [];
+  const hasStudyEntries = allEntries.some((entry) => {
+    if (!entry || !entry.event_type) return false;
+    const type = String(entry.event_type).toUpperCase();
+    return type === 'START' || type === 'RESUME';
+  });
+  if (!hasStudyEntries) {
+    console.log(`[DailySummary] Skipping ${dateStr} summary automation (no study entries).`);
+    return;
+  }
+
+  const dailySummary = logData.daily_summary || {};
+  const existingSummary = typeof dailySummary.summary === 'string' ? dailySummary.summary : null;
+  const summaryMeta = {
+    total_duration: Number(dailySummary.total_duration || logData.total_day_study_minutes || 0) || 0,
+    subjects: Array.isArray(dailySummary.subjects)
+      ? dailySummary.subjects
+      : Array.isArray(logData.subjects_studied)
+        ? logData.subjects_studied
+        : [],
+    goals: Array.isArray(dailySummary.goals) ? dailySummary.goals : [],
+  };
+  const sessions = Array.isArray(logData.sessions) ? logData.sessions : [];
+
+  const logCache = new Map();
+  logCache.set(dateStr, logData);
+  const referenceSummaries = [];
+  const searchRes = callManageLog('data.search', { type: 'summary', order: 'newest', limit: 10 });
+  if (searchRes && Array.isArray(searchRes.items)) {
+    for (const item of searchRes.items) {
+      if (!item) continue;
+      const refDate = item.date || item.id;
+      if (!refDate || refDate === dateStr) continue;
+      if (referenceSummaries.some((entry) => entry.date === refDate)) continue;
+      let refLog = logCache.get(refDate);
+      if (!refLog) {
+        refLog = callManageLog('log.get', { date: refDate });
+        if (refLog) logCache.set(refDate, refLog);
+      }
+      const refSummary = refLog?.daily_summary?.summary;
+      if (!refSummary) continue;
+      referenceSummaries.push({
+        date: refDate,
+        summary: refSummary,
+        total_duration: Number(refLog?.daily_summary?.total_duration || refLog?.total_day_study_minutes || 0) || 0,
+        subjects: Array.isArray(refLog?.daily_summary?.subjects)
+          ? refLog.daily_summary.subjects
+          : Array.isArray(refLog?.subjects_studied)
+            ? refLog.subjects_studied
+            : [],
+      });
+      if (referenceSummaries.length >= 5) break;
+    }
+  }
+
+  const payload = {
+    kind: 'daily_summary_check',
+    reason,
+    run_at: runIso,
+    run_local: runLocalIso,
+    timezone,
+    target_date: dateStr,
+    existing_summary: existingSummary,
+    summary_meta: summaryMeta,
+    study_log: {
+      total_minutes: Number.isFinite(Number(logData.total_day_study_minutes))
+        ? Number(logData.total_day_study_minutes)
+        : null,
+      subjects: Array.isArray(logData.subjects_studied)
+        ? logData.subjects_studied
+        : summaryMeta.subjects,
+      sessions,
+      entries: allEntries,
+    },
+    goals: summaryMeta.goals,
+    reference_summaries: referenceSummaries,
+    context_state: buildContextModeSnapshot(),
+  };
+
+  const instructions = [
+    '[System] 日次サマリーの自動確認ジョブです。あなたはNext.jsサーバー内で動作するバックグラウンドサブプロセスであり、ユーザーからは見えません。',
+    '提供されたJSONをもとに対象日の学習記録を確認し、必要に応じて日次サマリーを作成または更新してください。',
+    '---',
+    JSON.stringify(payload, null, 2),
+    '---',
+    '出力要件:',
+    '- 応答はJSONのみ。テキストや前置きは禁止です。',
+    '- study_log.entries に学習イベント（START/RESUME）が存在しない、あるいは有効な学習時間が確認できない場合は空配列 [] を返してください。',
+    '- 既存サマリーが適切で更新不要なら空配列 [] を返してください。',
+    '- 更新や新規作成が必要な場合は配列1件のみで {"action":"summary.daily_update","params":{"text":"...","date":"YYYY-MM-DD"}} を返してください。',
+    '- 文体や分量は reference_summaries を参考にし、対象日の学習内容・目標を反映してください。',
+  ];
+
+  enqueueContextEventPrompt(instructions.join('\n'), {
+    reason: 'daily_summary',
+    timeoutMs: 60000,
+    detail: { targetDate: dateStr, referenceCount: referenceSummaries.length },
+  });
+  console.log(`[DailySummary] Enqueued background check for ${dateStr} (reason=${reason})`);
 }
 
 function deriveNextPollDelay(payload) {
@@ -949,6 +1230,7 @@ async function runContextEventJob(job) {
   const suppressBusy = (
     reason === 'context_pending' ||
     reason === 'context_active' ||
+    reason === 'daily_summary' ||
     reason === 'reminder_due' ||
     eventType === 'reminder_due'
   );
@@ -1288,6 +1570,8 @@ function loadAndApplyTriggers(wss, opts={}) {
     } else {
       console.log('[Scheduler] Cron disabled');
     }
+
+    scheduleDailySummaryAutomation(nextTriggers?.daily_summary);
   } catch (e) {
     console.warn('[Scheduler] load/apply triggers failed:', e?.message || e);
   }
