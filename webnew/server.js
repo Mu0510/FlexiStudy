@@ -827,6 +827,42 @@ async function runDailySummaryAutomation({ reason = 'manual', targetDate = null 
     goals: Array.isArray(dailySummary.goals) ? dailySummary.goals : [],
   };
   const sessions = Array.isArray(logData.sessions) ? logData.sessions : [];
+  const sessionsMissingSummary = sessions
+    .filter((session) => {
+      if (!session) return false;
+      const text = typeof session.summary === 'string' ? session.summary : '';
+      return text.trim().length === 0;
+    })
+    .map((session) => {
+      const sessionId = Number(session.session_id);
+      if (!Number.isFinite(sessionId)) return null;
+      const normalizedDetails = Array.isArray(session.details)
+        ? session.details.map((detail) => {
+            if (!detail || typeof detail !== 'object') return null;
+            const cloned = {
+              id: detail.id,
+              event_type: detail.event_type,
+              content: detail.content,
+              start_time: detail.start_time,
+              end_time: detail.end_time,
+              duration_minutes: detail.duration_minutes,
+            };
+            if (detail.memo !== undefined) cloned.memo = detail.memo;
+            if (detail.impression !== undefined) cloned.impression = detail.impression;
+            return cloned;
+          }).filter(Boolean)
+        : [];
+      return {
+        session_id: sessionId,
+        subject: session.subject,
+        summary: session.summary,
+        total_study_minutes: session.total_study_minutes,
+        session_start_time: session.session_start_time,
+        session_end_time: session.session_end_time,
+        details: normalizedDetails,
+      };
+    })
+    .filter(Boolean);
 
   const logCache = new Map();
   logCache.set(dateStr, logData);
@@ -859,6 +895,39 @@ async function runDailySummaryAutomation({ reason = 'manual', targetDate = null 
     }
   }
 
+  const referenceSessionSummaries = [];
+  const sessionSearchRes = callManageLog('data.search', { type: 'entry', order: 'newest', limit: 40 });
+  if (sessionSearchRes && Array.isArray(sessionSearchRes.items)) {
+    for (const item of sessionSearchRes.items) {
+      if (!item || item.kind !== 'entry') continue;
+      if (referenceSessionSummaries.length >= 5) break;
+      const sessionId = Number(item.id);
+      if (!Number.isFinite(sessionId)) continue;
+      const entryDate = item.date;
+      if (!entryDate) continue;
+      if (referenceSessionSummaries.some((entry) => entry.session_id === sessionId)) continue;
+      let refLog = logCache.get(entryDate);
+      if (!refLog) {
+        refLog = callManageLog('log.get', { date: entryDate });
+        if (refLog) logCache.set(entryDate, refLog);
+      }
+      const refSessions = Array.isArray(refLog?.sessions) ? refLog.sessions : [];
+      const matchedSession = refSessions.find((session) => Number(session?.session_id) === sessionId);
+      if (!matchedSession) continue;
+      const summaryText = typeof matchedSession.summary === 'string' ? matchedSession.summary.trim() : '';
+      if (!summaryText) continue;
+      referenceSessionSummaries.push({
+        date: entryDate,
+        session_id: sessionId,
+        subject: matchedSession.subject,
+        total_study_minutes: matchedSession.total_study_minutes,
+        summary: matchedSession.summary,
+        session_start_time: matchedSession.session_start_time,
+        session_end_time: matchedSession.session_end_time,
+      });
+    }
+  }
+
   const payload = {
     kind: 'daily_summary_check',
     reason,
@@ -877,9 +946,11 @@ async function runDailySummaryAutomation({ reason = 'manual', targetDate = null 
         : summaryMeta.subjects,
       sessions,
       entries: allEntries,
+      sessions_missing_summary: sessionsMissingSummary,
     },
     goals: summaryMeta.goals,
     reference_summaries: referenceSummaries,
+    reference_session_summaries: referenceSessionSummaries,
     context_state: buildContextModeSnapshot(),
   };
 
@@ -890,11 +961,15 @@ async function runDailySummaryAutomation({ reason = 'manual', targetDate = null 
     JSON.stringify(payload, null, 2),
     '---',
     '出力要件:',
-    '- 応答はJSONのみ。テキストや前置きは禁止です。',
-    '- study_log.entries に学習イベント（START/RESUME）が存在しない、あるいは有効な学習時間が確認できない場合は空配列 [] を返してください。',
-    '- 既存サマリーが適切で更新不要なら空配列 [] を返してください。',
-    '- 更新や新規作成が必要な場合は配列1件のみで {"action":"summary.daily_update","params":{"text":"...","date":"YYYY-MM-DD"}} を返してください。',
-    '- 文体や分量は reference_summaries を参考にし、対象日の学習内容・目標を反映してください。',
+    '- 応答は実行可能なコマンドのみを含めてください。余計な前置きや説明文は不要です。',
+    '- study_log.entries に学習イベント（START/RESUME）が存在しない、あるいは有効な学習時間が確認できない場合は何も返さず終了してください。',
+    '- 既存サマリーが適切で更新不要なら何も返さないでください。',
+    '- 日次サマリーやセッションサマリーを更新する場合は manage_log.py のアクションを直接呼び出す形で返してください。例: summary.daily_update {"date":"YYYY-MM-DD","text":"..."}',
+    '- manage_log.pyを直接実行しても構いません。',
+    '- 複数の更新が必要な場合は各コマンドを個別の行として列挙してください。JSON形式で {"action": ..., "params": ...} の配列を返しても構いません。',
+    '- study_log.sessions_missing_summary に掲載されている各セッションについて、必要に応じて summary.session_update {"session_id":number,"text":"..."} を返し、reference_session_summaries を手がかりに短いインジケーター形式の要約を記録してください。',
+    '- 日次サマリーとセッションサマリーが両方必要な場合は同じ応答内でまとめて返してください。',
+    '- 文体や構成・分量は reference_summaries および reference_session_summaries を参考にし、対象日の学習内容・目標を反映してください。',
   ];
 
   enqueueContextEventPrompt(instructions.join('\n'), {
@@ -1052,9 +1127,14 @@ function scheduleContextEventRetry(job, errorMessage = null) {
 }
 
 const CONTEXT_EVENT_ALLOWED_ACTIONS = new Set([
+  'context.state_get',
   'context.state_set',
+  'context.mode_get',
+  'context.mode_list',
+  'context.pending_list',
   'context.pending_update',
   'context.pending_create',
+  'context.events_recent',
   'ai.reminder_create',
   'ai.reminder_update',
   'context.events_append',
@@ -1063,10 +1143,16 @@ const CONTEXT_EVENT_ALLOWED_ACTIONS = new Set([
 ]);
 
 const CONTEXT_EVENT_ACTION_ALIASES = new Map([
+  ['contextstateget', 'context.state_get'],
+  ['context.state.get', 'context.state_get'],
   ['contextstateset', 'context.state_set'],
   ['context.state.set', 'context.state_set'],
   ['contextactivate', 'context.state_set'],
   ['activatecontext', 'context.state_set'],
+  ['contextmodeget', 'context.mode_get'],
+  ['context.mode.get', 'context.mode_get'],
+  ['contextmodelist', 'context.mode_list'],
+  ['context.mode.list', 'context.mode_list'],
   ['contextpendingupdate', 'context.pending_update'],
   ['context.pending.update', 'context.pending_update'],
   ['contextpendingresolve', 'context.pending_update'],
@@ -1077,6 +1163,8 @@ const CONTEXT_EVENT_ACTION_ALIASES = new Map([
   ['context.pending.cancel', 'context.pending_update'],
   ['contextpendingcreate', 'context.pending_create'],
   ['context.pending.create', 'context.pending_create'],
+  ['contextpendinglist', 'context.pending_list'],
+  ['context.pending.list', 'context.pending_list'],
   ['airemindercreate', 'ai.reminder_create'],
   ['ai.reminder.create', 'ai.reminder_create'],
   ['remindercreate', 'ai.reminder_create'],
@@ -1087,12 +1175,27 @@ const CONTEXT_EVENT_ACTION_ALIASES = new Map([
   ['remindercancel', 'ai.reminder_update'],
   ['contexteventsappend', 'context.events_append'],
   ['context.events.append', 'context.events_append'],
+  ['contexteventsrecent', 'context.events_recent'],
+  ['context.events.recent', 'context.events_recent'],
 ]);
 
 const MANAGE_LOG_ALLOWED_ACTIONS = new Set([
   'summary.daily_update',
   'summary.session_update',
+  'log.get',
+  'log.get_entry',
+  'session.active',
+  'data.dashboard',
+  'data.unique_subjects',
+  'data.study_time_by_subject',
+  'data.weekly_study_time',
+  'data.this_week_study_time',
+  'data.events_since',
+  'data.tags',
+  'data.search',
 ]);
+
+const COMMAND_PREFIX_SKIP_CHARS = new Set([':', '=', '(', ')', '-', '>', '[', ']', ',', ';']);
 
 function runManageLogAction(action, params = {}) {
   const payload = JSON.stringify({ action, params });
@@ -1111,6 +1214,149 @@ function runManageLogAction(action, params = {}) {
   return JSON.parse(stdout);
 }
 
+function findJsonObjectStart(text, startIndex) {
+  if (!text || startIndex >= text.length) return -1;
+  let idx = startIndex;
+  while (idx < text.length) {
+    const ch = text[idx];
+    if (ch === '{') return idx;
+    if (/\s/.test(ch) || COMMAND_PREFIX_SKIP_CHARS.has(ch)) {
+      idx += 1;
+      continue;
+    }
+    break;
+  }
+  return -1;
+}
+
+function extractBalancedJsonBlock(text, jsonStart) {
+  if (!text || jsonStart < 0 || jsonStart >= text.length || text[jsonStart] !== '{') return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = jsonStart; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) {
+        escape = false;
+      } else if (ch === '\\') {
+        escape = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') {
+      depth += 1;
+      continue;
+    }
+    if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return text.slice(jsonStart, i + 1);
+      }
+    }
+  }
+  return null;
+}
+
+function extractManageLogCommandActions(text) {
+  if (!text) return [];
+  const trimmed = String(text);
+  const actions = [];
+  const allowedActionSet = MANAGE_LOG_ALLOWED_ACTIONS || new Set();
+  const allowedActions = Array.from(allowedActionSet);
+
+  const pushAction = (action, params) => {
+    if (!allowedActionSet.has(action)) return;
+    const safeParams = (params && typeof params === 'object' && !Array.isArray(params)) ? params : {};
+    actions.push({ action, params: safeParams });
+  };
+
+  for (const action of allowedActions) {
+    let searchIndex = 0;
+    while (searchIndex < trimmed.length) {
+      const found = trimmed.indexOf(action, searchIndex);
+      if (found === -1) break;
+
+      let consumed = false;
+      let jsonStart = findJsonObjectStart(trimmed, found + action.length);
+      if (jsonStart !== -1) {
+        const jsonBlock = extractBalancedJsonBlock(trimmed, jsonStart);
+        if (jsonBlock) {
+          try {
+            const params = JSON.parse(jsonBlock);
+            pushAction(action, params);
+            consumed = true;
+            searchIndex = jsonStart + jsonBlock.length;
+            continue;
+          } catch (err) {
+            console.warn(`[Context] Failed to parse ${action} command payload:`, err?.message || err);
+          }
+        }
+      }
+
+      if (!consumed) {
+        const backStart = trimmed.lastIndexOf('{', found);
+        if (backStart !== -1) {
+          const jsonBlock = extractBalancedJsonBlock(trimmed, backStart);
+          if (jsonBlock) {
+            try {
+              const parsed = JSON.parse(jsonBlock);
+              if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                const nestedAction = parsed.action || parsed.type || null;
+                if (nestedAction === action) {
+                  const params = (parsed.params && typeof parsed.params === 'object' && !Array.isArray(parsed.params))
+                    ? parsed.params
+                    : {};
+                  pushAction(action, params);
+                  consumed = true;
+                  searchIndex = backStart + jsonBlock.length;
+                  continue;
+                }
+              }
+            } catch (err) {
+              console.warn('[Context] Failed to parse manage_log payload:', err?.message || err);
+            }
+          }
+        }
+      }
+
+      if (!consumed) {
+        searchIndex = found + action.length;
+      }
+    }
+  }
+
+  if (!actions.length) {
+    let idx = 0;
+    while (idx < trimmed.length) {
+      const braceIdx = trimmed.indexOf('{', idx);
+      if (braceIdx === -1) break;
+      const jsonBlock = extractBalancedJsonBlock(trimmed, braceIdx);
+      if (!jsonBlock) break;
+      try {
+        const parsed = JSON.parse(jsonBlock);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          const nestedAction = parsed.action || parsed.type || null;
+          if (typeof nestedAction === 'string' && allowedActionSet.has(nestedAction)) {
+            const params = (parsed.params && typeof parsed.params === 'object' && !Array.isArray(parsed.params))
+              ? parsed.params
+              : {};
+            pushAction(nestedAction, params);
+          }
+        }
+      } catch {}
+      idx = braceIdx + Math.max(jsonBlock.length, 1);
+    }
+  }
+
+  return actions;
+}
 function parseContextEventResponseText(raw) {
   if (!raw) return null;
   const text = String(raw).trim();
@@ -1146,6 +1392,9 @@ function parseContextEventResponseText(raw) {
     const parsed = tryParse(text.slice(arrStart, arrEnd + 1));
     if (parsed !== null) return parsed;
   }
+
+  const commandActions = extractManageLogCommandActions(text);
+  if (commandActions.length) return commandActions;
 
   return null;
 }
@@ -1976,6 +2225,7 @@ function deriveCommandKeyFromTokens(tokens) {
         const b = basename(t);
         if (b === 'manage_log.py') return `${head}:manage_log`;
         if (b === 'manage_context.py') return `${head}:manage_context`;
+        if (b === 'notify_tool.py') return `${head}:notify_tool`;
         break;
       }
     }
@@ -2024,6 +2274,60 @@ function deriveCommandKey(tc) {
     return m.toLowerCase();
   } catch {
     return '';
+  }
+}
+
+const AUTO_TOOL_ALLOW_KEYWORDS = ['manage_log', 'manage_context', 'notify_tool'];
+
+function toolCallTargetsInternalScript(tc) {
+  try {
+    const segments = [];
+    const push = (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value === 'string') {
+        if (value) segments.push(value);
+        return;
+      }
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        segments.push(String(value));
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const entry of value) push(entry);
+        return;
+      }
+      if (typeof value === 'object') {
+        for (const key of Object.keys(value)) {
+          if (key === 'content' || key === 'preview' || key === 'proposed') continue;
+          try {
+            push(value[key]);
+          } catch {}
+        }
+      }
+    };
+
+    push(tc?.title);
+    push(tc?.kind);
+    push(tc?.command);
+    push(tc?.name);
+    push(tc?.input);
+    push(tc?.arguments);
+    push(tc?.args);
+
+    if (Array.isArray(tc?.locations)) {
+      for (const loc of tc.locations) {
+        if (!loc) continue;
+        push(loc.path);
+        push(loc.title);
+        push(loc.description);
+      }
+    }
+
+    const hay = segments.join(' ').toLowerCase();
+    if (!hay) return false;
+    return AUTO_TOOL_ALLOW_KEYWORDS.some((needle) => hay.includes(needle));
+  } catch {
+    return false;
   }
 }
 
@@ -2366,18 +2670,17 @@ function handleCliMessage(jsonString, wss) {
         const tc = msg.params?.toolCall;
         // Hidden decision mode: silently allow only safe, deny others; never broadcast
         if ((suppressNextAssistantBroadcast || hiddenDecisionActive) && tc) {
-          // Derive a safe allowlist: python/python3 calling manage_log.py or manage_context.py only
+          // Derive a safe allowlist: python/python3 targeting manage_* or notify_tool helper scripts
           const cmdKey = deriveCommandKey(tc);
           const rawLabel = tc.title || String(tc.kind || 'tool');
-          const locPath = (tc.locations && tc.locations[0] && tc.locations[0].path) ? String(tc.locations[0].path) : '';
-          const raw = (locPath || rawLabel || '').toLowerCase();
           const isPython = (
             cmdKey === 'python' || cmdKey === 'python3' ||
             cmdKey === 'python:manage_log' || cmdKey === 'python3:manage_log' ||
             cmdKey === 'python:manage_context' || cmdKey === 'python3:manage_context' ||
+            cmdKey === 'python:notify_tool' || cmdKey === 'python3:notify_tool' ||
             cmdKey === 'shell:python3'
           );
-          const allowed = isPython && (raw.includes('manage_log.py') || raw.includes('manage_context.py') || raw.includes('notify_tool.py'));
+          const allowed = isPython && toolCallTargetsInternalScript(tc);
           const opts = msg.params?.options || [];
           const allowOnce = opts.find(o => o.kind === 'allow_once') || opts.find(o => o.optionId === 'proceed_once') || opts[0];
           const denyOpt = opts.find(o => o.kind === 'deny') || opts.find(o => o.optionId === 'cancel');

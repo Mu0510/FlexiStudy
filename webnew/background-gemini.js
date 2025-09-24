@@ -318,6 +318,7 @@ function deriveCommandKeyFromTokens(tokens) {
         const b = basename(t);
         if (b === 'manage_log.py') return `${head}:manage_log`;
         if (b === 'manage_context.py') return `${head}:manage_context`;
+        if (b === 'notify_tool.py') return `${head}:notify_tool`;
         break;
       }
     }
@@ -362,6 +363,60 @@ function deriveCommandKey(tc) {
     return m.toLowerCase();
   } catch {
     return '';
+  }
+}
+
+const AUTO_TOOL_ALLOW_KEYWORDS = ['manage_log', 'manage_context', 'notify_tool'];
+
+function toolCallTargetsInternalScript(tc) {
+  try {
+    const segments = [];
+    const push = (value) => {
+      if (value === null || value === undefined) return;
+      if (typeof value === 'string') {
+        if (value) segments.push(value);
+        return;
+      }
+      if (typeof value === 'number' || typeof value === 'boolean') {
+        segments.push(String(value));
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const entry of value) push(entry);
+        return;
+      }
+      if (typeof value === 'object') {
+        for (const key of Object.keys(value)) {
+          if (key === 'content' || key === 'preview' || key === 'proposed') continue;
+          try {
+            push(value[key]);
+          } catch {}
+        }
+      }
+    };
+
+    push(tc?.title);
+    push(tc?.kind);
+    push(tc?.command);
+    push(tc?.name);
+    push(tc?.input);
+    push(tc?.arguments);
+    push(tc?.args);
+
+    if (Array.isArray(tc?.locations)) {
+      for (const loc of tc.locations) {
+        if (!loc) continue;
+        push(loc.path);
+        push(loc.title);
+        push(loc.description);
+      }
+    }
+
+    const hay = segments.join(' ').toLowerCase();
+    if (!hay) return false;
+    return AUTO_TOOL_ALLOW_KEYWORDS.some((needle) => hay.includes(needle));
+  } catch {
+    return false;
   }
 }
 
@@ -592,16 +647,14 @@ class BackgroundGemini {
       return;
     }
     const cmdKey = deriveCommandKey(tc);
-    const rawLabel = tc.title || String(tc.kind || 'tool');
-    const locPath = (tc.locations && tc.locations[0] && tc.locations[0].path) ? String(tc.locations[0].path) : '';
-    const hay = `${rawLabel} ${locPath}`.toLowerCase();
     const isPython = (
       cmdKey === 'python' || cmdKey === 'python3' ||
       cmdKey === 'python:manage_log' || cmdKey === 'python3:manage_log' ||
       cmdKey === 'python:manage_context' || cmdKey === 'python3:manage_context' ||
+      cmdKey === 'python:notify_tool' || cmdKey === 'python3:notify_tool' ||
       cmdKey === 'shell:python3'
     );
-    const allowed = isPython && (hay.includes('manage_log.py') || hay.includes('manage_context.py') || hay.includes('notify_tool.py'));
+    const allowed = isPython && toolCallTargetsInternalScript(tc);
     if (allowed) {
       const optionId = allowOnce?.optionId || 'proceed_once';
       this.respond(msg.id, { outcome: { outcome: 'selected', optionId } });
