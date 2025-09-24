@@ -33,6 +33,32 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR"
 PROJECT_NAME="$(basename "$REPO_ROOT")"
 
+DEFAULT_GEMINI_RUN_USER="geminicli"
+
+determine_invoking_user() {
+  if [[ -n ${SUDO_USER:-} ]]; then
+    printf '%s' "$SUDO_USER"
+    return
+  fi
+
+  if [[ -n ${USER:-} ]]; then
+    printf '%s' "$USER"
+    return
+  fi
+
+  if command -v id >/dev/null 2>&1; then
+    id -un
+    return
+  fi
+
+  if command -v whoami >/dev/null 2>&1; then
+    whoami
+    return
+  fi
+
+  printf '%s' ""
+}
+
 need_sudo=${SUDO:-}
 if [[ -z ${need_sudo} ]]; then
   if [[ $EUID -eq 0 ]]; then
@@ -269,6 +295,39 @@ esac
 ensure_global_npm_cli
 ensure_global_pnpm
 
+set_env_var_in_file() {
+  local env_path="$1"
+  local key="$2"
+  local value="$3"
+
+  python3 - "$env_path" "$key" "$value" <<'PY'
+import os
+import sys
+
+env_path, key, value = sys.argv[1:4]
+lines = []
+found = False
+
+if os.path.exists(env_path):
+    with open(env_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+
+for idx, line in enumerate(lines):
+    if line.startswith(f"{key}="):
+        lines[idx] = f"{key}={value}\n"
+        found = True
+        break
+
+if not found:
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] = lines[-1] + "\n"
+    lines.append(f"{key}={value}\n")
+
+with open(env_path, 'w', encoding='utf-8') as f:
+    f.writelines(lines)
+PY
+}
+
 for cmd in node npm pnpm python3 sqlite3 openssl mkcert; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     die "Required command '$cmd' is not available even after attempted installation."
@@ -328,6 +387,16 @@ EOF
 
 create_env_file "$REPO_ROOT/.env.local"
 create_env_file "$REPO_ROOT/webnew/.env.local"
+
+gemini_run_user="$(determine_invoking_user)"
+if [[ -z "$gemini_run_user" ]]; then
+  warn "Unable to determine invoking user. Falling back to default '$DEFAULT_GEMINI_RUN_USER'."
+  gemini_run_user="$DEFAULT_GEMINI_RUN_USER"
+fi
+
+log "Configuring GEMINI_RUN_AS_USER=$gemini_run_user in environment files..."
+set_env_var_in_file "$REPO_ROOT/.env.local" "GEMINI_RUN_AS_USER" "$gemini_run_user"
+set_env_var_in_file "$REPO_ROOT/webnew/.env.local" "GEMINI_RUN_AS_USER" "$gemini_run_user"
 
 log "Setup steps complete. Launching Gemini CLI to finish login..."
 echo "\nWhen prompted by the Gemini CLI, follow the instructions to authenticate with your Google account."
