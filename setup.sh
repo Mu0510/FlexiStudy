@@ -277,4 +277,4 @@ if ! npx @google/gemini-cli@0.5.5; then
   die "Failed to run Gemini CLI."
 fi
 
-log "Setup complete. You can now start the development server with 'cd webnew && pnpm run dev'."
+log "Setup complete. You can now start the development server with 'cd webnew && sudo -E pnpm run dev 2>&1 | cat'."
