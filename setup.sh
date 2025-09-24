@@ -189,6 +189,43 @@ ensure_node_with_brew() {
   fi
 }
 
+npm_global_install() {
+  local package="$1"
+  if [[ -n "$SUDO" ]]; then
+    $SUDO npm install -g "$package"
+  else
+    npm install -g "$package"
+  fi
+}
+
+ensure_global_npm_cli() {
+  log "Ensuring npm is installed globally..."
+  if ! command -v npm >/dev/null 2>&1; then
+    die "npm command not found even after Node.js installation."
+  fi
+
+  if ! npm_global_install npm; then
+    die "Failed to install npm globally."
+  fi
+
+  hash -r 2>/dev/null || true
+}
+
+ensure_global_pnpm() {
+  log "Ensuring pnpm is installed globally..."
+  if command -v pnpm >/dev/null 2>&1; then
+    log "Detected pnpm $(pnpm --version). Updating global installation to ensure root access..."
+  else
+    log "pnpm not found, installing globally via npm..."
+  fi
+
+  if ! npm_global_install pnpm; then
+    die "Failed to install pnpm globally."
+  fi
+
+  hash -r 2>/dev/null || true
+}
+
 case "$OS_NAME" in
   Linux)
     install_linux_dependencies
@@ -198,10 +235,13 @@ case "$OS_NAME" in
     ;; 
   *)
     die "Unsupported operating system: $OS_NAME"
-    ;; 
+    ;;
 esac
 
-for cmd in node npm python3 sqlite3 openssl mkcert; do
+ensure_global_npm_cli
+ensure_global_pnpm
+
+for cmd in node npm pnpm python3 sqlite3 openssl mkcert; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     die "Required command '$cmd' is not available even after attempted installation."
   fi
@@ -211,15 +251,6 @@ log "Node.js version: $(node --version)"
 log "npm version: $(npm --version)"
 log "Python version: $(python3 --version)"
 
-log "Ensuring pnpm is installed..."
-if ! command -v pnpm >/dev/null 2>&1; then
-  log "pnpm not found, installing globally via npm..."
-  if [[ -n "$SUDO" ]]; then
-    $SUDO npm install -g pnpm || die "Failed to install pnpm globally."
-  else
-    npm install -g pnpm || die "Failed to install pnpm globally."
-  fi
-fi
 log "pnpm version: $(pnpm --version)"
 
 log "Ensuring mkcert trust store is configured..."
