@@ -9,7 +9,6 @@ const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const readline = require('readline'); // 1. 依存モジュールの追加
-const BackgroundGemini = require('./background-gemini');
 
 if (process.env.NODE_ENV !== 'production') {
   const env = require('dotenv');
@@ -36,6 +35,8 @@ if (process.env.NODE_ENV !== 'production') {
     console.log('[Server] Loaded environment variables from:', loadedEnvFiles.join(', '));
   }
 }
+
+const BackgroundGemini = require('./background-gemini');
 
 const dev = process.env.NODE_ENV !== 'production';
 const devHttpsOptIn = process.env.ENABLE_DEV_HTTPS === 'true' || process.env.DEV_USE_HTTPS === 'true';
