@@ -130,6 +130,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
   const deltaTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track the assistant message id for the current visible turn
   const currentAssistantIdRef = useRef<string | null>(null);
+  const pendingRequests = useRef<Map<number, { method: string }>>(new Map());
   const pendingUserByReqId = useRef<Map<number, string>>(new Map());
 
   useEffect(() => {
@@ -225,23 +226,32 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
 
       // ストリーム完了通知（ターン終端）。確定処理を実行
       if (msg?.id !== undefined && msg?.error && typeof msg.error?.message === 'string') {
+        const reqId = Number(msg.id);
         // Roll back optimistic user message if server rejected (e.g., notify_busy)
-        const mid = pendingUserByReqId.current.get(Number(msg.id));
+        const mid = pendingUserByReqId.current.get(reqId);
         if (mid) {
-          pendingUserByReqId.current.delete(Number(msg.id));
+          pendingUserByReqId.current.delete(reqId);
           setMessages(prev => prev.filter(m => m.id !== mid));
         }
+        pendingRequests.current.delete(reqId);
         return;
       }
 
-      // Handle requestAiStatus response
-      if (msg?.id !== undefined && msg?.result && pendingUserByReqId.current.has(Number(msg.id)) === false) {
+      if (msg?.id !== undefined && msg?.result !== undefined) {
         const reqId = Number(msg.id);
-        const pendingReq = pendingUserByReqId.current.get(reqId);
-        if (pendingReq && pendingReq.method === 'requestAiStatus') {
-          setIsGeneratingResponse(Boolean(msg.result.active));
+        const pendingReq = pendingRequests.current.get(reqId);
+        if (pendingReq?.method === 'requestAiStatus') {
+          setIsGeneratingResponse(Boolean((msg.result as any)?.active));
+          pendingRequests.current.delete(reqId);
           pendingUserByReqId.current.delete(reqId);
           return;
+        }
+
+        if (pendingUserByReqId.current.has(reqId)) {
+          pendingUserByReqId.current.delete(reqId);
+        }
+        if (pendingReq) {
+          pendingRequests.current.delete(reqId);
         }
       }
 
@@ -701,6 +711,7 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
     };
     // map req -> messageId for rollback on error
     pendingUserByReqId.current.set(reqId, newMessage.id);
+    pendingRequests.current.set(reqId, { method: 'sendUserMessage' });
     sendWsMessage(req);
     return true;
   }, [ws, isGeneratingResponse, isNotifyBusy, isModelRestarting, sendWsMessage]);
@@ -843,7 +854,9 @@ export const useChat = ({ onMessageReceived }: { onMessageReceived?: () => void 
         hasLoadedOnceRef.current = true;
       }
       // Request AI status on connection
-      sendWsMessage({ jsonrpc: '2.0', id: requestIdCounter.current++, method: 'requestAiStatus' });
+      const reqId = requestIdCounter.current++;
+      pendingRequests.current.set(reqId, { method: 'requestAiStatus' });
+      sendWsMessage({ jsonrpc: '2.0', id: reqId, method: 'requestAiStatus' });
     }
   }, [ws, requestHistory, requestDelta, messages.length]);
 
