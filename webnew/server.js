@@ -148,17 +148,28 @@ function resolveTargetUserIds(username) {
 function buildRunAsUserSpec(command, args, options = {}) {
   const targetUser = GEMINI_RUN_AS_USER;
   const spawnOptions = { ...options };
+  let resolvedIds = null;
+  const ensureIds = () => {
+    if (resolvedIds !== null) return resolvedIds;
+    resolvedIds = resolveTargetUserIds(targetUser);
+    return resolvedIds;
+  };
+
   if (shouldUseSudo(targetUser)) {
-    return {
-      command: 'sudo',
-      args: ['-E', '-u', targetUser, command, ...args],
-      options: spawnOptions,
-    };
+    const ids = ensureIds();
+    if (ids) {
+      return {
+        command: 'sudo',
+        args: ['-E', '-u', targetUser, command, ...args],
+        options: spawnOptions,
+      };
+    }
+    console.warn(`[Server] target user "${targetUser}" unavailable; running without sudo.`);
   }
   if (typeof process.getuid === 'function') {
     try {
       if (process.getuid() === 0 && targetUser) {
-        const ids = resolveTargetUserIds(targetUser);
+        const ids = ensureIds();
         if (ids && Number.isInteger(ids.uid)) {
           spawnOptions.uid = ids.uid;
           if (Number.isInteger(ids.gid)) spawnOptions.gid = ids.gid;
@@ -1606,16 +1617,11 @@ function getGeminiSpawnSpec() {
     }
   } catch {}
   const flags = ['-m', model, '-y', '--experimental-acp'];
-  const targetUser = GEMINI_RUN_AS_USER;
-  if (shouldUseSudo(targetUser)) {
-    return {
-      cmd: 'sudo',
-      args: ['-E', '-u', targetUser, GEMINI_NPX_BIN, GEMINI_CLI_PACKAGE, ...flags],
-    };
-  }
+  const spec = buildRunAsUserSpec(GEMINI_NPX_BIN, [GEMINI_CLI_PACKAGE, ...flags]);
   return {
-    cmd: GEMINI_NPX_BIN,
-    args: [GEMINI_CLI_PACKAGE, ...flags],
+    cmd: spec.command,
+    args: spec.args,
+    options: spec.options || {},
   };
 }
 
@@ -2063,7 +2069,13 @@ function pushNormalizedToolHistory({ toolCallId, icon, label, command, status, c
 function _startNewGeminiProcess(wss) {
   console.log(`[Gemini Process] Starting new Gemini process...`);
   const spec = getGeminiSpawnSpec();
-  geminiProcess = spawn(spec.cmd, spec.args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: PROJECT_ROOT, env: process.env });
+  const spawnOptions = {
+    stdio: ['pipe', 'pipe', 'pipe'],
+    cwd: PROJECT_ROOT,
+    env: process.env,
+    ...(spec.options || {}),
+  };
+  geminiProcess = spawn(spec.cmd, spec.args, spawnOptions);
 
   acpSessionId = null;
   acpReqCounter = 1;

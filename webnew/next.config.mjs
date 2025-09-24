@@ -11,6 +11,15 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  async redirects() {
+    return [
+      {
+        source: '/dashboard',
+        destination: '/',
+        permanent: true,
+      },
+    ];
+  },
   // If you’re accessing the dev server from another origin (IP/domain),
   // add it to ALLOWED_DEV_ORIGINS env (comma-separated) and we’ll parse it here.
   ...(process.env.ALLOWED_DEV_ORIGINS

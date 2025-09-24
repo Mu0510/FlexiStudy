@@ -1,7 +1,10 @@
 // webnew/app/api/upload/route.ts
 import { NextResponse, NextRequest } from 'next/server';
 import { promises as fs } from 'fs';
+import { createWriteStream } from 'fs';
 import path from 'path';
+import { Readable } from 'stream';
+import { pipeline } from 'stream/promises';
 
 export const config = {
   api: {
@@ -68,10 +71,19 @@ export async function POST(req: NextRequest) {
     };
 
     for (const [index, file] of files.entries()) {
-      const buffer = Buffer.from(await file.arrayBuffer());
       const safeName = sanitizeFileName(file.name, index);
       const filePath = path.join(uploadDir, safeName);
-      await fs.writeFile(filePath, buffer);
+      const writeStream = createWriteStream(filePath, { flags: 'w' });
+      try {
+        const nodeStream = Readable.fromWeb(file.stream());
+        await pipeline(nodeStream, writeStream, { signal: req.signal });
+      } catch (streamError) {
+        writeStream.destroy();
+        try {
+          await fs.unlink(filePath);
+        } catch {}
+        throw streamError;
+      }
       uploadedFilesInfo.push({
         name: safeName,
         path: filePath, // Or a relative path if you prefer
