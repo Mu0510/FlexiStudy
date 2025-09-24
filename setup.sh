@@ -44,6 +44,15 @@ if [[ -z ${need_sudo} ]]; then
   fi
 fi
 
+sudo_can_see() {
+  local binary="$1"
+  if [[ -z ${SUDO:-} ]]; then
+    command -v "$binary" >/dev/null 2>&1
+  else
+    $SUDO sh -c "command -v '$binary' >/dev/null 2>&1"
+  fi
+}
+
 ensure_curl() {
   if command -v curl >/dev/null 2>&1; then
     return
@@ -81,6 +90,13 @@ install_linux_dependencies() {
     node_major=$(node --version | sed 's/v//' | cut -d. -f1)
     if [[ ${node_major:-0} -lt 20 ]]; then
       log "Detected Node.js version $(node --version). Upgrading to Node.js 20.x via NodeSource..."
+      install_node=1
+    fi
+  fi
+
+  if [[ $install_node -eq 0 && -n ${SUDO:-} ]]; then
+    if ! sudo_can_see node || ! sudo_can_see npm; then
+      log "Existing Node.js installation is not visible to root. Installing Node.js 20.x via NodeSource for system-wide availability..."
       install_node=1
     fi
   fi
@@ -192,6 +208,10 @@ ensure_node_with_brew() {
 npm_global_install() {
   local package="$1"
   if [[ -n "$SUDO" ]]; then
+    if ! sudo_can_see npm; then
+      warn "npm is not available when using sudo. A system-wide Node.js installation is required."
+      return 127
+    fi
     $SUDO npm install -g "$package"
   else
     npm install -g "$package"
@@ -202,6 +222,10 @@ ensure_global_npm_cli() {
   log "Ensuring npm is installed globally..."
   if ! command -v npm >/dev/null 2>&1; then
     die "npm command not found even after Node.js installation."
+  fi
+
+  if [[ -n "$SUDO" ]] && ! sudo_can_see npm; then
+    die "npm command is not accessible with sudo even after installation. Ensure Node.js is installed system-wide and rerun the setup."
   fi
 
   if ! npm_global_install npm; then
@@ -224,6 +248,10 @@ ensure_global_pnpm() {
   fi
 
   hash -r 2>/dev/null || true
+
+  if [[ -n "$SUDO" ]] && ! sudo_can_see pnpm; then
+    die "pnpm command is not accessible with sudo even after installation."
+  fi
 }
 
 case "$OS_NAME" in
