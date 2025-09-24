@@ -6,9 +6,13 @@ const readline = require('readline');
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const GEMINI_CLI_VERSION = process.env.GEMINI_CLI_VERSION || '0.5.5';
 const GEMINI_CLI_PACKAGE = process.env.GEMINI_CLI_PACKAGE || `@google/gemini-cli@${GEMINI_CLI_VERSION}`;
-const GEMINI_NPX_BIN = process.env.GEMINI_CLI_BIN || 'npx';
+const GEMINI_NPX_BIN = (process.env.GEMINI_CLI_BIN || 'npx').trim() || 'npx';
 const GEMINI_RUN_AS_USER = process.env.GEMINI_RUN_AS_USER || 'geminicli';
+const GEMINI_CLI_EXEC_OVERRIDE = (process.env.GEMINI_CLI_EXECUTABLE || process.env.GEMINI_CLI_PATH || '').trim();
+const GEMINI_CLI_DISABLE_AUTO_OFFLINE = process.env.GEMINI_CLI_DISABLE_AUTO_OFFLINE === 'true';
+let backgroundGeminiPreferOffline = process.env.GEMINI_CLI_PREFER_OFFLINE === 'true';
 const ACP_LOG_MAX_LENGTH = Number(process.env.BACKGROUND_GEMINI_ACP_LOG_LIMIT || 4000);
+const PROJECT_ROOT_DEFAULT = path.join(__dirname, '..');
 
 function logAcp(direction, payload) {
   try {
@@ -115,10 +119,116 @@ function buildRunAsUserSpec(command, args, options = {}) {
   return { command, args, options: spawnOptions };
 }
 
+const GEMINI_PACKAGE_RUNNERS = new Set(['npx', 'bunx', 'pnpm', 'pnpmx', 'npm', 'yarn', 'corepack']);
+const GEMINI_AUTO_BINARY_CANDIDATES = ['gemini', 'google-gemini', 'google-gemini-cli'];
+
+function resolveExecutablePath(raw) {
+  try {
+    if (!raw) return null;
+    const value = String(raw).trim();
+    if (!value) return null;
+    if (value.includes(path.sep) || value.includes('/')) {
+      const abs = path.isAbsolute(value) ? value : path.resolve(PROJECT_ROOT_DEFAULT, value);
+      if (fs.existsSync(abs)) return abs;
+      return null;
+    }
+    const which = spawnSync('which', [value], { encoding: 'utf8' });
+    if (which && which.status === 0) {
+      const located = (which.stdout || '').trim();
+      if (located) return located;
+    }
+  } catch {}
+  return null;
+}
+
+function resolveExplicitGeminiExecutable() {
+  const override = GEMINI_CLI_EXEC_OVERRIDE;
+  if (!override) return null;
+  const resolved = resolveExecutablePath(override);
+  if (resolved) return resolved;
+  try {
+    const abs = path.resolve(PROJECT_ROOT_DEFAULT, override);
+    if (fs.existsSync(abs)) return abs;
+  } catch {}
+  return override;
+}
+
+function detectGlobalGeminiBinary() {
+  for (const name of GEMINI_AUTO_BINARY_CANDIDATES) {
+    const resolved = resolveExecutablePath(name);
+    if (resolved) return resolved;
+  }
+  return null;
+}
+
+function buildGeminiSpawnEnv(baseEnv, { preferOffline }) {
+  const env = { ...baseEnv };
+  env.NPM_CONFIG_YES = 'true';
+  env.npm_config_yes = 'true';
+  if (preferOffline) {
+    env.NPM_CONFIG_PREFER_OFFLINE = 'true';
+    env.npm_config_prefer_offline = 'true';
+    env.NPM_CONFIG_UPDATE_NOTIFIER = 'false';
+    env.npm_config_update_notifier = 'false';
+    env.NPM_CONFIG_FUND = 'false';
+    env.npm_config_fund = 'false';
+    env.NPM_CONFIG_AUDIT = 'false';
+    env.npm_config_audit = 'false';
+  }
+  const cacheDir = process.env.GEMINI_NPM_CACHE_DIR;
+  if (cacheDir) {
+    env.NPM_CONFIG_CACHE = cacheDir;
+    env.npm_config_cache = cacheDir;
+  }
+  return env;
+}
+
+function resolveGeminiLaunch(flags) {
+  const explicit = resolveExplicitGeminiExecutable();
+  if (explicit) {
+    return { command: explicit, args: flags, runner: 'direct', preferOffline: false };
+  }
+
+  let bin = GEMINI_NPX_BIN;
+  if (!bin) bin = 'npx';
+  const normalizedBin = String(bin).trim() || 'npx';
+
+  if (!GEMINI_PACKAGE_RUNNERS.has(normalizedBin)) {
+    const resolved = resolveExecutablePath(normalizedBin);
+    if (resolved) {
+      return { command: resolved, args: flags, runner: 'direct', preferOffline: false };
+    }
+    if (normalizedBin !== 'npx') {
+      try { console.warn(`[BackgroundGemini] GEMINI_CLI_BIN=${normalizedBin} not found. Falling back to npx.`); } catch {}
+    }
+    bin = 'npx';
+  }
+
+  if (bin === 'npx') {
+    const auto = detectGlobalGeminiBinary();
+    if (auto) {
+      try { console.log(`[BackgroundGemini] Using detected Gemini CLI binary at ${auto}`); } catch {}
+      return { command: auto, args: flags, runner: 'direct', preferOffline: false };
+    }
+  }
+
+  return {
+    command: bin,
+    args: [GEMINI_CLI_PACKAGE, ...flags],
+    runner: 'runner',
+    preferOffline: backgroundGeminiPreferOffline && bin === 'npx',
+  };
+}
+
 function buildSpawnSpec({ modelOverride, projectRoot }) {
   const model = getModelFromSettings(path.join(projectRoot, 'webnew', 'mnt', 'settings.json'), modelOverride || DEFAULT_MODEL);
   const flags = ['-m', model, '-y', '--experimental-acp'];
-  const spec = buildRunAsUserSpec(GEMINI_NPX_BIN, [GEMINI_CLI_PACKAGE, ...flags]);
+  const launch = resolveGeminiLaunch(flags);
+  const env = buildGeminiSpawnEnv(process.env, { preferOffline: launch.preferOffline });
+  if (launch.runner === 'runner' && launch.preferOffline) {
+    try { console.log('[BackgroundGemini] Launching via npx with prefer-offline cache mode'); } catch {}
+  }
+  const spec = buildRunAsUserSpec(launch.command, launch.args, { env });
   return {
     command: spec.command,
     args: spec.args,
@@ -279,21 +389,45 @@ class BackgroundGemini {
       return;
     }
     const spec = buildSpawnSpec({ modelOverride: this.model, projectRoot: this.projectRoot });
-    this.child = spawn(spec.command, spec.args, {
+    const spawnOptions = {
       stdio: ['pipe', 'pipe', 'pipe'],
       cwd: this.projectRoot,
-      env: process.env,
       ...(spec.options || {}),
-    });
+    };
+    if (!spawnOptions.env) {
+      spawnOptions.env = process.env;
+    }
+    this.child = spawn(spec.command, spec.args, spawnOptions);
     this.child.on('error', (err) => {
       this.lastError = err;
       console.error('[BackgroundGemini] spawn error:', err?.message || err);
     });
+    let pendingNpmLogPath = null;
     this.child.stderr.on('data', (chunk) => {
-      console.error('[BackgroundGemini STDERR]', chunk.toString());
+      const text = chunk.toString();
+      console.error('[BackgroundGemini STDERR]', text);
+      if (!pendingNpmLogPath) {
+        const match = text.match(/A complete log of this run can be found in:\s*(.*)/i);
+        if (match && match[1]) {
+          pendingNpmLogPath = match[1].trim();
+        }
+      }
     });
     this.child.on('close', (code, signal) => {
       console.warn('[BackgroundGemini] process exited', code, signal);
+      if (code && code !== 0 && pendingNpmLogPath) {
+        try {
+          const logText = fs.readFileSync(pendingNpmLogPath, 'utf8');
+          const lines = logText.split(/\r?\n/).filter(Boolean);
+          const tail = lines.slice(-40).join('\n');
+          if (tail) {
+            console.error('[BackgroundGemini] npm failure details:\n' + tail);
+          }
+        } catch (err) {
+          console.error(`[BackgroundGemini] Failed to read npm log ${pendingNpmLogPath}: ${err?.message || err}`);
+        }
+      }
+      pendingNpmLogPath = null;
       this.sessionId = null;
       this.readyPromise = null;
       this.ready = false;
@@ -322,6 +456,10 @@ class BackgroundGemini {
       .then((value) => {
         this.ready = true;
         this.lastError = null;
+        if (!backgroundGeminiPreferOffline && !GEMINI_CLI_DISABLE_AUTO_OFFLINE) {
+          backgroundGeminiPreferOffline = true;
+          try { console.log('[BackgroundGemini] Cached CLI detected; future spawns will prefer offline npm cache.'); } catch {}
+        }
         return value;
       })
       .catch((err) => {
