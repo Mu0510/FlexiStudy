@@ -1058,6 +1058,8 @@ const CONTEXT_EVENT_ALLOWED_ACTIONS = new Set([
   'ai.reminder_create',
   'ai.reminder_update',
   'context.events_append',
+  'summary.daily_update',
+  'summary.session_update',
 ]);
 
 const CONTEXT_EVENT_ACTION_ALIASES = new Map([
@@ -1086,6 +1088,28 @@ const CONTEXT_EVENT_ACTION_ALIASES = new Map([
   ['contexteventsappend', 'context.events_append'],
   ['context.events.append', 'context.events_append'],
 ]);
+
+const MANAGE_LOG_ALLOWED_ACTIONS = new Set([
+  'summary.daily_update',
+  'summary.session_update',
+]);
+
+function runManageLogAction(action, params = {}) {
+  const payload = JSON.stringify({ action, params });
+  const cp = spawnSyncAsTargetUser('python3', ['manage_log.py', '--api-mode', 'execute', payload], {
+    cwd: PROJECT_ROOT,
+    encoding: 'utf8',
+    maxBuffer: 5 * 1024 * 1024,
+  });
+  if (cp.error) throw cp.error;
+  if (cp.status !== 0) {
+    const errText = (cp.stderr || cp.stdout || '').trim();
+    throw new Error(errText || `exit ${cp.status}`);
+  }
+  const stdout = (cp.stdout || '').trim();
+  if (!stdout) return {};
+  return JSON.parse(stdout);
+}
 
 function parseContextEventResponseText(raw) {
   if (!raw) return null;
@@ -1219,7 +1243,11 @@ async function handleContextEventPromptResult(rawText) {
     }
     const safeParams = (params && typeof params === 'object' && !Array.isArray(params)) ? { ...params } : {};
     try {
-      await runContextManager({ action, params: safeParams });
+      if (MANAGE_LOG_ALLOWED_ACTIONS.has(action)) {
+        runManageLogAction(action, safeParams);
+      } else {
+        await runContextManager({ action, params: safeParams });
+      }
     } catch (err) {
       const message = err?.message || err;
       console.warn(`[Context] background action failed (${action}):`, message);
