@@ -2811,33 +2811,45 @@ function startGemini(wss) {
   if (isRestartingGemini) return;
   if (geminiProcess) {
     isRestartingGemini = true;
-    const oldPid = geminiProcess.pid;
-    geminiProcess.once('close', () => {
-      geminiProcess = null;
+    const oldProcess = geminiProcess;
+    const oldPid = oldProcess.pid;
+    let restartTriggered = false;
+    const triggerRestart = () => {
+      if (restartTriggered) return;
+      restartTriggered = true;
+      if (geminiProcess === oldProcess) {
+        geminiProcess = null;
+      }
       isRestartingGemini = false;
       _startNewGeminiProcess(wss);
+    };
+    oldProcess.once('close', () => {
+      triggerRestart();
     });
     // Prefer direct kill on the child; fall back to process group
     try {
-      geminiProcess.kill('SIGTERM');
+      oldProcess.kill('SIGTERM');
     } catch (err) {
       try { process.kill(-oldPid, 'SIGTERM'); } catch (e) {
         console.error(`[Gemini Process] Failed to SIGTERM pid ${oldPid}: ${e.message}`);
       }
     }
     setTimeout(() => {
-      if (geminiProcess && !geminiProcess.killed) {
+      if (restartTriggered) return;
+      const stillRunning = (oldProcess.exitCode === null && oldProcess.signalCode === null);
+      if (stillRunning && !oldProcess.killed) {
         try {
-          geminiProcess.kill('SIGKILL');
+          oldProcess.kill('SIGKILL');
         } catch (err) {
-          console.error(`[Gemini Process] Failed to SIGKILL process ${geminiProcess.pid}: ${err.message}`);
+          console.error(`[Gemini Process] Failed to SIGKILL process ${oldPid}: ${err.message}`);
         }
       }
       // Fallback: if still no 'close' fired, hard spawn a new process
-      if (geminiProcess && !geminiProcess.killed) {
+      const closedOrKilled = oldProcess.killed || oldProcess.exitCode !== null || oldProcess.signalCode !== null;
+      if (!closedOrKilled) {
         try { console.warn('[Gemini Process] close not received; forcing new process spawn'); } catch {}
-        try { _startNewGeminiProcess(wss); } catch {}
       }
+      triggerRestart();
     }, 3000);
   } else {
     _startNewGeminiProcess(wss);

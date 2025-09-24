@@ -221,7 +221,8 @@ export const WebSocketProvider: React.FC<{ children: ReactNode }> = ({ children 
       }
     }
 
-    const wsProtocol = targetProtocol === 'https:' ? 'wss' : 'ws';
+    const normalizedProtocol = (targetProtocol || '').toLowerCase().replace(/:.*$/, '');
+    const wsProtocol = normalizedProtocol === 'https' || normalizedProtocol === 'wss' ? 'wss' : 'ws';
     const portSegment = targetPort ? `:${targetPort}` : '';
     const socketUrl = `${wsProtocol}://${targetHostname}${portSegment}${RESOLVED_CHAT_SERVER_WS_PATH}`;
     const socket = new WebSocket(socketUrl);
