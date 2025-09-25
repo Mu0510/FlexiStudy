@@ -974,7 +974,7 @@ async function runDailySummaryAutomation({ reason = 'manual', targetDate = null 
 
   enqueueContextEventPrompt(instructions.join('\n'), {
     reason: 'daily_summary',
-    timeoutMs: 60000,
+    timeoutMs: 120000,
     detail: { targetDate: dateStr, referenceCount: referenceSummaries.length },
   });
   console.log(`[DailySummary] Enqueued background check for ${dateStr} (reason=${reason})`);
@@ -1079,7 +1079,7 @@ function runContextManager(payload) {
   });
 }
 
-function enqueueContextEventPrompt(text, { reason = 'context_event', timeoutMs = 45000, eventType = null, detail = null } = {}) {
+function enqueueContextEventPrompt(text, { reason = 'context_event', timeoutMs = 120000, eventType = null, detail = null } = {}) {
   if (!text) return;
   contextEventProcessingQueue.push({ text, reason, timeoutMs, eventType, detail, retryCount: 0 });
   maybeProcessContextEventQueue();
@@ -1517,7 +1517,10 @@ async function runContextEventJob(job) {
 
   const eventType = job.eventType || null;
   const reason = job.reason || eventType || 'context_event';
-  const timeoutMs = Math.max(5000, Number(job.timeoutMs) || 45000);
+  const timeoutMs = Math.max(5000, Number(job.timeoutMs) || 120000);
+
+  const historyDeltaInfo = prepareHistoryDelta(`context:${reason}`);
+  const promptWithHistory = attachHistoryDeltaToPrompt(job.text, historyDeltaInfo.delta);
 
   const suppressBusy = (
     reason === 'context_pending' ||
@@ -1528,7 +1531,8 @@ async function runContextEventJob(job) {
   );
   beginHiddenDecision(reason, { suppressBusy });
   try {
-    const promptResult = await backgroundGemini.promptText(job.text, { timeoutMs });
+    const promptResult = await backgroundGemini.promptText(promptWithHistory, { timeoutMs });
+    commitHistoryDelta(historyDeltaInfo);
     if (promptResult && typeof promptResult.text === 'string') {
       try {
         await handleContextEventPromptResult(promptResult.text);
@@ -1595,7 +1599,7 @@ function dispatchContextEvent(eventType, detail) {
       : eventType === 'reminder_due'
         ? 'reminder_due'
         : 'context_event';
-  enqueueContextEventPrompt(promptText, { reason, timeoutMs: 45000, eventType, detail });
+  enqueueContextEventPrompt(promptText, { reason, timeoutMs: 120000, eventType, detail });
 }
 
 async function checkDueReminders() {
@@ -1704,16 +1708,19 @@ async function runReminderAutomation(reminder) {
     context_state: buildContextModeSnapshot(),
   };
 
+  const historyDeltaInfo = prepareHistoryDelta('reminder:auto');
   const promptText = [
     '[System] 設定されたリマインダーが届きました。あなたはNext.jsサーバー内で動作するバックグラウンドサブプロセスであり、ユーザーからは見えません。もし何かユーザーに伝える必要が生じた場合は、通知を作成して送信するのが唯一の経路です。ユーザーはあなたに直接話しかけることはできませんが、システムから提供されるGeminiのメインプロセスとユーザーとの会話を参照できます。',
     '---',
     JSON.stringify(promptPayload, null, 2),
     '---',
   ].join('\n');
+  const promptWithHistory = attachHistoryDeltaToPrompt(promptText, historyDeltaInfo.delta);
 
-  const timeoutMs = 40000;
+  const timeoutMs = 120000;
   try {
-    await backgroundGemini.promptText(promptText, { timeoutMs });
+    await backgroundGemini.promptText(promptWithHistory, { timeoutMs });
+    commitHistoryDelta(historyDeltaInfo);
   } catch (err) {
     console.warn('[Reminder] background prompt failed:', err?.message || err);
   } finally {
@@ -2016,6 +2023,234 @@ function getGeminiSpawnSpec() {
 let geminiProcess = null;
 let isAIPromptActive = false;
 const history = [];
+
+// --- History delta helpers (background Gemini) ---
+const HISTORY_DELTA_STATE = new Map();
+const HISTORY_DELTA_DEFAULT_CONVERSATION = 'default';
+const HISTORY_DELTA_MAX_CHARS = 800000;
+const HISTORY_DELTA_RECENT_FALLBACK_COUNT = 20;
+const HISTORY_DELTA_MAX_STRING_LENGTH = 35000;
+let historyDeltaSummaryCounter = 0;
+
+function buildHistoryDeltaStateKey(taskType, conversationId) {
+  const task = taskType ? String(taskType) : 'default';
+  const convo = conversationId ? String(conversationId) : HISTORY_DELTA_DEFAULT_CONVERSATION;
+  return `${convo}::${task}`;
+}
+
+function truncateHistoryDeltaString(value) {
+  if (typeof value !== 'string') return value;
+  if (value.length <= HISTORY_DELTA_MAX_STRING_LENGTH) return value;
+  const truncatedCount = value.length - HISTORY_DELTA_MAX_STRING_LENGTH;
+  const suffix = `… [truncated ${truncatedCount} chars]`;
+  const head = value.slice(0, Math.max(0, HISTORY_DELTA_MAX_STRING_LENGTH - suffix.length));
+  return `${head}${suffix}`;
+}
+
+function cloneForHistoryDelta(value, seen = new Set()) {
+  if (value === null || value === undefined) return value === undefined ? undefined : null;
+  if (typeof value === 'string') return truncateHistoryDeltaString(value);
+  if (typeof value === 'number' || typeof value === 'boolean') return value;
+  if (typeof value === 'bigint') return Number.isSafeInteger(value) ? Number(value) : value.toString();
+  if (value instanceof Date) return value.toISOString();
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer && Buffer.isBuffer(value)) {
+    return truncateHistoryDeltaString(value.toString('utf8'));
+  }
+  if (seen.has(value)) {
+    return null;
+  }
+  if (Array.isArray(value)) {
+    seen.add(value);
+    const arr = [];
+    for (const item of value) {
+      const cloned = cloneForHistoryDelta(item, seen);
+      if (cloned !== undefined) arr.push(cloned);
+    }
+    seen.delete(value);
+    return arr;
+  }
+  if (typeof value === 'object') {
+    seen.add(value);
+    const result = {};
+    for (const [key, val] of Object.entries(value)) {
+      if (typeof val === 'function') continue;
+      const cloned = cloneForHistoryDelta(val, seen);
+      if (cloned !== undefined) result[key] = cloned;
+    }
+    seen.delete(value);
+    return result;
+  }
+  return truncateHistoryDeltaString(String(value));
+}
+
+function normalizeHistoryRecordForDelta(entry) {
+  try {
+    const cloned = cloneForHistoryDelta(entry);
+    if (!cloned || typeof cloned !== 'object') return null;
+    if (!cloned.id) {
+      const sourceId = entry && entry.id ? entry.id : (entry && entry.ts ? entry.ts : Date.now());
+      cloned.id = typeof sourceId === 'string' ? sourceId : String(sourceId);
+    }
+    if (!cloned.ts) {
+      const tsCandidate = Number(entry?.ts ?? entry?.updatedTs ?? Date.now());
+      if (Number.isFinite(tsCandidate)) cloned.ts = tsCandidate;
+    }
+    if (!cloned.role && entry?.role) cloned.role = entry.role;
+    if (!cloned.type && entry?.type) cloned.type = entry.type;
+    return cloned;
+  } catch (err) {
+    console.warn('[HistoryDelta] failed to normalize record:', err?.message || err);
+    return null;
+  }
+}
+
+function historyDeltaSerializedLength(delta) {
+  try {
+    return JSON.stringify({ historyDelta: delta }).length;
+  } catch (err) {
+    console.warn('[HistoryDelta] failed to stringify delta:', err?.message || err);
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function createHistoryDeltaSummaryMessage(text) {
+  historyDeltaSummaryCounter += 1;
+  const message = truncateHistoryDeltaString(String(text || ''));
+  return {
+    id: `history-delta-summary-${Date.now()}-${historyDeltaSummaryCounter}`,
+    ts: Date.now(),
+    role: 'system',
+    type: 'meta',
+    content: message,
+    text: message,
+  };
+}
+
+function prepareHistoryDelta(taskType, { conversationId } = {}) {
+  const stateKey = buildHistoryDeltaStateKey(taskType, conversationId);
+  const state = HISTORY_DELTA_STATE.get(stateKey) || {};
+  let fromHistoryId = state.lastSentHistoryId || null;
+  let startIndex = 0;
+  if (fromHistoryId) {
+    const idx = history.findIndex(rec => rec && rec.id === fromHistoryId);
+    if (idx === -1) {
+      fromHistoryId = null;
+    } else {
+      startIndex = idx + 1;
+    }
+  }
+
+  const collected = [];
+  for (let i = startIndex; i < history.length; i++) {
+    const normalized = normalizeHistoryRecordForDelta(history[i]);
+    if (normalized) collected.push(normalized);
+  }
+
+  const totalCount = collected.length;
+  let trimmed = collected;
+  let hasMore = false;
+  let toHistoryId = fromHistoryId;
+  if (trimmed.length > 0) {
+    const last = trimmed[trimmed.length - 1];
+    if (last && last.id) {
+      toHistoryId = last.id;
+    }
+  }
+
+  const delta = {
+    fromHistoryId,
+    toHistoryId,
+    messages: [],
+    hasMore: false,
+  };
+
+  if (trimmed.length > 0) {
+    let candidateMessages = trimmed.slice();
+    delta.messages = candidateMessages.slice();
+    delta.toHistoryId = toHistoryId;
+    let serializedLength = historyDeltaSerializedLength(delta);
+
+    if (serializedLength > HISTORY_DELTA_MAX_CHARS) {
+      let trimmedAny = false;
+      const fallbackCount = Math.max(1, Math.min(HISTORY_DELTA_RECENT_FALLBACK_COUNT, candidateMessages.length));
+      if (candidateMessages.length > fallbackCount) {
+        trimmedAny = true;
+      }
+      candidateMessages = candidateMessages.slice(-fallbackCount);
+      hasMore = candidateMessages.length < totalCount;
+      delta.messages = candidateMessages.slice();
+      delta.toHistoryId = candidateMessages.length ? (candidateMessages[candidateMessages.length - 1].id || toHistoryId) : toHistoryId;
+      serializedLength = historyDeltaSerializedLength(delta);
+      while (serializedLength > HISTORY_DELTA_MAX_CHARS && candidateMessages.length > 1) {
+        candidateMessages = candidateMessages.slice(1);
+        trimmedAny = true;
+        delta.messages = candidateMessages.slice();
+        delta.toHistoryId = candidateMessages.length ? (candidateMessages[candidateMessages.length - 1].id || toHistoryId) : toHistoryId;
+        serializedLength = historyDeltaSerializedLength(delta);
+      }
+      if (serializedLength > HISTORY_DELTA_MAX_CHARS && candidateMessages.length === 1) {
+        delta.messages = candidateMessages.slice();
+        delta.toHistoryId = candidateMessages[0].id || toHistoryId;
+        trimmedAny = true;
+      }
+      hasMore = hasMore || trimmedAny;
+    }
+
+    const actualToHistoryId = delta.toHistoryId;
+    if (hasMore) {
+      const summary = createHistoryDeltaSummaryMessage(`※履歴上限のため、合計 ${totalCount} 件のうち最近 ${delta.messages.length} 件を送信しています。`);
+      delta.messages = delta.messages.concat(summary);
+    }
+    delta.hasMore = hasMore;
+    delta.toHistoryId = actualToHistoryId;
+  } else {
+    delta.messages = [];
+    delta.toHistoryId = toHistoryId;
+    delta.hasMore = false;
+  }
+
+  try {
+    const count = Array.isArray(delta.messages) ? delta.messages.length : 0;
+    const serializedLength = historyDeltaSerializedLength(delta);
+    const parts = [
+      `[HistoryDelta] prepared for ${stateKey}`,
+      `messages=${count}`,
+      `hasMore=${delta.hasMore ? 'true' : 'false'}`,
+    ];
+    if (delta.fromHistoryId) parts.push(`from=${delta.fromHistoryId}`);
+    if (delta.toHistoryId) parts.push(`to=${delta.toHistoryId}`);
+    if (Number.isFinite(serializedLength)) parts.push(`bytes=${serializedLength}`);
+    console.log(parts.join(' '));
+  } catch {}
+
+  return { delta, stateKey, toHistoryId: delta.toHistoryId || fromHistoryId || null };
+}
+
+function commitHistoryDelta(info) {
+  if (!info || !info.stateKey) return;
+  const toHistoryId = info.toHistoryId ?? null;
+  if (toHistoryId === null && HISTORY_DELTA_STATE.has(info.stateKey)) {
+    const current = HISTORY_DELTA_STATE.get(info.stateKey) || {};
+    HISTORY_DELTA_STATE.set(info.stateKey, { ...current, lastSentTs: Date.now() });
+    return;
+  }
+  const nextState = {
+    lastSentHistoryId: toHistoryId,
+    lastSentTs: Date.now(),
+  };
+  HISTORY_DELTA_STATE.set(info.stateKey, nextState);
+}
+
+function attachHistoryDeltaToPrompt(promptText, delta) {
+  if (!delta) return promptText;
+  const base = typeof promptText === 'string' ? promptText : '';
+  const serialized = JSON.stringify({ historyDelta: delta }, null, 2);
+  const trimmedBase = base.trim();
+  if (!trimmedBase) {
+    return `---\n${serialized}\n---`;
+  }
+  return `---\n${serialized}\n---\n${trimmedBase}`;
+}
 let isRestartingGemini = false;
 
 function isGeminiRunning() {
@@ -3542,9 +3777,12 @@ async function runHiddenDecision({ intent, context, userId }) {
 
   // Enqueue hidden prompt and await the assistant's final text
   const promptText = `${baseSystem}\n\n[入力]\n${JSON.stringify(user)}`;
+  const historyDeltaInfo = prepareHistoryDelta('notify:hidden_decision');
+  const promptWithHistory = attachHistoryDeltaToPrompt(promptText, historyDeltaInfo.delta);
   let promptResult;
   try {
-    promptResult = await backgroundGemini.promptText(promptText, { timeoutMs: 45000 });
+    promptResult = await backgroundGemini.promptText(promptWithHistory, { timeoutMs: 120000 });
+    commitHistoryDelta(historyDeltaInfo);
   } catch (err) {
     console.warn('[Notify] background prompt failed:', err?.message || err);
     maybeRunDeferredNotify();
