@@ -1,0 +1,211 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+  .dark {
+    --background: 0 0% 3.9%;
+    --foreground: 0 0% 98%;
+    --card: 0 0% 3.9%;
+    --card-foreground: 0 0% 98%;
+    --popover: 0 0% 3.9%;
+    --popover-foreground: 0 0% 98%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 9%;
+    --secondary: 0 0% 14.9%;
+    --secondary-foreground: 0 0% 98%;
+    --muted: 0 0% 14.9%;
+    --muted-foreground: 0 0% 63.9%;
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 14.9%;
+    --input: 0 0% 14.9%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+.prose hr {
+  border-top-width: 1px;
+  margin-top: 2em;   /* 3em の 2/3 */
+  margin-bottom: 2em; /* 3em の 2/3 */
+}
+
+.prose p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.tool-card__body p {
+  color: white;
+}
+
+.tool-card__body span {
+  color: white;
+}
+
+/* Diff 表示用スタイル */
+.tool-card__body pre {
+  background: transparent; /* 外側のコンテナ背景を使用 */
+  color: #f8f8f2; /* デフォルトの文字色 */
+  padding: 0; /* 余白は外側で管理 */
+  overflow: visible; /* スクロールは外側で管理 */
+  border-radius: 0; /* 角丸も外側で管理 */
+}
+
+.tool-card__body pre span.add {
+  color: #a6e22e; /* 緑色 */
+}
+
+.tool-card__body pre span.del {
+  color: #f92672; /* 赤色 */
+}
+
+.tool-card__body pre span.context {
+  color: #f8f8f2; /* デフォルトの文字色 */
+}
+
+.tool-card__body pre span.line-num {
+  display: inline-block;
+  width: 1em;
+  text-align: right;
+  margin-right: 1em;
+  color: #75715e; /* 行番号の色 */
+}
+
+.tool-card__body pre span.add .diff-prefix {
+  color: #a6e22e; /* 緑色 */
+}
+
+.tool-card__body pre span.del .diff-prefix {
+  color: #f92672; /* 赤色 */
+}
+
+/* Tool card header chip (e.g., Edit/Search) */
+.tool-card__icon-text {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  border-color: hsl(var(--border));
+}
+
+/* Make tool-card code area scrollbars blend with theme (Chrome/WebKit) */
+.tool-card__body { 
+  /* Hint browser to render dark scrollbars to match dark code bg */
+  color-scheme: dark; 
+  scrollbar-gutter: stable; /* keep horizontal gutter space reserved */
+}
+.tool-card__body::-webkit-scrollbar {
+  height: 8px;
+  width: 8px;
+}
+
+.tool-card__body::-webkit-scrollbar-track {
+  background: #1f2937; /* gray-800 */
+  border-radius: 8px;
+}
+
+.tool-card__body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.5); /* slate-400/50 */
+  border-radius: 8px;
+}
+
+.dark .tool-card__body::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.35); /* slightly subtler in dark */
+}
+
+.dark .tool-card__body::-webkit-scrollbar-track {
+  background: #0b1220; /* near slate-950 */
+}
+
+.tool-card__body::-webkit-scrollbar-track-piece {
+  background: inherit; /* ensure no white gaps on horizontal */
+}
+
+.tool-card__body::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox */
+.tool-card__body {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148,163,184,.35) #0b1220;
+}
+
+.tool-card__body pre span.diff-prefix {
+  display: inline-block;
+  width: 1em; /* + や - のための幅 */
+  text-align: center;
+  margin-right: 0.5em;
+}
+
+.tool-card__body pre span.add .diff-prefix {
+  color: #a6e22e; /* 緑色 */
+}
+
+.tool-card__body pre span.del .diff-prefix {
+  color: #f92672; /* 赤色 */
+}

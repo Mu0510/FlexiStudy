@@ -1,0 +1,581 @@
+const { createServer: createHttpServer } = require('http');
+const { createServer: createHttpsServer } = require('https');
+const { parse } = require('url');
+const next = require('next');
+const { WebSocketServer } = require('ws');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const readline = require('readline'); // Using readline for line-by-line processing
+
+// Suppress noisy Workbox multi-run warnings in dev only
+if (process.env.NODE_ENV !== 'production') {
+  const _warn = console.warn.bind(console);
+  console.warn = (...args) => {
+    try {
+      const msg = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+      if (/has been called multiple times, perhaps due to running webpack in --watch mode/i.test(msg)) {
+        return; // drop only this specific Workbox warning
+      }
+    } catch {}
+    _warn(...args);
+  };
+}
+
+const dev = process.env.NODE_ENV !== 'production';
+const hostname = '0.0.0.0';
+const port = 443;
+
+const app = next({ dev, hostname, port });
+const handle = app.getRequestHandler();
+
+// --- Gemini Process Logic ---
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+const GEMINI_FLAGS = ['-m', GEMINI_MODEL, '-y', '--experimental-acp'];
+const PROJECT_ROOT = path.join(__dirname, '..');
+
+function getGeminiSpawnSpec() {
+  // Pinning to v0.2.2 as requested for stability during the competition.
+  return {
+    cmd: 'sudo',
+    args: ['-E', '-u', 'geminicli', 'npx', '@google/gemini-cli@0.2.2', ...GEMINI_FLAGS],
+  };
+}
+
+let geminiProcess = null;
+const history = [];
+let isRestartingGemini = false;
+
+// --- ACP v0.2.2 State ---
+let acpSessionId = null;
+let acpReqCounter = 1;
+const acpPending = new Map(); // Maps request ID -> { method, resolve, reject }
+const pendingPrompts = []; // Queue for user messages before session is ready
+let isSessionReady = false;
+
+// Function to send a JSON-RPC request to the Gemini CLI
+function acpSend(method, params) {
+  if (!geminiProcess || !geminiProcess.stdin || geminiProcess.stdin.destroyed) {
+    console.error('[ACP] Cannot send: Gemini process is not running.');
+    return Promise.reject(new Error('Gemini process not running'));
+  }
+  const id = acpReqCounter++;
+  const req = { jsonrpc: '2.0', id, method, params };
+  
+  return new Promise((resolve, reject) => {
+    acpPending.set(id, { method, resolve, reject });
+    try {
+      geminiProcess.stdin.write(JSON.stringify(req) + '\n');
+      console.log('[ACP >]', JSON.stringify(req));
+    } catch (e) {
+      console.error('[ACP] Error writing to stdin:', e);
+      acpPending.delete(id);
+      reject(e);
+    }
+  });
+}
+
+// Maps ACP tool status to frontend status
+function mapToolStatus(status) {
+  switch (status) {
+    case 'pending':
+    case 'in_progress':
+      return 'running';
+    case 'completed':
+      return 'finished';
+    case 'failed':
+      return 'error';
+    default:
+      return 'running';
+  }
+}
+
+// Broadcasts a message to all connected WebSocket clients
+function broadcast(wss, json) {
+  const str = JSON.stringify(json);
+  for (const ws of wss.clients) {
+    if (ws.readyState === 1) { // WebSocket.OPEN
+      ws.send(str);
+    }
+  }
+}
+
+// Broadcasts a message to all clients except the sender
+function broadcastExcept(wss, sender, json) {
+  const str = JSON.stringify(json);
+  for (const ws of wss.clients) {
+    if (ws !== sender && ws.readyState === 1) { // WebSocket.OPEN
+      ws.send(str);
+    }
+  }
+}
+
+// Starts a new Gemini CLI process
+function _startNewGeminiProcess(wss) {
+  console.log(`[Gemini Process] Starting new Gemini process...`);
+  const spec = getGeminiSpawnSpec();
+  console.log(`[Gemini Process] Spawning: ${spec.cmd} ${spec.args.join(' ')}`);
+  geminiProcess = spawn(spec.cmd, spec.args, { stdio: ['pipe', 'pipe', 'pipe'], cwd: PROJECT_ROOT, env: process.env });
+
+  // Reset ACP state
+  acpSessionId = null;
+  acpReqCounter = 1;
+  acpPending.clear();
+  isSessionReady = false;
+  // Do not clear pendingPrompts, they will be flushed once the new session is ready.
+
+  geminiProcess.on('error', (err) => {
+    console.error('[Gemini SPAWN ERROR]', err);
+  });
+
+  console.log(`[Gemini Process] New Gemini process started with PID: ${geminiProcess.pid}`);
+
+  // Setup line-by-line reader for stdout
+  const rl = readline.createInterface({ input: geminiProcess.stdout });
+  rl.on('line', (line) => {
+    handleCliMessage(line, wss);
+  });
+
+  geminiProcess.stderr.on('data', data => {
+    console.error('[Gemini ERROR] ' + data.toString());
+  });
+
+  geminiProcess.on('close', (code, signal) => {
+    console.log(`[Gemini Process] Gemini process (PID: ${geminiProcess.pid}) exited with code ${code} and signal ${signal}.`);
+    if (geminiProcess && geminiProcess.pid === geminiProcess.pid) {
+      history.length = 0;
+      broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'gemini-exit' } });
+      geminiProcess = null;
+      isSessionReady = false;
+      acpSessionId = null;
+      // Automatically restart after a short delay
+      setTimeout(() => {
+        console.log('[Gemini Process] Restarting after unexpected exit...');
+        startGemini(wss);
+      }, 1500);
+    }
+  });
+
+  // Initialize ACP session
+  initializeAndStartSession();
+}
+
+async function initializeAndStartSession() {
+    try {
+        console.log('[ACP] Initializing...');
+        const initResult = await acpSend('initialize', {
+            protocolVersion: 1,
+            clientCapabilities: {
+                fs: { readTextFile: true, writeTextFile: true }
+            },
+        });
+        console.log('[ACP] Initialize result:', initResult);
+
+        console.log('[ACP] Starting new session...');
+        const sessionResult = await acpSend('session/new', {
+            cwd: PROJECT_ROOT,
+            mcpServers: [],
+        });
+
+        console.log('[ACP] Full session/new result:', JSON.stringify(sessionResult, null, 2)); // DEBUG: Log the full session result
+
+        if (sessionResult?.sessionId) {
+            acpSessionId = sessionResult.sessionId;
+            isSessionReady = true;
+            console.log(`[ACP] New session established: ${acpSessionId}`);
+            flushPromptQueue();
+        } else {
+            console.error('[ACP] Failed to create new session, result:', sessionResult);
+        }
+    } catch (error) {
+        console.error('[ACP] Error during initialization or session creation:', error);
+        // Handle auth errors if necessary in the future
+    }
+}
+
+
+// Handles a single JSON message from the Gemini CLI
+function handleCliMessage(jsonString, wss) {
+  console.log('[Gemini CLI <]', jsonString);
+  let msg;
+  try {
+    msg = JSON.parse(jsonString);
+  } catch (e) {
+    console.error('Error parsing JSON from CLI:', e, jsonString);
+    return;
+  }
+
+  // 1) Handle responses to our ACP requests
+  if (msg.id !== undefined && (msg.result !== undefined || msg.error !== undefined)) {
+    const pending = acpPending.get(msg.id);
+    if (pending) {
+      acpPending.delete(msg.id);
+      if (msg.error) {
+        console.error(`[ACP] Error response for method '${pending.method}':`, msg.error);
+        pending.reject(msg.error);
+      } else {
+        pending.resolve(msg.result);
+        // If this is the response to a prompt, flush the assistant message
+        if (pending.method === 'session/prompt') {
+          flushAssistantMessage(wss, msg.result?.stopReason);
+        }
+      }
+    }
+    return;
+  }
+
+  // 2) Handle requests/notifications from the Agent
+  if (typeof msg.method === 'string') {
+    switch (msg.method) {
+      case 'session/update':
+        handleSessionUpdate(msg.params.update, wss);
+        break;
+      
+      case 'session/request_permission':
+        // Auto-allow all permissions
+        const opts = msg.params?.options || [];
+        const allow = opts.find(o => o.kind === 'allow_once') || opts[0];
+        acpSend('session/provide_permission', {
+            sessionId: acpSessionId,
+            outcome: { outcome: 'selected', optionId: allow?.optionId || 'allow_once' }
+        }).catch(e => console.error('[ACP] Error providing permission:', e));
+        break;
+
+      // Implement fs capabilities if needed, similar to old implementation
+      case 'fs/read_text_file':
+      case 'fs/write_text_file':
+        // These are now handled by the CLI directly, but we could intercept them here if needed.
+        break;
+        
+      default:
+        // console.log(`[ACP] Unhandled method from agent: ${msg.method}`);
+    }
+    return;
+  }
+}
+
+let currentAssistantMessage = { id: null, text: '', thought: '' };
+
+function ensureAssistantMessage(wss, ts) {
+    if (!currentAssistantMessage.id) {
+        currentAssistantMessage.id = `assistant-${ts}`;
+        const rec = { id: currentAssistantMessage.id, ts, role: 'assistant', text: '' };
+        history.push(rec);
+        broadcast(wss, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
+    }
+}
+
+function flushAssistantMessage(wss, stopReason) {
+    if (currentAssistantMessage.id) {
+        const finalMsg = {
+            id: currentAssistantMessage.id,
+            ts: Date.now(),
+            role: 'assistant',
+            text: currentAssistantMessage.text,
+            thought: currentAssistantMessage.thought,
+        };
+        // Update history
+        const index = history.findIndex(m => m.id === finalMsg.id);
+        if (index !== -1) {
+            history[index] = finalMsg;
+        }
+        // Broadcast completion
+        broadcast(wss, { jsonrpc: '2.0', method: 'messageCompleted', params: { messageId: finalMsg.id, stopReason: stopReason || 'end_turn' } });
+    }
+    // Reset
+    currentAssistantMessage = { id: null, text: '', thought: '' };
+}
+
+
+// Handles the 'session/update' notification
+function handleSessionUpdate(upd, wss) {
+  const nowTs = Date.now();
+
+  switch (upd.sessionUpdate) {
+    case 'agent_thought_chunk':
+      ensureAssistantMessage(wss, nowTs);
+      const thoughtChunk = upd.content?.type === 'text' ? upd.content.text : '';
+      currentAssistantMessage.thought += thoughtChunk;
+      broadcast(wss, {
+        jsonrpc: '2.0',
+        method: 'streamAssistantThoughtChunk',
+        params: { thought: thoughtChunk }
+      });
+      break;
+
+    case 'agent_message_chunk':
+      ensureAssistantMessage(wss, nowTs);
+      const textChunk = upd.content?.type === 'text' ? upd.content.text : '';
+      currentAssistantMessage.text += textChunk;
+      broadcast(wss, {
+        jsonrpc: '2.0',
+        method: 'streamAssistantMessageChunk',
+        params: { messageId: currentAssistantMessage.id, chunk: { text: textChunk } }
+      });
+      break;
+
+    case 'end_of_turn':
+      flushAssistantMessage(wss, upd.stopReason);
+      break;
+
+    case 'tool_call':
+      const toolCallId = upd.toolCallId || `tool-${nowTs}`;
+      const toolMsg = {
+        jsonrpc: '2.0',
+        method: 'pushToolCall',
+        params: {
+          toolCallId: toolCallId,
+          icon: upd.kind || 'tool',
+          label: upd.title || String(upd.kind || 'tool'),
+          locations: upd.locations || [],
+        }
+      };
+      history.push({ ...toolMsg, ts: nowTs, type: 'tool' });
+      broadcast(wss, toolMsg);
+      break;
+
+    case 'tool_call_update':
+      let content = undefined;
+      if (Array.isArray(upd.content) && upd.content.length > 0) {
+        const c = upd.content[0];
+        if (c.type === 'content' && c.content?.type === 'text') {
+          content = { type: 'markdown', markdown: c.content.text };
+        } else if (c.type === 'diff') {
+          content = { type: 'diff', oldText: c.oldText || '', newText: c.newText || '' };
+        }
+      }
+      const updateMsg = {
+        jsonrpc: '2.0',
+        method: 'updateToolCall',
+        params: { toolCallId: upd.toolCallId, status: mapToolStatus(upd.status), content }
+      };
+      broadcast(wss, updateMsg);
+      break;
+
+    case 'plan':
+      console.log('[ACP] Plan update with entries:', upd.entries?.length || 0);
+      broadcast(wss, {
+        jsonrpc: '2.0',
+        method: 'updatePlan',
+        params: { plan: upd.entries || [] }
+      });
+      break;
+      
+    case 'agent_state':
+        // This can be used to show a generic "Agent is thinking..." state
+        // console.log('[ACP] Agent state update:', upd.state);
+        break;
+
+    default:
+      // console.log(`[ACP] Unhandled session update: ${upd.sessionUpdate}`);
+  }
+}
+
+// Flushes the queue of user prompts
+function flushPromptQueue() {
+  if (!isSessionReady || pendingPrompts.length === 0) return;
+
+  while (pendingPrompts.length > 0) {
+    const { text, messageId } = pendingPrompts.shift();
+    
+    // Associate the current assistant message ID with this prompt
+    currentAssistantMessage.id = `assistant-for-${messageId}`;
+
+    acpSend('session/prompt', {
+      sessionId: acpSessionId,
+      prompt: [{ type: 'text', text }],
+    }).catch(e => console.error('[ACP] Error sending queued prompt:', e));
+  }
+}
+
+// Starts or restarts the Gemini process
+function startGemini(wss) {
+  if (isRestartingGemini) {
+    console.log('[Gemini Process] Already restarting. Skipping.');
+    return;
+  }
+
+  if (geminiProcess) {
+    console.log(`[Gemini Process] Killing existing process (PID: ${geminiProcess.pid}) for restart...`);
+    isRestartingGemini = true;
+    
+    geminiProcess.once('close', () => {
+      console.log(`[Gemini Process] Old process killed. Starting new one.`);
+      geminiProcess = null;
+      isRestartingGemini = false;
+      _startNewGeminiProcess(wss);
+    });
+
+    try {
+      // Using process group killing
+      process.kill(-geminiProcess.pid, 'SIGTERM');
+    } catch (err) {
+      console.error(`[Gemini Process] Failed to kill process group ${geminiProcess.pid}: ${err.message}. Trying individual kill.`);
+       try {
+         geminiProcess.kill('SIGTERM');
+       } catch (e) {
+         console.error(`[Gemini Process] Failed to kill process ${geminiProcess.pid}: ${e.message}`);
+       }
+    }
+
+    // Failsafe timeout
+    setTimeout(() => {
+      if (geminiProcess && !geminiProcess.killed) {
+        console.warn(`[Gemini Process] Process (PID: ${geminiProcess.pid}) did not exit gracefully. Forcing SIGKILL.`);
+        try {
+          geminiProcess.kill('SIGKILL');
+        } catch (err) {
+          console.error(`[Gemini Process] Failed to SIGKILL process ${geminiProcess.pid}: ${err.message}`);
+        }
+      }
+    }, 3000);
+
+  } else {
+    console.log('[Gemini Process] No existing process. Starting a new one.');
+    _startNewGeminiProcess(wss);
+  }
+}
+
+// --- Server Setup ---
+
+const httpsOptions = {
+  key: fs.readFileSync(path.resolve(__dirname, 'certs/key.pem')),
+  cert: fs.readFileSync(path.resolve(__dirname, 'certs/cert.pem')),
+};
+
+app.prepare().then(() => {
+  const httpsServer = createHttpsServer(httpsOptions, async (req, res) => {
+    try {
+      if (dev) {
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range, X-Requested-With');
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204;
+          res.end();
+          return;
+        }
+      }
+      const parsedUrl = parse(req.url, true);
+      await handle(req, res, parsedUrl);
+    } catch (err) {
+      console.error('Error occurred handling', req.url, err);
+      res.statusCode = 500;
+      res.end('internal server error');
+    }
+  });
+
+  const httpServer = createHttpServer((req, res) => {
+    const host = req.headers.host;
+    // Remove port 3000 from host if present, as we redirect to standard 443
+    const hostWithoutPort = host.replace(':3000', '');
+    const httpsUrl = `https://${hostWithoutPort}${req.url}`;
+    if (dev) res.setHeader('Access-Control-Allow-Origin', '*');
+    res.writeHead(301, { Location: httpsUrl });
+    res.end();
+  });
+
+  const wss = new WebSocketServer({ noServer: true });
+
+  httpsServer.on('upgrade', (request, socket, head) => {
+    if (parse(request.url, true).pathname === '/ws') {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit('connection', ws, request);
+      });
+    } else {
+      socket.destroy();
+    }
+  });
+
+  wss.on('connection', ws => {
+    console.log('Client connected');
+
+    ws.on('message', async data => {
+      const text = data.toString();
+      if (!text.trim()) return;
+
+      let msg;
+      try {
+        msg = JSON.parse(text);
+      } catch (e) {
+        console.error('Failed to parse incoming WebSocket message:', e);
+        return;
+      }
+
+      if (msg.method === 'ping') {
+        try { ws.send(JSON.stringify({ jsonrpc: '2.0', method: 'pong' })); } catch {}
+        return;
+      }
+
+      if (msg.method === 'clearHistory') {
+        console.log('[Server] Received clearHistory. Restarting Gemini process.');
+        history.length = 0;
+        broadcast(wss, { jsonrpc: '2.0', method: 'historyCleared', params: { reason: 'command' } });
+        startGemini(wss); // Restart the process to get a clean slate
+        return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
+      }
+
+      if (msg.method === 'fetchHistory') {
+        flushAssistantMessage(wss, 'interrupted');
+        const { limit = 50 } = msg.params || {};
+        const chunk = history.slice(-limit);
+        chunk.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+        return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { messages: chunk } }));
+      }
+
+      if (msg.method === 'sendUserMessage') {
+        flushAssistantMessage(wss, 'interrupted');
+        
+        const { text: userText, files, goal, session, messageId, features } = msg.params?.chunks?.[0] || {};
+
+        const rec = { id: messageId || String(Date.now()), ts: Date.now(), role: 'user', text: userText, files: files || [], goal: goal || null, session: session || null };
+        history.push(rec);
+        
+        broadcastExcept(wss, ws, { jsonrpc: '2.0', method: 'addMessage', params: { message: rec } });
+
+        // Create the message for the AI (augment with implicit system messages)
+        let systemMessages = [];
+        if (features?.webSearch) {
+            systemMessages.push(`[System]ユーザーはウェブ検索機能を使うことを希望しています。`);
+        }
+        if (files && files.length > 0) {
+            const fileNames = files.map(file => `- ${file.name} (${file.path})`).join('\n');
+            systemMessages.push(`[System]ユーザーは以下のファイルをアップロードしました：\n${fileNames}`);
+        }
+        if (goal) {
+            systemMessages.push(`[System]ユーザーは以下の目標を開始しました：\n- ID: ${goal.id}\n- 教科: ${goal.subject}\n- タスク: ${goal.task}${goal.details ? `\n- 詳細: ${goal.details}` : ''}`);
+        }
+        if (session) {
+            systemMessages.push(`[System]ユーザーは以下の学習記録を共有しました：\n- ログID: ${session.id}\n- イベントタイプ: ${session.type}\n- 学習内容: ${session.content || 'N/A'}`);
+        }
+
+        const fullPrompt = (systemMessages.length > 0 ? systemMessages.join('\n') + '\n\n' : '') + userText;
+
+        if (isSessionReady && acpSessionId) {
+            acpSend('session/prompt', {
+                sessionId: acpSessionId,
+                prompt: [{ type: 'text', text: fullPrompt }],
+            }).catch(e => console.error('[ACP] Error sending prompt:', e));
+        } else {
+            console.log('[Server] Session not ready or invalid. Queuing prompt.');
+            pendingPrompts.push({ text: fullPrompt, messageId });
+        }
+        
+        return ws.send(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: null }));
+      }
+    });
+
+    ws.on('close', () => {
+      console.log('Client disconnected');
+    });
+  });
+
+  httpsServer.listen(port, hostname, () => {
+    console.log(`> Ready on https://${hostname}:${port}`);
+    startGemini(wss);
+  });
+
+  httpServer.listen(80, hostname, () => {
+    console.log(`> HTTP redirect server running on http://${hostname}:80, redirecting to https`);
+  });
+});

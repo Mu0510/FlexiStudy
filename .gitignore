@@ -1,0 +1,38 @@
+# Dependencies
+/node_modules
+/.pnpm
+.pnpm-lock.yaml
+/pnpm-lock.yaml
+
+# env files
+.env*
+webnew/.env*
+# Next.js
+/.next/
+**/.next/
+/out/
+
+# Production
+/build
+
+# Misc
+.DS_Store
+*.pem
+
+# Log files
+*.log
+
+# Local data
+study_log.db
+notify_state.db
+db_backups/
+db_redo_backups/
+db_long_term_backups/
+webnew/mnt/
+webnew/tmp/
+
+# Python cache
+*.pyc
+
+# Temporary files
+temp_*.py

@@ -1,0 +1,15 @@
+{
+  "cron": "0 20 * * *",
+  "events": {
+    "study_log_updated": { "cooldown_minutes": 60 },
+    "exam_approaching": { "days_before": [14, 7, 1] }
+  },
+  "ai_poll": {
+    "interval_minutes": 30,
+    "grace_after_last_turn_minutes": 3
+  },
+  "daily_summary": {
+    "time": "23:00",
+    "enabled": true
+  }
+}

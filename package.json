@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "server:restart": "npm --prefix webnew run server:restart"
+  }
+}
