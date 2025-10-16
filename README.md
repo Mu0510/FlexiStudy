@@ -20,6 +20,7 @@ Gemini CLIとNext.jsベースのWebアプリケーションを組み合わせた
 ### macOS
 - Homebrew
 - Bash 4
+※ macOSでも動作しますが、Debian系Linuxの方がセットアップ等の動作が安定しています。
 
 ### Debian系Linux
 - apt
